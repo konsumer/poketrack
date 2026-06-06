@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
-project(raypoketrack VERSION 0.2.0 LANGUAGES C OBJC)
+if(APPLE)
+  project(raypoketrack VERSION 0.2.0 LANGUAGES C OBJC)
+else()
+  project(raypoketrack VERSION 0.2.0 LANGUAGES C)
+endif()
 
 if(POLICY CMP0135)
   cmake_policy(SET CMP0135 NEW)
