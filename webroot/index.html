@@ -26,8 +26,11 @@
         const url = hash.endsWith('.rpt') ? hash : `${hash}.rpt`
         try {
           const r = await fetch(url)
-          if (r.ok) songBytes = new Uint8Array(await r.arrayBuffer())
-          else console.error(`song fetch failed: ${r.status} ${url}`)
+          if (r.ok) {
+            songBytes = new Uint8Array(await r.arrayBuffer())
+          } else {
+            console.error(`song fetch failed: ${r.status} ${url}`)
+          }
         } catch(e) {
           console.error('song fetch error:', e)
         }
@@ -36,7 +39,9 @@
       await raypoketrack({
         canvas: document.getElementById('canvas'),
         preRun({ FS_createDataFile }) {
-          if (songBytes) FS_createDataFile('.', 'song.rpt', songBytes, true, false, true)
+          if (songBytes) {
+            FS_createDataFile('.', 'song.rpt', songBytes, true, false, true)
+          }
         }
       })
     </script>
