@@ -1,24 +1,44 @@
 <html>
-	<head>
-		<title>raypoketrack</title>
-		<style>
-			* { margin: 0; padding: 0; }
-			html, body { background: #000; overflow: hidden; }
-			canvas {
-				position: fixed;
-				top: 50%;
-				left: 50%;
-				transform: translate(-50%, -50%);
-				width: min(100vw, calc(100vh * 480 / 320)) !important;
-				height: min(100vh, calc(100vw * 320 / 480)) !important;
-			}
-		</style>
-	</head>
-	<body>
-		<canvas id="canvas"></canvas>
-		<script type="module">
-			import raypoketrack from './raypoketrack.mjs'
-			const tracker = await raypoketrack({ canvas: document.getElementById('canvas') })
-		</script>
-	</body>
+  <head>
+    <title>raypoketrack</title>
+    <style>
+      * { margin: 0; padding: 0; }
+      html, body { background: #000; overflow: hidden; }
+      canvas {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: min(100vw, calc(100vh * 480 / 320)) !important;
+        height: min(100vh, calc(100vw * 320 / 480)) !important;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+    <script type="module">
+      import raypoketrack from './raypoketrack.mjs'
+
+      // Fetch song from URL hash before starting wasm (preRun must be sync)
+      let songBytes = null
+      const hash = document.location.hash?.slice(1)
+      if (hash) {
+        const url = hash.endsWith('.rpt') ? hash : `${hash}.rpt`
+        try {
+          const r = await fetch(url)
+          if (r.ok) songBytes = new Uint8Array(await r.arrayBuffer())
+          else console.error(`song fetch failed: ${r.status} ${url}`)
+        } catch(e) {
+          console.error('song fetch error:', e)
+        }
+      }
+
+      await raypoketrack({
+        canvas: document.getElementById('canvas'),
+        preRun({ FS_createDataFile }) {
+          if (songBytes) FS_createDataFile('.', 'song.rpt', songBytes, true, false, true)
+        }
+      })
+    </script>
+  </body>
 </html>

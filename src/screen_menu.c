@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "file_browser.h"
@@ -47,14 +48,15 @@ void screen_menu_update(UIState *ui) {
     if (g_fb_mode == MENU_FB_LOAD) {
       g_fb_mode = MENU_FB_NONE;
       audio_stop(ui->engine);
-      TrackerSong tmp;
-      if (tracker_load(&tmp, fb_path)) {
-        *ui->song = tmp;
+      TrackerSong *tmp = malloc(sizeof(TrackerSong));
+      if (tmp && tracker_load(tmp, fb_path)) {
+        *ui->song = *tmp;
         audio_set_save_dir(ui->engine, fb_path);
         snprintf(status_msg, sizeof(status_msg), "LOADED");
       } else {
         snprintf(status_msg, sizeof(status_msg), "LOAD FAILED");
       }
+      free(tmp);
       status_timer = 180;
     } else if (g_fb_mode == MENU_FB_SAVE) {
       g_fb_mode = MENU_FB_NONE;
