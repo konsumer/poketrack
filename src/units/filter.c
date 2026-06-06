@@ -41,27 +41,35 @@ static void filter_render(UnitState *s, const uint8_t *p,
   float max_fc = sr * 0.49f;
   if (fc > max_fc) fc = max_fc;
 
-  float f = 2.0f * sinf((float)M_PI * fc / sr);
-  if (f > 1.98f) f = 1.98f;
-
   float q = p2f(p[2], 0.5f, 8.0f);
+  float damp = 1.0f / q;  // Chamberlin SVF uses 1/Q as damping coefficient
+
+  float f = 2.0f * sinf((float)M_PI * fc / sr);
+  // Exact Schur-Cohn bound for Chamberlin SVF: f^2 + 2*f*damp < 4
+  // Solving: max_f = sqrt(damp^2 + 4) - damp
+  float max_f = (sqrtf(damp * damp + 4.0f) - damp) * 0.99f;
+  if (f > max_f) f = max_f;
 
   float low_l = s->low_l;
   float band_l = s->band_l;
   float low_r = s->low_r;
   float band_r = s->band_r;
 
+  // Recover from corrupted state (NaN/Inf from prior instability)
+  if (!isfinite(low_l) || !isfinite(band_l)) { low_l = band_l = 0.0f; }
+  if (!isfinite(low_r) || !isfinite(band_r)) { low_r = band_r = 0.0f; }
+
   for (uint32_t i = 0; i < frames; i++) {
     float inl = in_l[i];
     float inr = in_r[i];
 
     // Chamberlin SVF
-    float high_l = inl - q * band_l - low_l;
+    float high_l = inl - damp * band_l - low_l;
     band_l = f * high_l + band_l;
     low_l  = f * band_l + low_l;
     float notch_l = high_l + low_l;
 
-    float high_r = inr - q * band_r - low_r;
+    float high_r = inr - damp * band_r - low_r;
     band_r = f * high_r + band_r;
     low_r  = f * band_r + low_r;
     float notch_r = high_r + low_r;
