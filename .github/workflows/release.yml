@@ -24,7 +24,7 @@ jobs:
           - os: ubuntu-24.04-arm
             name: raypoketrack-linux-arm64-drm
             linux_deps: libdrm-dev libgbm-dev libgles2-mesa-dev libasound2-dev
-            cmake_flags: -DPLATFORM=PLATFORM_DRM
+            cmake_flags: -DPLATFORM=DRM
           - os: macos-latest
             name: raypoketrack-macos
             linux_deps: ""
