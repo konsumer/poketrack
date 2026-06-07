@@ -121,19 +121,7 @@ void screen_instrument_update(UIState *ui) {
       return;
     }
 
-    // A on FILE row: open file browser
-    if (on_data && input_pressed(BTN_A)) {
-      g_file_slot = slot;
-      file_browser_open("Select file", def->file_filter ? def->file_filter : "");
-    }
-
-    // A on ADD row: open picker
-    if (on_add && input_pressed(BTN_A)) {
-      ui->clap_picker_active = true;
-      ui->clap_picker_row    = 0;
-    }
-
-    // Poll for file-browser result
+    // Poll for file-browser result — must precede any re-open trigger
     const char *chosen = file_browser_poll();
     if (chosen && g_file_slot == slot) {
       g_file_slot = -1;
@@ -145,6 +133,21 @@ void screen_instrument_update(UIState *ui) {
       strncpy(sl->data, rel, sizeof(sl->data) - 1);
       sl->data[sizeof(sl->data) - 1] = '\0';
       audio_rebuild_instrument(ui->engine, (uint8_t)ui->ctx_instrument);
+      return;
+    }
+
+    if (file_browser_active()) return;
+
+    // A on FILE row: open file browser
+    if (on_data && input_pressed(BTN_A)) {
+      g_file_slot = slot;
+      file_browser_open("Select file", def->file_filter ? def->file_filter : "");
+    }
+
+    // A on ADD row: open picker
+    if (on_add && input_pressed(BTN_A)) {
+      ui->clap_picker_active = true;
+      ui->clap_picker_row    = 0;
     }
 
     if (!edit) {

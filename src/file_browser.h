@@ -1,4 +1,5 @@
 #pragma once
+#include <stdbool.h>
 
 // Portable file browser: blocking on desktop, async on web.
 //
@@ -19,3 +20,5 @@ void        file_browser_save_as(const char *title, const char *default_name);
 void        file_browser_download(const char *fs_path, const char *suggested_name);
 const char *file_browser_poll(void);
 void        file_browser_tick(void);
+void        file_browser_draw(void);
+bool        file_browser_active(void);

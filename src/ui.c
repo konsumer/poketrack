@@ -100,32 +100,34 @@ void ui_update(UIState *ui) {
   ui->blink++;
   file_browser_tick();
 
-  // START = play/stop; pattern screen loops current pattern only
-  if (input_pressed(BTN_START) && !input_held(BTN_SELECT)) {
-    if (audio_is_playing(ui->engine)) {
-      audio_stop(ui->engine);
-    } else if (ui->screen == SCREEN_PATTERN) {
-      audio_play_pattern(ui->engine, (uint8_t)ui->ctx_pattern);
-    } else {
-      audio_play(ui->engine);
+  if (!file_browser_active()) {
+    // START = play/stop; pattern screen loops current pattern only
+    if (input_pressed(BTN_START) && !input_held(BTN_SELECT)) {
+      if (audio_is_playing(ui->engine)) {
+        audio_stop(ui->engine);
+      } else if (ui->screen == SCREEN_PATTERN) {
+        audio_play_pattern(ui->engine, (uint8_t)ui->ctx_pattern);
+      } else {
+        audio_play(ui->engine);
+      }
     }
-  }
 
-  // SELECT + direction = switch screen (takes priority, no A held)
-  if (input_held(BTN_SELECT) && !input_held(BTN_A)) {
-    AppScreen prev = ui->screen;
-    if (input_pressed(BTN_LEFT))
-      ui->screen = SCREEN_SONG;
-    if (input_pressed(BTN_UP))
-      ui->screen = SCREEN_PATTERN;
-    if (input_pressed(BTN_DOWN))
-      ui->screen = SCREEN_INSTRUMENT;
-    if (input_pressed(BTN_RIGHT))
-      ui->screen = SCREEN_MENU;
-    if (ui->screen != prev) {
-      if (prev == SCREEN_PATTERN)
-        audio_preview_kill(ui->engine);
-      return;
+    // SELECT + direction = switch screen (takes priority, no A held)
+    if (input_held(BTN_SELECT) && !input_held(BTN_A)) {
+      AppScreen prev = ui->screen;
+      if (input_pressed(BTN_LEFT))
+        ui->screen = SCREEN_SONG;
+      if (input_pressed(BTN_UP))
+        ui->screen = SCREEN_PATTERN;
+      if (input_pressed(BTN_DOWN))
+        ui->screen = SCREEN_INSTRUMENT;
+      if (input_pressed(BTN_RIGHT))
+        ui->screen = SCREEN_MENU;
+      if (ui->screen != prev) {
+        if (prev == SCREEN_PATTERN)
+          audio_preview_kill(ui->engine);
+        return;
+      }
     }
   }
 
@@ -243,4 +245,5 @@ void ui_draw(UIState *ui) {
       screen_menu_draw(ui);
       break;
   }
+  file_browser_draw();
 }

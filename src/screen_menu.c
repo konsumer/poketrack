@@ -22,6 +22,7 @@ typedef enum {
   MENU_NEW,
 #ifndef __EMSCRIPTEN__
   MENU_FULLSCREEN,
+  MENU_EXIT,
 #endif
   MENU_COUNT,
 } MenuItem;
@@ -36,6 +37,7 @@ static const char *menu_labels[] = {
     "NEW SONG",
 #ifndef __EMSCRIPTEN__
     "FULLSCREEN",
+    "EXIT",
 #endif
 };
 
@@ -74,7 +76,10 @@ void screen_menu_update(UIState *ui) {
       snprintf(status_msg, sizeof(status_msg), ok ? "SAVED" : "SAVE FAILED");
       status_timer = 180;
     }
+    return;  // don't re-process the A press that confirmed the dialog
   }
+
+  if (file_browser_active()) return;
 
   if (!edit) {
     if (ui_repeat(BTN_UP) && ui->menu_row > 0)
@@ -143,6 +148,10 @@ void screen_menu_update(UIState *ui) {
       case MENU_FULLSCREEN:
         if (input_pressed(BTN_UP) || input_pressed(BTN_DOWN) || input_pressed(BTN_A))
           ToggleFullscreen();
+        break;
+      case MENU_EXIT:
+        if (input_pressed(BTN_A))
+          exit(0);
         break;
 #endif
     }
