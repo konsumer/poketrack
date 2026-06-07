@@ -15,10 +15,24 @@ jobs:
         include:
           - os: ubuntu-latest
             name: raypoketrack-linux
+            linux_deps: libgl1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libasound2-dev
+            cmake_flags: ""
+          - os: ubuntu-24.04-arm
+            name: raypoketrack-linux-arm64
+            linux_deps: libgl1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libasound2-dev
+            cmake_flags: ""
+          - os: ubuntu-24.04-arm
+            name: raypoketrack-linux-arm64-drm
+            linux_deps: libdrm-dev libgbm-dev libgles2-mesa-dev libasound2-dev
+            cmake_flags: -DPLATFORM=PLATFORM_DRM
           - os: macos-latest
             name: raypoketrack-macos
+            linux_deps: ""
+            cmake_flags: ""
           - os: windows-latest
             name: raypoketrack-windows
+            linux_deps: ""
+            cmake_flags: ""
 
     runs-on: ${{ matrix.os }}
 
@@ -29,14 +43,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libgl1-mesa-dev \
-            libx11-dev \
-            libxrandr-dev \
-            libxi-dev \
-            libxcursor-dev \
-            libxinerama-dev \
-            libasound2-dev
+          sudo apt-get install -y ${{ matrix.linux_deps }}
 
       - name: Install MinGW (Windows)
         if: runner.os == 'Windows'
@@ -48,7 +55,7 @@ jobs:
 
       - name: Configure (non-Windows)
         if: runner.os != 'Windows'
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_flags }}
 
       - name: Build
         run: cmake --build build --parallel

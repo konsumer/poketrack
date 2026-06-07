@@ -2,6 +2,10 @@ This is a cross-platform joystick-driven music-tracker.
 
 It uses [CLAP](https://github.com/free-audio/clap) for sound-generation and effects, which you can sequence. This allows a wide variety of instrument-types, from the same interface.
 
+## installation
+
+Grab [the latest reelase](https://github.com/konsumer/raypoketrack/releases) for your platform. On steamdeck, I made a non-steam game launcher. Joystick (analog/dpad/etc) worked for me without any config, but you can also assign keys, if needed.
+
 ## usage
 
 You should be able to track quickly with a joystick, or keys:
