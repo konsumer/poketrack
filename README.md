@@ -4,7 +4,7 @@ It uses [CLAP](https://github.com/free-audio/clap) for sound-generation and effe
 
 ## installation
 
-Grab [the latest reelase](https://github.com/konsumer/raypoketrack/releases) for your platform. On steamdeck, I made a non-steam game launcher. Joystick (analog/dpad/etc) worked for me without any config, but since SELECT is next to dpad, I also added controller-maps so triggers act as START/SELECT (on opposite sides) which allows for easier SELECT + dpad.
+Grab [the latest reelase](https://github.com/konsumer/raypoketrack/releases) for your platform. On steamdeck, I made a non-steam game launcher. Joystick (analog/dpad/etc) worked for me without any config, but since SELECT is next to dpad, I also added controller-maps so triggers act as START/SELECT (on opposite sides) which allows for easier SELECT + dpad. In launch options, add `--fullscreen`.
 
 ## usage
 
