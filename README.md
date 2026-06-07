@@ -108,7 +108,7 @@ C-4  00  00 80
 
 which sequences cutoff.
 
-At some point, I will try to make a bunch of simpler 1-function CLAP units that can be dropped in easier. In general, I htink it's actually better to chain several differnt units together, and there are a lot of built-ins that should just work.
+At some point, I will try to make a bunch of simpler 1-function CLAP units that can be dropped in easier. In general, I think it's actually better to chain several differnt units together, and there are a lot of built-ins that should just work.
 
 
 ## development
