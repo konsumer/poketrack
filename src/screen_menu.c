@@ -20,6 +20,9 @@ typedef enum {
   MENU_SAVE,
   MENU_LOAD,
   MENU_NEW,
+#ifndef __EMSCRIPTEN__
+  MENU_FULLSCREEN,
+#endif
   MENU_COUNT,
 } MenuItem;
 
@@ -31,6 +34,9 @@ static const char *menu_labels[] = {
     "SAVE",
     "LOAD",
     "NEW SONG",
+#ifndef __EMSCRIPTEN__
+    "FULLSCREEN",
+#endif
 };
 
 static char status_msg[48] = "";
@@ -133,6 +139,12 @@ void screen_menu_update(UIState *ui) {
           status_timer = 120;
         }
         break;
+#ifndef __EMSCRIPTEN__
+      case MENU_FULLSCREEN:
+        if (input_pressed(BTN_UP) || input_pressed(BTN_DOWN) || input_pressed(BTN_A))
+          ToggleFullscreen();
+        break;
+#endif
     }
   }
 }
@@ -169,6 +181,11 @@ void screen_menu_draw(UIState *ui) {
       case MENU_NEW:
         DrawText(cur ? "[holdA+A=confirm]" : "", 100, y + (CH_H - FONT_S) / 2, FONT_S - 1, C_DIM);
         break;
+#ifndef __EMSCRIPTEN__
+      case MENU_FULLSCREEN:
+        DrawText(IsWindowFullscreen() ? "ON" : "OFF", 100, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_TEXT);
+        break;
+#endif
     }
   }
 
