@@ -36,11 +36,18 @@ typedef struct {
   // "ON"/"OFF" → boolean toggle display (no bar). Any other string → stepped int display.
   const char *(*format_param_val)(UnitState *s, int idx, uint8_t val);
 
-  // Param picker (for units like CLAP where user manually maps params)
-  int          (*picker_count)(UnitState *s);                // total params available to pick
-  const char  *(*picker_name)(UnitState *s, int picker_idx); // name of picker entry
-  void         (*picker_add)(UnitState *s, int picker_idx);  // add picker entry as next mapping
-  void         (*mapping_remove)(UnitState *s, int map_idx); // remove a mapped param
+  // Param picker (ADD row → opens overlay to add a mapped param slot)
+  const char  *picker_title;                                  // overlay header (NULL = "ADD PARAM")
+  int          (*picker_count)(UnitState *s);                 // total params available to pick
+  const char  *(*picker_name)(UnitState *s, int picker_idx);  // name of picker entry
+  void         (*picker_add)(UnitState *s, int picker_idx);   // add picker entry as next mapping
+  void         (*mapping_remove)(UnitState *s, int map_idx);  // remove a mapped param
+
+  // Device picker (DATA row A → opens overlay to select a device/port)
+  const char  *dev_picker_title;                              // overlay header (NULL = "SELECT DEVICE")
+  int          (*dev_picker_count)(UnitState *s);
+  const char  *(*dev_picker_name)(UnitState *s, int idx);
+  void         (*dev_picker_set)(UnitState *s, int idx);      // select device at idx
 
   UnitState *(*create)(float sample_rate);
   void (*destroy)(UnitState *s);

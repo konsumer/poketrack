@@ -7,6 +7,9 @@
 #include "tracker.h"
 #include "ui.h"
 #include "units/unit_registry.h"
+#ifndef __EMSCRIPTEN__
+#include "midi_out.h"
+#endif
 
 #if defined(PLATFORM_WEB)
 #include <emscripten/emscripten.h>
@@ -53,6 +56,9 @@ int main(int argc, char **argv) {
   (void)argc; (void)argv;
 #endif
 
+#ifndef __EMSCRIPTEN__
+  midi_out_global_init();
+#endif
   tracker_init(&song);
   audio_init(&g_engine, &song);
   tracker_load(&song, "song.rpt");
@@ -83,6 +89,7 @@ int main(int argc, char **argv) {
   UnloadAudioStream(g_stream);
   CloseAudioDevice();
   audio_shutdown(&g_engine);
+  midi_out_global_shutdown();
   UnloadRenderTexture(g_target);
   CloseWindow();
 #endif

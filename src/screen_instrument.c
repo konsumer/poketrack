@@ -103,6 +103,21 @@ void screen_instrument_update(UIState *ui) {
     bool on_data = has_data && (ui->inst_row == data_row);
     ChainSlot *sl = &inst->chain[slot];
 
+    // Device picker mode: select MIDI/audio device
+    if (ui->dev_picker_active) {
+      int total = def->dev_picker_count(state);
+      if (ui_repeat(BTN_UP)   && ui->dev_picker_row > 0)       ui->dev_picker_row--;
+      if (ui_repeat(BTN_DOWN) && ui->dev_picker_row < total-1) ui->dev_picker_row++;
+      if (input_pressed(BTN_A)) {
+        def->dev_picker_set(state, ui->dev_picker_row);
+        if (def->sync_to_data) def->sync_to_data(state, sl->data, sizeof(sl->data));
+        audio_rebuild_instrument(ui->engine, (uint8_t)ui->ctx_instrument);
+        ui->dev_picker_active = false;
+      }
+      if (input_pressed(BTN_B)) ui->dev_picker_active = false;
+      return;
+    }
+
     // Picker mode: browse all plugin params
     if (ui->clap_picker_active) {
       int total = def->picker_count(state);
@@ -138,10 +153,18 @@ void screen_instrument_update(UIState *ui) {
 
     if (file_browser_active()) return;
 
-    // A on FILE row: open file browser
+    // A on DATA row: open device picker, param picker, or file browser
     if (on_data && input_pressed(BTN_A)) {
-      g_file_slot = slot;
-      file_browser_open("Select file", def->file_filter ? def->file_filter : "");
+      if (def->dev_picker_count && def->dev_picker_set && state) {
+        ui->dev_picker_active = true;
+        ui->dev_picker_row    = 0;
+      } else if (def->picker_count && def->picker_add && state) {
+        ui->clap_picker_active = true;
+        ui->clap_picker_row    = 0;
+      } else {
+        g_file_slot = slot;
+        file_browser_open("Select file", def->file_filter ? def->file_filter : "");
+      }
     }
 
     // A on ADD row: open picker
@@ -279,8 +302,9 @@ void screen_instrument_draw(UIState *ui) {
   if (ui->engine->chan_states[0][cur_slot])
     cur_state = ui->engine->chan_states[0][cur_slot];
   int nparams = (def->dyn_num_params && cur_state) ? def->dyn_num_params(cur_state) : def->num_params;
-  bool has_picker_draw = def->picker_count && def->picker_add && cur_state;
-  bool has_add_row_draw = has_picker_draw && nparams < UNIT_MAX_PARAMS;
+  bool has_picker_draw     = def->picker_count && def->picker_add && cur_state;
+  bool has_dev_picker_draw = def->dev_picker_count && def->dev_picker_set && cur_state;
+  bool has_add_row_draw    = has_picker_draw && nparams < UNIT_MAX_PARAMS;
 
   int param_offset = 0;
   for (int s = 0; s < cur_slot; s++) {
@@ -406,7 +430,8 @@ void screen_instrument_draw(UIState *ui) {
     int overlay_w = WIN_W - PANEL_W;
     int overlay_h = WIN_H - STATUS_H - overlay_y;
     DrawRectangle(overlay_x, overlay_y, overlay_w, overlay_h, C_BG);
-    DrawText("ADD PARAM  [A]=add  [B]=cancel",
+    const char *ptitle = (def->picker_title && def->picker_title[0]) ? def->picker_title : "ADD PARAM";
+    DrawText(TextFormat("%s  [A]=select  [B]=cancel", ptitle),
              overlay_x + 4, overlay_y + (CH_H - FONT_S) / 2, FONT_S - 1, C_HEADER);
     DrawLine(overlay_x, overlay_y + CH_H, WIN_W, overlay_y + CH_H, C_SEP);
 
@@ -425,6 +450,41 @@ void screen_instrument_draw(UIState *ui) {
       snprintf(label, sizeof(label), "%d %.20s", pi, pname ? pname : "");
       DrawText(label, overlay_x + 4, py + (CH_H - FONT_S) / 2, FONT_S,
                cur ? C_TITLE : C_TEXT);
+    }
+  }
+
+  // Device picker overlay
+  if (ui->dev_picker_active && has_dev_picker_draw) {
+    int total     = def->dev_picker_count(cur_state);
+    int overlay_x = PANEL_W;
+    int overlay_y = INST_CONTENT_Y;
+    int overlay_w = WIN_W - PANEL_W;
+    int overlay_h = WIN_H - STATUS_H - overlay_y;
+    DrawRectangle(overlay_x, overlay_y, overlay_w, overlay_h, C_BG);
+    const char *dtitle = (def->dev_picker_title && def->dev_picker_title[0])
+                         ? def->dev_picker_title : "SELECT DEVICE";
+    DrawText(TextFormat("%s  [A]=select  [B]=cancel", dtitle),
+             overlay_x + 4, overlay_y + (CH_H - FONT_S) / 2, FONT_S - 1, C_HEADER);
+    DrawLine(overlay_x, overlay_y + CH_H, WIN_W, overlay_y + CH_H, C_SEP);
+
+    int visible = (overlay_h - CH_H) / CH_H;
+    int scroll  = 0;
+    if (ui->dev_picker_row >= visible) scroll = ui->dev_picker_row - visible + 1;
+
+    for (int i = 0; i < visible && (scroll + i) < total; i++) {
+      int pi  = scroll + i;
+      int py  = overlay_y + CH_H + i * CH_H;
+      bool cur = (pi == ui->dev_picker_row);
+      DrawRectangle(overlay_x, py, overlay_w, CH_H,
+                    cur ? C_CURSOR : (i % 2 == 0 ? C_BG_ALT : C_BG));
+      const char *dname = def->dev_picker_name(cur_state, pi);
+      DrawText(dname ? dname : "(unnamed)",
+               overlay_x + 4, py + (CH_H - FONT_S) / 2, FONT_S,
+               cur ? C_TITLE : C_TEXT);
+    }
+    if (total == 0) {
+      DrawText("no devices found",
+               overlay_x + 4, overlay_y + CH_H + (CH_H - FONT_S) / 2, FONT_S, C_DIM);
     }
   }
 }

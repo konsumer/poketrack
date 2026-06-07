@@ -67,6 +67,10 @@ typedef struct {
   // CLAP param picker sub-mode
   bool clap_picker_active;
   int  clap_picker_row;   // cursor in full plugin param list
+
+  // Device picker sub-mode (data row A, for units with dev_picker_*)
+  bool dev_picker_active;
+  int  dev_picker_row;
 } UIState;
 
 void ui_init(UIState *ui, TrackerSong *song, AudioEngine *engine);
