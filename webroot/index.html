@@ -283,38 +283,47 @@
       }
 
       const gp = document.getElementById('gamepad')
-
-      function btnFromPoint(x, y) {
-        const el = document.elementFromPoint(x, y)
-        return el?.closest('[data-btn]')
-      }
+      // Map touch.identifier → data-btn string for each active finger
+      const activeTouch = new Map()
 
       gp.addEventListener('touchstart', e => {
         e.preventDefault()
         for (const t of e.changedTouches) {
-          const el = btnFromPoint(t.clientX, t.clientY)
-          if (el) { el.classList.add('active'); fireKey(el.dataset.btn, 'keydown') }
+          const el = document.elementFromPoint(t.clientX, t.clientY)?.closest('[data-btn]')
+          if (!el) continue
+          const btn = el.dataset.btn
+          activeTouch.set(t.identifier, btn)
+          el.classList.add('active')
+          fireKey(btn, 'keydown')
         }
       }, { passive: false })
 
       gp.addEventListener('touchend', e => {
         e.preventDefault()
         for (const t of e.changedTouches) {
-          const el = btnFromPoint(t.clientX, t.clientY)
-          if (el) { el.classList.remove('active'); fireKey(el.dataset.btn, 'keyup') }
+          const btn = activeTouch.get(t.identifier)
+          if (!btn) continue
+          activeTouch.delete(t.identifier)
+          // Only remove .active if no other finger is still holding this button
+          const stillHeld = [...activeTouch.values()].includes(btn)
+          if (!stillHeld) {
+            gp.querySelector(`[data-btn="${btn}"]`)?.classList.remove('active')
+            fireKey(btn, 'keyup')
+          }
         }
-        // Clear any orphaned active states
-        gp.querySelectorAll('.active').forEach(el => {
-          el.classList.remove('active')
-          fireKey(el.dataset.btn, 'keyup')
-        })
       }, { passive: false })
 
-      gp.addEventListener('touchcancel', () => {
-        gp.querySelectorAll('.active').forEach(el => {
-          el.classList.remove('active')
-          fireKey(el.dataset.btn, 'keyup')
-        })
+      gp.addEventListener('touchcancel', e => {
+        for (const t of e.changedTouches) {
+          const btn = activeTouch.get(t.identifier)
+          if (!btn) continue
+          activeTouch.delete(t.identifier)
+          const stillHeld = [...activeTouch.values()].includes(btn)
+          if (!stillHeld) {
+            gp.querySelector(`[data-btn="${btn}"]`)?.classList.remove('active')
+            fireKey(btn, 'keyup')
+          }
+        }
       }, { passive: false })
     </script>
   </body>
