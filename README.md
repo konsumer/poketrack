@@ -68,8 +68,7 @@ It may seem a bit inscrutable at first, but input is meant to be consistent and 
 
 Here are some videos:
 
-[![built-in synths](https://img.youtube.com/vi/3JeYaVriygU/0.jpg)](https://www.youtube.com/watch?v=3JeYaVriygU)
-
+[![built-in synths](https://img.youtube.com/vi/3JeYaVriygU/0.jpg)](https://www.youtube.com/playlist?list=PLDE2Ywpu1J__p2yBXrMOoKCgtIYQgfGo7)
 
 ### plugins
 
