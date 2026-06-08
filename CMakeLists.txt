@@ -65,6 +65,7 @@ set(SOURCES
     src/audio.c
     src/ui.c
     src/file_browser.c
+    src/midi_in.c
     src/screen_song.c
     src/screen_pattern.c
     src/screen_instrument.c

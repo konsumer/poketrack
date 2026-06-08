@@ -8,6 +8,7 @@
 #include "ui.h"
 #include "units/unit_registry.h"
 #ifndef __EMSCRIPTEN__
+#include "midi_in.h"
 #include "midi_out.h"
 #endif
 
@@ -24,7 +25,35 @@ static void stream_callback(void *buf, unsigned int frames) {
   audio_fill_buffer(&g_engine, (float *)buf, frames);
 }
 
+#ifndef __EMSCRIPTEN__
+static void poll_midi_in(void) {
+  MidiInMsg msg;
+  while (midi_in_poll(&msg)) {
+    uint8_t type    = msg.status & 0xF0;
+    uint8_t msg_ch  = (msg.status & 0x0F) + 1;  // 1-16
+    bool is_note_on  = (type == 0x90) && msg.data2 > 0;
+    bool is_note_off = (type == 0x80) || (type == 0x90 && msg.data2 == 0);
+    if (!is_note_on && !is_note_off) continue;
+    const char *port_name = midi_in_port_name(msg.port_idx);
+    for (int i = 0; i < NUM_INSTRUMENTS; i++) {
+      TrackerInstrument *inst = &g_engine.song->instruments[i];
+      if (!inst->midi_in_device[0]) continue;
+      if (strcmp(inst->midi_in_device, port_name) != 0) continue;
+      if (inst->midi_in_channel != 0 && inst->midi_in_channel != msg_ch) continue;
+      if (is_note_on)
+        audio_preview_note(&g_engine, (uint8_t)i, msg.data1);
+      else
+        audio_preview_kill(&g_engine);
+      break;
+    }
+  }
+}
+#endif
+
 static void main_loop(void) {
+#ifndef __EMSCRIPTEN__
+  poll_midi_in();
+#endif
   input_update();
   ui_update(&g_ui);
 
@@ -57,6 +86,7 @@ int main(int argc, char **argv) {
 #endif
 
 #ifndef __EMSCRIPTEN__
+  midi_in_global_init();
   midi_out_global_init();
 #endif
   tracker_init(&song);
@@ -89,6 +119,7 @@ int main(int argc, char **argv) {
   UnloadAudioStream(g_stream);
   CloseAudioDevice();
   audio_shutdown(&g_engine);
+  midi_in_global_shutdown();
   midi_out_global_shutdown();
   UnloadRenderTexture(g_target);
   CloseWindow();

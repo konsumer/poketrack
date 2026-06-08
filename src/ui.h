@@ -71,6 +71,10 @@ typedef struct {
   // Device picker sub-mode (data row A, for units with dev_picker_*)
   bool dev_picker_active;
   int  dev_picker_row;
+
+  // MIDI-in device picker (instrument-level, left panel DEV row)
+  bool midi_in_picker_active;
+  int  midi_in_picker_row;
 } UIState;
 
 void ui_init(UIState *ui, TrackerSong *song, AudioEngine *engine);

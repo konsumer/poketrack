@@ -56,6 +56,9 @@ typedef struct {
 typedef struct {
   char name[16];
   ChainSlot chain[CHAIN_MAX];
+  char midi_in_device[128];  // "" = disabled; device name to receive MIDI from
+  uint8_t midi_in_channel;   // 0 = all channels, 1-16 = specific channel
+  uint8_t _pad[3];
 } TrackerInstrument;
 
 typedef struct {
