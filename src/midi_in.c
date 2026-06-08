@@ -236,13 +236,44 @@ const char *midi_in_port_name(int idx) {
 }
 
 // ============================================================
-// Stub — no MIDI input support
+// Web — Web MIDI API (JS calls into C via ccall)
 // ============================================================
-#else
+#elif defined(__EMSCRIPTEN__)
 
-void        midi_in_global_init(void)           {}
-void        midi_in_global_shutdown(void)       {}
-int         midi_in_port_count(void)            { return 0; }
-const char *midi_in_port_name(int idx)          { (void)idx; return "none"; }
+#include <emscripten.h>
+#include <string.h>
+
+#define MAX_IN_PORTS 32
+static char g_web_names[MAX_IN_PORTS][256];
+static int  g_web_count = 0;
+
+void midi_in_global_init(void)     {}
+void midi_in_global_shutdown(void) {}
+int  midi_in_port_count(void)      { return g_web_count; }
+
+const char *midi_in_port_name(int idx) {
+    if (idx < 0 || idx >= g_web_count) return "?";
+    return g_web_names[idx];
+}
+
+EMSCRIPTEN_KEEPALIVE void midi_in_web_set_port_count(int n) {
+    g_web_count = (n < MAX_IN_PORTS) ? n : MAX_IN_PORTS;
+}
+EMSCRIPTEN_KEEPALIVE void midi_in_web_set_port_name(int idx, const char *name) {
+    if (idx < 0 || idx >= MAX_IN_PORTS || !name) return;
+    strncpy(g_web_names[idx], name, 255);
+    g_web_names[idx][255] = '\0';
+}
+EMSCRIPTEN_KEEPALIVE void midi_in_web_push(int status, int d1, int d2, int port_idx) {
+    push_msg((uint8_t)status, (uint8_t)d1, (uint8_t)d2, port_idx);
+}
+
+// Lazy, idempotent: calls window._midiWebRequestAccess() defined in index.html.
+// That function requests browser MIDI access and populates C port tables via ccall.
+void midi_web_request_access(void) {
+    emscripten_run_script(
+        "typeof window._midiWebRequestAccess==='function'&&window._midiWebRequestAccess();"
+    );
+}
 
 #endif

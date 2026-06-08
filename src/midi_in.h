@@ -16,3 +16,9 @@ const char *midi_in_port_name(int idx);
 
 // Returns true if a message was available (msg written); false if queue empty.
 bool midi_in_poll(MidiInMsg *msg);
+
+#ifdef __EMSCRIPTEN__
+// Lazily request Web MIDI access (idempotent). Call before opening any MIDI picker.
+// Populates both input and output port lists asynchronously.
+void midi_web_request_access(void);
+#endif

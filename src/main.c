@@ -3,12 +3,12 @@
 
 #include "audio.h"
 #include "input.h"
+#include "midi_in.h"
 #include "raylib.h"
 #include "tracker.h"
 #include "ui.h"
 #include "units/unit_registry.h"
 #ifndef __EMSCRIPTEN__
-#include "midi_in.h"
 #include "midi_out.h"
 #endif
 
@@ -25,12 +25,11 @@ static void stream_callback(void *buf, unsigned int frames) {
   audio_fill_buffer(&g_engine, (float *)buf, frames);
 }
 
-#ifndef __EMSCRIPTEN__
 static void poll_midi_in(void) {
   MidiInMsg msg;
   while (midi_in_poll(&msg)) {
-    uint8_t type    = msg.status & 0xF0;
-    uint8_t msg_ch  = (msg.status & 0x0F) + 1;  // 1-16
+    uint8_t type     = msg.status & 0xF0;
+    uint8_t msg_ch   = (msg.status & 0x0F) + 1;  // 1-16
     bool is_note_on  = (type == 0x90) && msg.data2 > 0;
     bool is_note_off = (type == 0x80) || (type == 0x90 && msg.data2 == 0);
     if (!is_note_on && !is_note_off) continue;
@@ -48,12 +47,9 @@ static void poll_midi_in(void) {
     }
   }
 }
-#endif
 
 static void main_loop(void) {
-#ifndef __EMSCRIPTEN__
   poll_midi_in();
-#endif
   input_update();
   ui_update(&g_ui);
 
@@ -85,8 +81,8 @@ int main(int argc, char **argv) {
   (void)argc; (void)argv;
 #endif
 
-#ifndef __EMSCRIPTEN__
   midi_in_global_init();
+#ifndef __EMSCRIPTEN__
   midi_out_global_init();
 #endif
   tracker_init(&song);

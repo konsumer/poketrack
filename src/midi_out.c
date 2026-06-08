@@ -233,19 +233,59 @@ void midi_out_send(MidiOut *m, const uint8_t *msg, int len) {
 int midi_out_port_idx(const MidiOut *m) { return m ? m->port_idx : -1; }
 
 // ============================================================
-// Stub — no MIDI support
+// Web — Web MIDI API outputs (JS bridge via ccall)
 // ============================================================
-#else
+#elif defined(__EMSCRIPTEN__)
+
+#include <emscripten.h>
+#include <string.h>
+
+#define MAX_OUT_PORTS 32
+static char g_web_out_names[MAX_OUT_PORTS][256];
+static int  g_web_out_count = 0;
 
 struct MidiOut { int port_idx; };
 
-void        midi_out_global_init(void)                          {}
-void        midi_out_global_shutdown(void)                      {}
-int         midi_out_port_count(void)                           { return 0; }
-const char *midi_out_port_name(int idx)                         { (void)idx; return "none"; }
-MidiOut    *midi_out_open(int idx)                              { (void)idx; return NULL; }
-void        midi_out_close(MidiOut *m)                          { free(m); }
-void        midi_out_send(MidiOut *m, const uint8_t *b, int l)  { (void)m;(void)b;(void)l; }
-int         midi_out_port_idx(const MidiOut *m)                 { return m ? m->port_idx : -1; }
+void midi_out_global_init(void)     {}
+void midi_out_global_shutdown(void) {}
+int  midi_out_port_count(void)      { return g_web_out_count; }
+
+const char *midi_out_port_name(int idx) {
+    if (idx < 0 || idx >= g_web_out_count) return "?";
+    return g_web_out_names[idx];
+}
+
+EMSCRIPTEN_KEEPALIVE void midi_out_web_set_port_count(int n) {
+    g_web_out_count = n < MAX_OUT_PORTS ? n : MAX_OUT_PORTS;
+}
+
+EMSCRIPTEN_KEEPALIVE void midi_out_web_set_port_name(int idx, const char *name) {
+    if (idx < 0 || idx >= MAX_OUT_PORTS || !name) return;
+    strncpy(g_web_out_names[idx], name, 255);
+    g_web_out_names[idx][255] = '\0';
+}
+
+MidiOut *midi_out_open(int idx) {
+    if (idx < 0 || idx >= g_web_out_count) return NULL;
+    MidiOut *m = calloc(1, sizeof(*m));
+    m->port_idx = idx;
+    return m;
+}
+
+void midi_out_close(MidiOut *m) { free(m); }
+
+EM_JS(void, midi_out_web_send_js, (int idx, const uint8_t *msg, int len), {
+    var outputs = window._midiOutputs;
+    if (!outputs || idx < 0 || idx >= outputs.length) return;
+    var port = outputs[idx];
+    if (port && port.state === 'connected') port.send(HEAPU8.subarray(msg, msg + len));
+});
+
+void midi_out_send(MidiOut *m, const uint8_t *msg, int len) {
+    if (!m || len < 1) return;
+    midi_out_web_send_js(m->port_idx, msg, len);
+}
+
+int midi_out_port_idx(const MidiOut *m) { return m ? m->port_idx : -1; }
 
 #endif

@@ -90,10 +90,10 @@ set(SOURCES
 )
 
 # CLAP and tinyfiledialogs — desktop only
+list(APPEND SOURCES src/midi_out.c src/units/midi_unit.c)
 if(NOT EMSCRIPTEN)
     list(APPEND SOURCES src/clap_host.c src/units/clap_unit.c)
     list(APPEND SOURCES ${TFD_DIR}/tinyfiledialogs.c)
-    list(APPEND SOURCES src/midi_out.c src/units/midi_unit.c)
 endif()
 
 add_executable(${PROJECT_NAME} ${SOURCES})
@@ -116,6 +116,7 @@ if(EMSCRIPTEN)
         -sALLOW_MEMORY_GROWTH=1
         -sFORCE_FILESYSTEM=1
         -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','FS']
+        "-sEXPORTED_FUNCTIONS=['_main','_midi_in_web_set_port_count','_midi_in_web_set_port_name','_midi_in_web_push','_midi_out_web_set_port_count','_midi_out_web_set_port_name']"
         -sEXPORT_ES6=1
         -sMODULARIZE=1
         -sSINGLE_FILE=1

@@ -111,6 +111,9 @@ void screen_instrument_update(UIState *ui) {
   } else if (in_midi) {
     // A on DEVICE row: open picker (must be outside !edit block — same as DATA/ADD row pattern)
     if (ui->inst_row == INST_MIDI_DEV_ROW && input_pressed(BTN_A)) {
+#ifdef __EMSCRIPTEN__
+      midi_web_request_access();
+#endif
       ui->midi_in_picker_active = true;
       ui->midi_in_picker_row    = 0;
     }
@@ -217,6 +220,9 @@ void screen_instrument_update(UIState *ui) {
     // A on DATA row: open device picker, param picker, or file browser
     if (on_data && input_pressed(BTN_A)) {
       if (def->dev_picker_count && def->dev_picker_set && state) {
+#ifdef __EMSCRIPTEN__
+        midi_web_request_access();
+#endif
         ui->dev_picker_active = true;
         ui->dev_picker_row    = 0;
       } else if (def->picker_count && def->picker_add && state) {

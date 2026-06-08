@@ -36,7 +36,7 @@
         }
       }
 
-      await raypoketrack({
+      const mod = await raypoketrack({
         canvas: document.getElementById('canvas'),
         preRun({ FS_createDataFile }) {
           if (songBytes) {
@@ -44,6 +44,35 @@
           }
         }
       })
+
+      // Called lazily from C (midi_web_request_access) when user opens a MIDI device picker.
+      // Idempotent — does nothing if already requested.
+      window._midiWebRequestAccess = async () => {
+        if (!navigator.requestMIDIAccess || window._midiAccessRequested) return
+        window._midiAccessRequested = true
+        try {
+          const access = await navigator.requestMIDIAccess({ sysex: false })
+          const syncPorts = () => {
+            const inputs = [...access.inputs.values()]
+            mod.ccall('midi_in_web_set_port_count', null, ['number'], [inputs.length])
+            inputs.forEach((input, i) => {
+              mod.ccall('midi_in_web_set_port_name', null, ['number', 'string'], [i, input.name])
+              input.onmidimessage = ({ data: d }) =>
+                mod.ccall('midi_in_web_push', null, ['number','number','number','number'],
+                  [d[0]??0, d[1]??0, d[2]??0, i])
+            })
+            const outputs = [...access.outputs.values()]
+            window._midiOutputs = outputs
+            mod.ccall('midi_out_web_set_port_count', null, ['number'], [outputs.length])
+            outputs.forEach((output, i) =>
+              mod.ccall('midi_out_web_set_port_name', null, ['number', 'string'], [i, output.name]))
+          }
+          syncPorts()
+          access.onstatechange = syncPorts
+        } catch (e) {
+          console.warn('Web MIDI access denied:', e)
+        }
+      }
     </script>
   </body>
 </html>
