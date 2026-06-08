@@ -14,6 +14,8 @@ typedef struct {
   const char *id;           // short id: "osc","drum","delay","dist"
   const char *name;         // display name
   const char *data_hint;    // placeholder shown when slot->data is empty (NULL = no data field)
+  const char *data_label;   // label shown left of data field (NULL = "FILE")
+  const char *role_label;   // label shown after unit name (NULL = "SOURCE"/"EFFECT", "" = hidden)
   const char *file_filter;  // file dialog filter pattern e.g. "*.sf2" (NULL = any)
   bool is_source;           // true=generates audio, false=processes audio
   int num_params;

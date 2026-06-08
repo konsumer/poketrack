@@ -30,6 +30,10 @@ static const UnitDef *slot_def(TrackerInstrument *inst, int s) {
 void screen_instrument_update(UIState *ui) {
   TrackerInstrument *inst = &ui->song->instruments[ui->ctx_instrument];
 
+#ifdef __EMSCRIPTEN__
+  midi_web_request_access();  // idempotent — fires once, gives promise time to resolve before picker opens
+#endif
+
   bool edit     = input_held(BTN_A);
   bool in_params = (ui->inst_row >= INST_PARAM_BASE);
   bool in_midi   = (!in_params && ui->inst_row >= INST_MIDI_DEV_ROW);
@@ -50,12 +54,14 @@ void screen_instrument_update(UIState *ui) {
 
   // ---- MIDI-in device picker overlay ----
   if (ui->midi_in_picker_active) {
-    int total = midi_in_port_count();
+    int total = midi_in_port_count() + 1;  // +1 for NONE at index 0
     if (ui_repeat(BTN_UP)   && ui->midi_in_picker_row > 0)         ui->midi_in_picker_row--;
     if (ui_repeat(BTN_DOWN) && ui->midi_in_picker_row < total - 1) ui->midi_in_picker_row++;
     if (input_pressed(BTN_A)) {
-      if (total > 0) {
-        const char *name = midi_in_port_name(ui->midi_in_picker_row);
+      if (ui->midi_in_picker_row == 0) {
+        inst->midi_in_device[0] = '\0';
+      } else {
+        const char *name = midi_in_port_name(ui->midi_in_picker_row - 1);
         strncpy(inst->midi_in_device, name ? name : "", sizeof(inst->midi_in_device) - 1);
         inst->midi_in_device[sizeof(inst->midi_in_device) - 1] = '\0';
       }
@@ -389,9 +395,15 @@ void screen_instrument_draw(UIState *ui) {
     goto draw_overlays;
   }
 
-  DrawText(TextFormat("%s  %s",
-                      def->name, def->is_source ? "SOURCE" : "EFFECT"),
-           PANEL_W + 4, INST_CONTENT_Y + (CH_H - FONT_S) / 2, FONT_S, def->is_source ? C_NOTE : C_FX);
+  {
+    const char *rlabel = (def->role_label == NULL) ? (def->is_source ? "SOURCE" : "EFFECT") : def->role_label;
+    if (rlabel && rlabel[0])
+      DrawText(TextFormat("%s  %s", def->name, rlabel),
+               PANEL_W + 4, INST_CONTENT_Y + (CH_H - FONT_S) / 2, FONT_S, def->is_source ? C_NOTE : C_FX);
+    else
+      DrawText(def->name,
+               PANEL_W + 4, INST_CONTENT_Y + (CH_H - FONT_S) / 2, FONT_S, def->is_source ? C_NOTE : C_FX);
+  }
 
   {
     ChainSlot *sl = &inst->chain[cur_slot];
@@ -482,7 +494,8 @@ void screen_instrument_draw(UIState *ui) {
         bool editing = cur && ui->inst_data_editing;
         Color bg = editing ? C_CURSOR2 : (cur ? C_CURSOR : (nparams % 2 == 0 ? C_BG_ALT : C_BG));
         DrawRectangle(PANEL_W, y, WIN_W - PANEL_W, CH_H, bg);
-        DrawText("FILE", PANEL_W + 4, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_TITLE : C_TEXT);
+        const char *dlabel = def->data_label ? def->data_label : "FILE";
+        DrawText(dlabel, PANEL_W + 4, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_TITLE : C_TEXT);
 
         bool using_hint = !sl->data[0];
         static char path_buf[512];
@@ -496,7 +509,7 @@ void screen_instrument_draw(UIState *ui) {
           if (tab) *tab = '\0';
           path = path_buf;
         }
-        int px = PANEL_W + 38;
+        int px = PANEL_W + 4 + MeasureText(dlabel, FONT_S) + 6;
         int pw = WIN_W - px - 4;
         int cw = MeasureText("W", FONT_S);
         int max_chars = pw / (cw > 0 ? cw : 6);
@@ -583,20 +596,20 @@ draw_overlays:
              overlay_x + 4, overlay_y + (CH_H - FONT_S) / 2, FONT_S - 1, C_HEADER);
     DrawLine(overlay_x, overlay_y + CH_H, WIN_W, overlay_y + CH_H, C_SEP);
 
+    int total_draw = midi_in_port_count() + 1;
     int visible = (overlay_h - CH_H) / CH_H;
     int scroll  = 0;
     if (ui->midi_in_picker_row >= visible) scroll = ui->midi_in_picker_row - visible + 1;
 
-    for (int i = 0; i < visible && (scroll + i) < total; i++) {
+    for (int i = 0; i < visible && (scroll + i) < total_draw; i++) {
       int pi  = scroll + i;
       int py  = overlay_y + CH_H + i * CH_H;
       bool cur = (pi == ui->midi_in_picker_row);
       DrawRectangle(overlay_x, py, overlay_w, CH_H,
                     cur ? C_CURSOR : (i % 2 == 0 ? C_BG_ALT : C_BG));
-      DrawText(midi_in_port_name(pi), overlay_x + 4, py + (CH_H - FONT_S) / 2, FONT_S,
-               cur ? C_TITLE : C_TEXT);
+      const char *label = (pi == 0) ? "NONE" : midi_in_port_name(pi - 1);
+      DrawText(label, overlay_x + 4, py + (CH_H - FONT_S) / 2, FONT_S,
+               cur ? C_TITLE : (pi == 0 ? C_DIM : C_TEXT));
     }
-    if (total == 0)
-      DrawText("no MIDI inputs found", overlay_x + 4, overlay_y + CH_H + (CH_H - FONT_S) / 2, FONT_S, C_DIM);
   }
 }

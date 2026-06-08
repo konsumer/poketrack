@@ -230,14 +230,22 @@ static void midi_mapping_remove(UnitState *s, int map_idx) {
 
 // ---- Device picker (DATA row) ----
 
-static int         midi_dev_picker_count(UnitState *s) { (void)s; return midi_out_port_count(); }
-static const char *midi_dev_picker_name(UnitState *s, int i) { (void)s; return midi_out_port_name(i); }
+static int midi_dev_picker_count(UnitState *s) { (void)s; return midi_out_port_count() + 1; }
+
+static const char *midi_dev_picker_name(UnitState *s, int i) {
+    (void)s;
+    return (i == 0) ? "NONE" : midi_out_port_name(i - 1);
+}
 
 static void midi_dev_picker_set(UnitState *s, int idx) {
-    const char *name = midi_out_port_name(idx);
-    strncpy(s->device_name, name ? name : "", sizeof(s->device_name) - 1);
     if (s->out) { midi_out_close(s->out); s->out = NULL; }
-    s->out = midi_out_open(idx);
+    if (idx == 0) {
+        s->device_name[0] = '\0';
+        return;
+    }
+    const char *name = midi_out_port_name(idx - 1);
+    strncpy(s->device_name, name ? name : "", sizeof(s->device_name) - 1);
+    s->out = midi_out_open(idx - 1);
 }
 
 // ---- Channel enum ----
@@ -251,6 +259,8 @@ const UnitDef unit_midi = {
     .id          = "midi",
     .name        = "MIDI OUT",
     .data_hint   = "no device",
+    .data_label  = "DEVICE",
+    .role_label  = "",
     .file_filter = NULL,
     .is_source   = true,
     .num_params  = 1,
