@@ -48,8 +48,9 @@ typedef struct {
 typedef struct {
   char unit_id[UNIT_ID_LEN];  // "" = empty/unused
   uint8_t params[UNIT_MAX_PARAMS];
+  uint8_t cc_map[UNIT_MAX_PARAMS];  // CC number per param; 0xFF = unmapped
   bool enabled;
-  char data[239];  // extra string data (e.g. SF2 file path)
+  char data[231];  // extra string data (e.g. SF2 file path)
 } ChainSlot;
 
 // Instrument = chain of units (sources first, then effects)

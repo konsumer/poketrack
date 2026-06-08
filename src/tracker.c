@@ -120,8 +120,11 @@ void tracker_init(TrackerSong *song) {
     for (int si = 0; si < PATTERN_STEPS; si++)
       for (int fi = 0; fi < FX_PER_STEP; fi++)
         song->pattern_data[pi].steps[si].fx[fi] = TRACKER_EMPTY;
-  for (int i = 0; i < NUM_INSTRUMENTS; i++)
+  for (int i = 0; i < NUM_INSTRUMENTS; i++) {
     snprintf(song->instruments[i].name, 16, "INST%02X", i);
+    for (int s = 0; s < CHAIN_MAX; s++)
+      memset(song->instruments[i].chain[s].cc_map, 0xFF, UNIT_MAX_PARAMS);
+  }
   song->bpm = 120;
   song->swing = 0;
   song->loop = true;
