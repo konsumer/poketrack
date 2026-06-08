@@ -8,7 +8,7 @@ Grab [the latest reelase](https://github.com/konsumer/raypoketrack/releases) for
 
 I don't have mobile builds setup yet, but it should work OK on the web:
 
-<img width="1550" height="1550" alt="image" src="https://github.com/user-attachments/assets/aec5b46b-2ffd-4eba-8ba8-43275f548eca" />
+<img width="150" height="150" alt="image" src="https://github.com/user-attachments/assets/aec5b46b-2ffd-4eba-8ba8-43275f548eca" />
 
 ## usage
 
