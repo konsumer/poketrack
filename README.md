@@ -6,6 +6,10 @@ It uses [CLAP](https://github.com/free-audio/clap) for sound-generation and effe
 
 Grab [the latest reelase](https://github.com/konsumer/raypoketrack/releases) for your platform. On steamdeck, I made a non-steam game launcher. Joystick (analog/dpad/etc) worked for me without any config, but since SELECT is next to dpad, I also added controller-maps so triggers act as START/SELECT (on opposite sides) which allows for easier SELECT + dpad. In launch options, add `--fullscreen`.
 
+I don't have mobile builds setup yet, but it should work OK on the web:
+
+<img width="1550" height="1550" alt="image" src="https://github.com/user-attachments/assets/aec5b46b-2ffd-4eba-8ba8-43275f548eca" />
+
 ## usage
 
 You should be able to track quickly with a joystick, or keys:
