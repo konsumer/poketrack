@@ -75,6 +75,7 @@ typedef struct {
   // MIDI-in device picker (instrument-level, left panel DEV row)
   bool midi_in_picker_active;
   int  midi_in_picker_row;
+  bool inst_param_cc_col;  // true = cursor is on the CC field of a param row
 } UIState;
 
 void ui_init(UIState *ui, TrackerSong *song, AudioEngine *engine);

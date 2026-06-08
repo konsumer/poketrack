@@ -246,19 +246,34 @@ void screen_instrument_update(UIState *ui) {
       ui->clap_picker_row    = 0;
     }
 
+    bool on_cc_col = ui->inst_param_cc_col && !on_data && !on_add
+                     && param >= 0 && param < nparams && param < UNIT_MAX_PARAMS;
+
     if (!edit) {
       if (ui_repeat(BTN_UP)) {
         if (ui->inst_row > INST_PARAM_BASE)
           ui->inst_row--;
-        else
+        else {
           ui->inst_row = slot;
+          ui->inst_param_cc_col = false;
+        }
       }
       if (ui_repeat(BTN_DOWN)) {
         int max_row = has_data ? data_row : (has_add_row ? add_row : INST_PARAM_BASE + nparams - 1);
         if (ui->inst_row < max_row) ui->inst_row++;
       }
-      if (ui_repeat(BTN_LEFT))
-        ui->inst_row = slot;
+      // Left: exit CC col → value col, or exit params → slot panel
+      if (ui_repeat(BTN_LEFT)) {
+        if (ui->inst_param_cc_col)
+          ui->inst_param_cc_col = false;
+        else {
+          ui->inst_row = slot;
+          ui->inst_param_cc_col = false;
+        }
+      }
+      // Right: enter CC col from a normal param row
+      if (ui_repeat(BTN_RIGHT) && !on_data && !on_add && param >= 0 && param < nparams && param < UNIT_MAX_PARAMS)
+        ui->inst_param_cc_col = true;
 
       if (on_data) {
         if (input_pressed(BTN_B)) {
@@ -267,7 +282,10 @@ void screen_instrument_update(UIState *ui) {
         }
       } else if (!on_add && param >= 0 && param < nparams) {
         if (input_pressed(BTN_B)) {
-          if (def->mapping_remove && state) {
+          if (on_cc_col) {
+            // B on CC col: back to value col
+            ui->inst_param_cc_col = false;
+          } else if (def->mapping_remove && state) {
             def->mapping_remove(state, param);
             if (def->sync_to_data) def->sync_to_data(state, sl->data, sizeof(sl->data));
             if (ui->inst_row > INST_PARAM_BASE) ui->inst_row--;
@@ -284,6 +302,19 @@ void screen_instrument_update(UIState *ui) {
           }
         }
       }
+    } else if (on_cc_col) {
+      // A held + up/down: cycle CC value -- → 00 → ... → 7F → -- (loops)
+      uint8_t cc = sl->cc_map[param];
+      bool changed = false;
+      if (ui_repeat(BTN_UP)) {
+        cc = (cc == 0xFF) ? 0x00 : (cc >= 0x7F ? 0xFF : cc + 1);
+        changed = true;
+      }
+      if (ui_repeat(BTN_DOWN)) {
+        cc = (cc == 0xFF) ? 0x7F : (cc == 0x00 ? 0xFF : cc - 1);
+        changed = true;
+      }
+      if (changed) sl->cc_map[param] = cc;
     } else {
       if (!on_data && !on_add && param >= 0 && param < nparams) {
         bool use_dyn = def->get_param_val && def->set_param_val && state;
@@ -408,7 +439,7 @@ void screen_instrument_draw(UIState *ui) {
   {
     ChainSlot *sl = &inst->chain[cur_slot];
     int bar_x = PANEL_W + 94;
-    int bar_w = WIN_W - bar_x - 4;
+    int bar_w = WIN_W - bar_x - 26;  // shrunk to fit CC field at right
     UnitState *cur_state = ui->engine->preview_states[cur_slot];
     if (ui->engine->chan_states[0][cur_slot])
       cur_state = ui->engine->chan_states[0][cur_slot];
@@ -467,6 +498,15 @@ void screen_instrument_draw(UIState *ui) {
         float frac = pv / 255.0f;
         DrawRectangle(bar_x, y + 3, bar_w, CH_H - 6, C_DIM);
         DrawRectangle(bar_x, y + 3, (int)(frac * bar_w), CH_H - 6, cur ? C_NOTE : C_HEADER);
+      }
+
+      // CC map field (right edge)
+      {
+        uint8_t cc = (pi < UNIT_MAX_PARAMS) ? sl->cc_map[pi] : 0xFF;
+        const char *cc_str = (cc <= 127) ? TextFormat("%02X", cc) : "--";
+        bool cc_focused = cur && ui->inst_param_cc_col;
+        Color cc_col = cc_focused ? C_NOTE : (cc <= 127 ? C_VEL : C_DIM);
+        DrawText(cc_str, WIN_W - 20, y + (CH_H - FONT_S) / 2, FONT_S, cc_col);
       }
     }
 

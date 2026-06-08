@@ -36,10 +36,22 @@ typedef struct {
   UnitState *chan_states[SONG_CHANNELS][CHAIN_MAX];
   const UnitDef *chan_defs[SONG_CHANNELS][CHAIN_MAX];
 
-  // Preview channel
+  // Preview channel (UI keyboard preview — monophonic, params readable by instrument screen)
   UnitState *preview_states[CHAIN_MAX];
   const UnitDef *preview_defs[CHAIN_MAX];
   uint8_t preview_inst;
+
+  // MIDI live-input poly voices
+  struct MidiVoice {
+    UnitState    *states[CHAIN_MAX];
+    const UnitDef *defs[CHAIN_MAX];
+    uint8_t       note;
+    uint8_t       inst_idx;
+    uint8_t       vstate;    // 0=free 1=playing 2=released
+    uint32_t      birth;     // voice-clock at note-on (for stealing)
+    uint32_t      rel_age;   // voice-clock at note-off (for stealing released)
+  } midi_voices[8];
+  uint32_t midi_voice_clock;
 
   // Temp buffers for per-channel mixing
   float tmp_l[AUDIO_BLOCK_SIZE];
@@ -64,6 +76,11 @@ void audio_rebuild_instrument(AudioEngine *eng, uint8_t inst_idx);
 void audio_ensure_preview(AudioEngine *eng, uint8_t inst_idx);
 void audio_preview_note(AudioEngine *eng, uint8_t inst_idx, uint8_t note);
 void audio_preview_kill(AudioEngine *eng);
+
+// Polyphonic MIDI live input (separate from UI preview)
+void audio_midi_note_on(AudioEngine *eng, uint8_t inst_idx, uint8_t note);
+void audio_midi_note_off(AudioEngine *eng, uint8_t inst_idx, uint8_t note);
+void audio_midi_kill_all(AudioEngine *eng);
 
 void audio_fill_buffer(AudioEngine *eng, float *out, uint32_t frames);
 

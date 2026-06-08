@@ -32,17 +32,30 @@ static void poll_midi_in(void) {
     uint8_t msg_ch   = (msg.status & 0x0F) + 1;  // 1-16
     bool is_note_on  = (type == 0x90) && msg.data2 > 0;
     bool is_note_off = (type == 0x80) || (type == 0x90 && msg.data2 == 0);
-    if (!is_note_on && !is_note_off) continue;
+    bool is_cc       = (type == 0xB0);
+    if (!is_note_on && !is_note_off && !is_cc) continue;
     const char *port_name = midi_in_port_name(msg.port_idx);
     for (int i = 0; i < NUM_INSTRUMENTS; i++) {
       TrackerInstrument *inst = &g_engine.song->instruments[i];
       if (!inst->midi_in_device[0]) continue;
       if (strcmp(inst->midi_in_device, port_name) != 0) continue;
       if (inst->midi_in_channel != 0 && inst->midi_in_channel != msg_ch) continue;
-      if (is_note_on)
-        audio_preview_note(&g_engine, (uint8_t)i, msg.data1);
-      else
-        audio_preview_kill(&g_engine);
+      if (is_note_on) {
+        audio_midi_note_on(&g_engine, (uint8_t)i, msg.data1);
+      } else if (is_note_off) {
+        audio_midi_note_off(&g_engine, (uint8_t)i, msg.data1);
+      } else if (is_cc) {
+        // Apply CC to any param with a matching cc_map entry
+        uint8_t cc_num = msg.data1 & 0x7F;
+        uint8_t cc_val = msg.data2 & 0x7F;
+        for (int s = 0; s < CHAIN_MAX; s++) {
+          ChainSlot *sl = &inst->chain[s];
+          for (int p = 0; p < UNIT_MAX_PARAMS; p++) {
+            if (sl->cc_map[p] != cc_num) continue;
+            sl->params[p] = (uint8_t)(cc_val * 2);  // 0-127 → 0-254
+          }
+        }
+      }
       break;
     }
   }
