@@ -105,7 +105,9 @@ int main(int argc, char **argv) {
 
   ui_init(&g_ui, &song, &g_engine);
 
+#ifndef __EMSCRIPTEN__
   SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+#endif
   InitWindow(WIN_W, WIN_H, "raypoketrack");
   SetTargetFPS(60);
   g_target = LoadRenderTexture(WIN_W, WIN_H);
