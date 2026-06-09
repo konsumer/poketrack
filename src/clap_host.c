@@ -94,7 +94,8 @@ static void resolve_clap_path(const char *in, char *out, size_t out_size) {
   strncpy(stem, base, sizeof(stem) - 1);
   stem[sizeof(stem) - 1] = '\0';
   char *dot = strrchr(stem, '.');
-  if (dot) *dot = '\0';
+  if (dot)
+    *dot = '\0';
   snprintf(out, out_size, "%s/Contents/MacOS/%s", tmp, stem);
 #else
   strncpy(out, in, out_size);
@@ -269,24 +270,31 @@ void clap_host_process(ClapPlugin *p,
   float *out_bufs[2] = {p->buf_out_l, p->buf_out_r};
 
   // clap_audio_buffer_t: data32, data64, channel_count, latency, constant_mask
-  clap_audio_buffer_t audio_in  = { (float **)in_bufs, NULL, 2, 0, 0 };
-  clap_audio_buffer_t audio_out = { out_bufs,           NULL, 2, 0, 0 };
+  clap_audio_buffer_t audio_in = {(float **)in_bufs, NULL, 2, 0, 0};
+  clap_audio_buffer_t audio_out = {out_bufs, NULL, 2, 0, 0};
 
   // clap_input_events_t: ctx, size, get
   clap_input_events_t in_events = {
-      p, list_size, list_get,
+      p,
+      list_size,
+      list_get,
   };
   // clap_output_events_t: ctx, try_push
-  clap_output_events_t out_events = { p, out_try_push };
+  clap_output_events_t out_events = {p, out_try_push};
 
   // clap_process_t: steady_time, frames_count, transport,
   //   audio_inputs, audio_outputs, audio_inputs_count, audio_outputs_count,
   //   in_events, out_events
   clap_process_t proc = {
-      -1, frames, NULL,
-      in_l ? &audio_in : NULL, &audio_out,
-      in_l ? 1u : 0u, 1u,
-      &in_events, &out_events,
+      -1,
+      frames,
+      NULL,
+      in_l ? &audio_in : NULL,
+      &audio_out,
+      in_l ? 1u : 0u,
+      1u,
+      &in_events,
+      &out_events,
   };
 
   p->plugin->process(p->plugin, &proc);
@@ -303,52 +311,66 @@ bool clap_host_is_instrument(ClapPlugin *p) { return p && p->is_instrument; }
 const char *clap_host_name(ClapPlugin *p) { return p ? p->name : ""; }
 
 uint32_t clap_host_param_count(ClapPlugin *p) {
-  if (!p || !p->params_ext) return 0;
+  if (!p || !p->params_ext)
+    return 0;
   return p->params_ext->count(p->plugin);
 }
 
 bool clap_host_param_flags(ClapPlugin *p, uint32_t idx, uint32_t *out_flags) {
-  if (!p || !p->params_ext) return false;
+  if (!p || !p->params_ext)
+    return false;
   clap_param_info_t info;
-  if (!p->params_ext->get_info(p->plugin, idx, &info)) return false;
-  if (out_flags) *out_flags = (uint32_t)info.flags;
+  if (!p->params_ext->get_info(p->plugin, idx, &info))
+    return false;
+  if (out_flags)
+    *out_flags = (uint32_t)info.flags;
   return true;
 }
 
 bool clap_host_param_is_stepped(ClapPlugin *p, uint32_t idx) {
-  if (!p || !p->params_ext) return false;
+  if (!p || !p->params_ext)
+    return false;
   clap_param_info_t info;
-  if (!p->params_ext->get_info(p->plugin, idx, &info)) return false;
+  if (!p->params_ext->get_info(p->plugin, idx, &info))
+    return false;
   return (info.flags & CLAP_PARAM_IS_STEPPED) != 0;
 }
 
 bool clap_host_param_info(ClapPlugin *p, uint32_t idx,
                           uint32_t *out_id, char *out_name, size_t name_sz,
                           double *out_min, double *out_max, double *out_default) {
-  if (!p || !p->params_ext) return false;
+  if (!p || !p->params_ext)
+    return false;
   clap_param_info_t info;
-  if (!p->params_ext->get_info(p->plugin, idx, &info)) return false;
-  if (out_id)      *out_id      = (uint32_t)info.id;
-  if (out_name)    snprintf(out_name, name_sz, "%s", info.name);
-  if (out_min)     *out_min     = info.min_value;
-  if (out_max)     *out_max     = info.max_value;
-  if (out_default) *out_default = info.default_value;
+  if (!p->params_ext->get_info(p->plugin, idx, &info))
+    return false;
+  if (out_id)
+    *out_id = (uint32_t)info.id;
+  if (out_name)
+    snprintf(out_name, name_sz, "%s", info.name);
+  if (out_min)
+    *out_min = info.min_value;
+  if (out_max)
+    *out_max = info.max_value;
+  if (out_default)
+    *out_default = info.default_value;
   return true;
 }
 
 void clap_host_queue_param(ClapPlugin *p, uint32_t param_id, double value) {
-  if (!p || p->param_event_count >= 16) return;
+  if (!p || p->param_event_count >= 16)
+    return;
   clap_event_param_value_t *ev = &p->param_events[p->param_event_count++];
   memset(ev, 0, sizeof(*ev));
-  ev->header.size     = sizeof(*ev);
-  ev->header.time     = 0;
+  ev->header.size = sizeof(*ev);
+  ev->header.time = 0;
   ev->header.space_id = CLAP_CORE_EVENT_SPACE_ID;
-  ev->header.type     = CLAP_EVENT_PARAM_VALUE;
-  ev->header.flags    = 0;
-  ev->param_id        = (clap_id)param_id;
-  ev->value           = value;
-  ev->note_id         = -1;
-  ev->port_index      = -1;
-  ev->channel         = -1;
-  ev->key             = -1;
+  ev->header.type = CLAP_EVENT_PARAM_VALUE;
+  ev->header.flags = 0;
+  ev->param_id = (clap_id)param_id;
+  ev->value = value;
+  ev->note_id = -1;
+  ev->port_index = -1;
+  ev->channel = -1;
+  ev->key = -1;
 }

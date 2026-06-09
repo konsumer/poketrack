@@ -143,96 +143,112 @@ void tracker_clear(TrackerSong *song) {
 #include <stdlib.h>
 
 static void song_dir(const char *file_path, char *dir, int sz) {
-    strncpy(dir, file_path, sz - 1);
-    char *sep = strrchr(dir, '/');
-    if (!sep) sep = strrchr(dir, '\\');
-    if (sep) *(sep + 1) = '\0';
-    else { dir[0] = '.'; dir[1] = '/'; dir[2] = '\0'; }
+  strncpy(dir, file_path, sz - 1);
+  char *sep = strrchr(dir, '/');
+  if (!sep)
+    sep = strrchr(dir, '\\');
+  if (sep)
+    *(sep + 1) = '\0';
+  else {
+    dir[0] = '.';
+    dir[1] = '/';
+    dir[2] = '\0';
+  }
 }
 
 // Convert abs_path to path relative to base_dir (must end with '/').
 // Falls back to abs_path if no common prefix.
 static void path_make_relative(const char *base_dir, const char *abs_path, char *out, int out_sz) {
-    int last_sep = 0;
-    for (int i = 0; base_dir[i] && abs_path[i]; i++) {
-        if (base_dir[i] != abs_path[i]) break;
-        if (base_dir[i] == '/') last_sep = i + 1;
-    }
-    if (last_sep == 0) {
-        strncpy(out, abs_path, out_sz - 1);
-        out[out_sz - 1] = '\0';
-        return;
-    }
-    int ups = 0;
-    for (int i = last_sep; base_dir[i]; i++) if (base_dir[i] == '/') ups++;
-    out[0] = '\0';
-    for (int i = 0; i < ups; i++) strncat(out, "../", out_sz - (int)strlen(out) - 1);
-    strncat(out, abs_path + last_sep, out_sz - (int)strlen(out) - 1);
+  int last_sep = 0;
+  for (int i = 0; base_dir[i] && abs_path[i]; i++) {
+    if (base_dir[i] != abs_path[i])
+      break;
+    if (base_dir[i] == '/')
+      last_sep = i + 1;
+  }
+  if (last_sep == 0) {
+    strncpy(out, abs_path, out_sz - 1);
+    out[out_sz - 1] = '\0';
+    return;
+  }
+  int ups = 0;
+  for (int i = last_sep; base_dir[i]; i++)
+    if (base_dir[i] == '/')
+      ups++;
+  out[0] = '\0';
+  for (int i = 0; i < ups; i++) strncat(out, "../", out_sz - (int)strlen(out) - 1);
+  strncat(out, abs_path + last_sep, out_sz - (int)strlen(out) - 1);
 }
 
 static void path_resolve(const char *base_dir, const char *rel, char *out, int out_sz) {
-    if (rel[0] == '/' || rel[0] == '\\' || rel[1] == ':')
-        strncpy(out, rel, out_sz - 1);
-    else
-        snprintf(out, out_sz, "%s%s", base_dir, rel);
-    out[out_sz - 1] = '\0';
+  if (rel[0] == '/' || rel[0] == '\\' || rel[1] == ':')
+    strncpy(out, rel, out_sz - 1);
+  else
+    snprintf(out, out_sz, "%s%s", base_dir, rel);
+  out[out_sz - 1] = '\0';
 }
 
 // Rewrite data field path in-place using path_fn(dir, old_path) -> new_path.
 // Handles CLAP "path\tplugin_id" by only transforming the path part.
 static void rewrite_path(char *d, const char *dir,
-                         void (*path_fn)(const char*, const char*, char*, int)) {
-    if (!d[0]) return;
-    char fpath[512];
-    strncpy(fpath, d, sizeof(fpath) - 1);
-    char *tab = strchr(fpath, '\t');
-    if (tab) *tab = '\0';
-    char result[512];
-    path_fn(dir, fpath, result, sizeof(result));
-    if (tab) snprintf(d, 239, "%s\t%s", result, tab + 1);
-    else     strncpy(d, result, 238);
+                         void (*path_fn)(const char *, const char *, char *, int)) {
+  if (!d[0])
+    return;
+  char fpath[512];
+  strncpy(fpath, d, sizeof(fpath) - 1);
+  char *tab = strchr(fpath, '\t');
+  if (tab)
+    *tab = '\0';
+  char result[512];
+  path_fn(dir, fpath, result, sizeof(result));
+  if (tab)
+    snprintf(d, 239, "%s\t%s", result, tab + 1);
+  else
+    strncpy(d, result, 238);
 }
 
 bool tracker_save(const TrackerSong *song, const char *path) {
-    char dir[512];
-    song_dir(path, dir, sizeof(dir));
+  char dir[512];
+  song_dir(path, dir, sizeof(dir));
 
-    TrackerSong *out = malloc(sizeof(TrackerSong));
-    if (!out) return false;
-    memcpy(out, song, sizeof(TrackerSong));
+  TrackerSong *out = malloc(sizeof(TrackerSong));
+  if (!out)
+    return false;
+  memcpy(out, song, sizeof(TrackerSong));
 
-    for (int i = 0; i < NUM_INSTRUMENTS; i++)
-        for (int s = 0; s < CHAIN_MAX; s++) {
-            char *d = out->instruments[i].chain[s].data;
-            // Only relativise absolute paths
-            if (d[0] == '/' || d[0] == '\\' || d[1] == ':')
-                rewrite_path(d, dir, path_make_relative);
-        }
+  for (int i = 0; i < NUM_INSTRUMENTS; i++)
+    for (int s = 0; s < CHAIN_MAX; s++) {
+      char *d = out->instruments[i].chain[s].data;
+      // Only relativise absolute paths
+      if (d[0] == '/' || d[0] == '\\' || d[1] == ':')
+        rewrite_path(d, dir, path_make_relative);
+    }
 
-    bool ok = SaveFileData(path, out, (int)sizeof(TrackerSong));
-    free(out);
-    return ok;
+  bool ok = SaveFileData(path, out, (int)sizeof(TrackerSong));
+  free(out);
+  return ok;
 }
 
 bool tracker_load(TrackerSong *song, const char *path) {
-    int size = 0;
-    unsigned char *data = LoadFileData(path, &size);
-    if (!data) return false;
+  int size = 0;
+  unsigned char *data = LoadFileData(path, &size);
+  if (!data)
+    return false;
 
-    bool ok = ((size_t)size >= sizeof(TrackerSong));
-    if (ok) {
-        char dir[512];
-        song_dir(path, dir, sizeof(dir));
-        memcpy(song, data, sizeof(TrackerSong));
-        for (int i = 0; i < NUM_INSTRUMENTS; i++)
-            for (int s = 0; s < CHAIN_MAX; s++) {
-                char *d = song->instruments[i].chain[s].data;
-                // Only resolve relative paths
-                if (d[0] && d[0] != '/' && d[0] != '\\' && d[1] != ':')
-                    rewrite_path(d, dir, path_resolve);
-            }
-    }
+  bool ok = ((size_t)size >= sizeof(TrackerSong));
+  if (ok) {
+    char dir[512];
+    song_dir(path, dir, sizeof(dir));
+    memcpy(song, data, sizeof(TrackerSong));
+    for (int i = 0; i < NUM_INSTRUMENTS; i++)
+      for (int s = 0; s < CHAIN_MAX; s++) {
+        char *d = song->instruments[i].chain[s].data;
+        // Only resolve relative paths
+        if (d[0] && d[0] != '/' && d[0] != '\\' && d[1] != ':')
+          rewrite_path(d, dir, path_resolve);
+      }
+  }
 
-    UnloadFileData(data);
-    return ok;
+  UnloadFileData(data);
+  return ok;
 }

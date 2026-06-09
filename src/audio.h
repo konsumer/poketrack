@@ -43,13 +43,13 @@ typedef struct {
 
   // MIDI live-input poly voices
   struct MidiVoice {
-    UnitState    *states[CHAIN_MAX];
+    UnitState *states[CHAIN_MAX];
     const UnitDef *defs[CHAIN_MAX];
-    uint8_t       note;
-    uint8_t       inst_idx;
-    uint8_t       vstate;    // 0=free 1=playing 2=released
-    uint32_t      birth;     // voice-clock at note-on (for stealing)
-    uint32_t      rel_age;   // voice-clock at note-off (for stealing released)
+    uint8_t note;
+    uint8_t inst_idx;
+    uint8_t vstate;    // 0=free 1=playing 2=released
+    uint32_t birth;    // voice-clock at note-on (for stealing)
+    uint32_t rel_age;  // voice-clock at note-off (for stealing released)
   } midi_voices[8];
   uint32_t midi_voice_clock;
 

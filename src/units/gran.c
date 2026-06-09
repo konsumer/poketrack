@@ -166,8 +166,10 @@ static void gran_kill(UnitState *s) {
 }
 
 static inline float gran_env(float phase, float atk_f, float rel_f) {
-  if (atk_f > 0.0f && phase < atk_f)          return phase / atk_f;
-  if (rel_f > 0.0f && phase > (1.0f - rel_f)) return (1.0f - phase) / rel_f;
+  if (atk_f > 0.0f && phase < atk_f)
+    return phase / atk_f;
+  if (rel_f > 0.0f && phase > (1.0f - rel_f))
+    return (1.0f - phase) / rel_f;
   return 1.0f;
 }
 
@@ -216,10 +218,14 @@ static void gran_render(UnitState *s, const uint8_t *p,
 
       // Bounds-check before array access (NaN/overshoot guard)
       if (g->src_pos < 0.0f || g->src_pos >= (float)s->buf_len) {
-        g->active = false; continue;
+        g->active = false;
+        continue;
       }
       uint32_t idx = (uint32_t)g->src_pos;
-      if (idx >= s->buf_len) { g->active = false; continue; }
+      if (idx >= s->buf_len) {
+        g->active = false;
+        continue;
+      }
       float frac = g->src_pos - idx;
       uint32_t idx2 = (idx + 1 < s->buf_len) ? idx + 1 : idx;
       float sl1 = s->buf_l[idx] + frac * (s->buf_l[idx2] - s->buf_l[idx]);

@@ -111,23 +111,10 @@ C-4  00  00 80
 
 which sequences cutoff.
 
-At some point, I will try to make a bunch of simpler 1-function CLAP units that can be dropped in easier. In general, I think it's actually better to chain several differnt units together, and there are a lot of built-ins that should just work.
+At some point, I will try to make a bunch of simpler 1-function CLAP units that can be dropped in easier. In general, I think it's actually better to chain several differnt units together, and there are a lot of built-ins that should just work. The idea is that we eventually have an ecosystem of open plugins that can be used in other things, if you like, that are pretty easy to setup.
 
 
 ## development
 
-```sh
-# build native
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
+I use `make` to record common tasks (and `cmake` to actually build) so you can run `make` to get documentation.
 
-# build web
-emcmake cmake -B build-web -DCMAKE_BUILD_TYPE=Release -DPLATFORM=Web
-cmake --build build-web --parallel
-
-# run local watching web-server
-npx -y live-server webroot --mount=/raypoketrack.mjs:./build-web/raypoketrack.mjs
-
-# format code
-find . -name "*.c" -o -name "*.h" | grep -v build | xargs clang-format -i
-```

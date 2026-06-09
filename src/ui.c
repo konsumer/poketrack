@@ -1,8 +1,9 @@
-#include "file_browser.h"
 #include "ui.h"
 
 #include <stdio.h>
 #include <string.h>
+
+#include "file_browser.h"
 
 const Color CH_COLORS[SONG_CHANNELS] = {
     {0xFF, 0x40, 0x40, 0xFF},
@@ -171,12 +172,12 @@ static void draw_status(UIState *ui) {
   // Left: screen name; pattern screen includes pattern number
   char left[32];
   if (ui->screen == SCREEN_PATTERN)
-      snprintf(left, sizeof(left), "PATTERN %02X", ui->ctx_pattern);
+    snprintf(left, sizeof(left), "PATTERN %02X", ui->ctx_pattern);
   else if (ui->screen == SCREEN_INSTRUMENT)
-      snprintf(left, sizeof(left), "INSTRUMENT %02X", ui->ctx_instrument);
+    snprintf(left, sizeof(left), "INSTRUMENT %02X", ui->ctx_instrument);
   else {
-      static const char *names[] = {"SONG", NULL, NULL, "MENU"};
-      snprintf(left, sizeof(left), "%s", names[ui->screen]);
+    static const char *names[] = {"SONG", NULL, NULL, "MENU"};
+    snprintf(left, sizeof(left), "%s", names[ui->screen]);
   }
   DrawText(left, 4, (STATUS_H - FONT_S) / 2, FONT_S, C_STATUS);
 

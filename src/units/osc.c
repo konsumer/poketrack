@@ -162,7 +162,7 @@ static void osc_render(UnitState *s, const uint8_t *p,
   }
 }
 
-static const char * const osc_wave_names[] = {"SINE","SQR","SAW","TRI","NOISE"};
+static const char *const osc_wave_names[] = {"SINE", "SQR", "SAW", "TRI", "NOISE"};
 
 const UnitDef unit_osc = {
     .id = "osc",

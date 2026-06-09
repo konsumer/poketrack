@@ -66,15 +66,15 @@ typedef struct {
 
   // CLAP param picker sub-mode
   bool clap_picker_active;
-  int  clap_picker_row;   // cursor in full plugin param list
+  int clap_picker_row;  // cursor in full plugin param list
 
   // Device picker sub-mode (data row A, for units with dev_picker_*)
   bool dev_picker_active;
-  int  dev_picker_row;
+  int dev_picker_row;
 
   // MIDI-in device picker (instrument-level, left panel DEV row)
   bool midi_in_picker_active;
-  int  midi_in_picker_row;
+  int midi_in_picker_row;
   bool inst_param_cc_col;  // true = cursor is on the CC field of a param row
 } UIState;
 
