@@ -188,7 +188,8 @@ static void render_channel(AudioEngine *eng, int ch, float *out_l, float *out_r,
 // Pre-load chan_states for a specific pattern on the given channel (main-thread safe).
 // Scans pattern for the first note-carrying step and ensures states exist for that instrument.
 static void preload_chan_states_for_pattern(AudioEngine *eng, int ch, uint8_t pi) {
-  if (pi == TRACKER_EMPTY) return;
+  if (pi == TRACKER_EMPTY)
+    return;
   Pattern *pat = &eng->song->pattern_data[pi];
   for (int step = 0; step < PATTERN_STEPS; step++) {
     PatternStep *s = &pat->steps[step];
@@ -267,7 +268,8 @@ static void fire_step(AudioEngine *eng, int ch, PatternStep *step) {
     inst_idx = step->instrument;
     ensure_chan_states(eng, ch, inst_idx);
   } else {
-    if (eng->active_inst[ch] == TRACKER_EMPTY) return;
+    if (eng->active_inst[ch] == TRACKER_EMPTY)
+      return;
     inst_idx = eng->active_inst[ch];
   }
 
@@ -276,12 +278,15 @@ static void fire_step(AudioEngine *eng, int ch, PatternStep *step) {
   // slot 0 params 0..(n0-1), slot 1 params n0..(n0+n1-1), etc.
   TrackerInstrument *inst = &eng->song->instruments[inst_idx];
   for (int fi = 0; fi < FX_PER_STEP; fi++) {
-    if (step->fx[fi] == TRACKER_EMPTY) continue;
+    if (step->fx[fi] == TRACKER_EMPTY)
+      continue;
     int remaining = (int)step->fx[fi];
     for (int s = 0; s < CHAIN_MAX; s++) {
-      if (!inst->chain[s].unit_id[0]) continue;
+      if (!inst->chain[s].unit_id[0])
+        continue;
       const UnitDef *def = unit_find(inst->chain[s].unit_id);
-      if (!def) continue;
+      if (!def)
+        continue;
       UnitState *st = eng->chan_states[ch][s];
       int nparams = (def->dyn_num_params && st) ? def->dyn_num_params(st) : def->num_params;
       if (remaining < nparams) {
@@ -295,7 +300,8 @@ static void fire_step(AudioEngine *eng, int ch, PatternStep *step) {
     }
   }
 
-  if (step->note == NOTE_EMPTY) return;
+  if (step->note == NOTE_EMPTY)
+    return;
 
   if (eng->active_note[ch])
     chan_note_off(eng, ch, eng->active_note[ch]);
@@ -456,9 +462,10 @@ static void midi_voice_destroy(AudioEngine *eng, int v) {
   struct MidiVoice *mv = &eng->midi_voices[v];
   for (int s = 0; s < CHAIN_MAX; s++) {
     if (mv->states[s]) {
-      if (mv->defs[s]) mv->defs[s]->destroy(mv->states[s]);
+      if (mv->defs[s])
+        mv->defs[s]->destroy(mv->states[s]);
       mv->states[s] = NULL;
-      mv->defs[s]   = NULL;
+      mv->defs[s] = NULL;
     }
   }
   mv->vstate = 0;  // MV_FREE
@@ -470,11 +477,13 @@ static void midi_voice_init(AudioEngine *eng, int v, uint8_t inst_idx) {
   TrackerInstrument *inst = &eng->song->instruments[inst_idx];
   for (int s = 0; s < CHAIN_MAX; s++) {
     ChainSlot *slot = &inst->chain[s];
-    if (!slot->unit_id[0] || !slot->enabled) continue;
+    if (!slot->unit_id[0] || !slot->enabled)
+      continue;
     const UnitDef *def = unit_find(slot->unit_id);
-    if (!def) continue;
+    if (!def)
+      continue;
     mv->states[s] = def->create(AUDIO_SAMPLE_RATE);
-    mv->defs[s]   = def;
+    mv->defs[s] = def;
     if (def->set_data && mv->states[s])
       def->set_data(mv->states[s], slot->data, eng->save_dir);
   }
@@ -488,10 +497,16 @@ static int midi_voice_alloc(AudioEngine *eng, uint8_t inst_idx) {
   for (int v = 0; v < 8; v++) {
     struct MidiVoice *mv = &eng->midi_voices[v];
     int score;
-    if (mv->vstate == 0)         score = 3000000 + v;          // free: highest priority
-    else if (mv->vstate == 2)    score = 2000000 - mv->rel_age; // released: prefer oldest
-    else                         score = 1000000 - mv->birth;   // playing: prefer oldest
-    if (score > best_score) { best_score = score; best = v; }
+    if (mv->vstate == 0)
+      score = 3000000 + v;  // free: highest priority
+    else if (mv->vstate == 2)
+      score = 2000000 - mv->rel_age;  // released: prefer oldest
+    else
+      score = 1000000 - mv->birth;  // playing: prefer oldest
+    if (score > best_score) {
+      best_score = score;
+      best = v;
+    }
   }
   // Reinit states if switching instrument or stealing a live voice
   if (eng->midi_voices[best].inst_idx != inst_idx || eng->midi_voices[best].vstate != 0)
@@ -506,26 +521,29 @@ void audio_midi_note_on(AudioEngine *eng, uint8_t inst_idx, uint8_t note) {
   struct MidiVoice *mv = &eng->midi_voices[v];
   TrackerInstrument *inst = &eng->song->instruments[inst_idx];
   for (int s = 0; s < CHAIN_MAX; s++) {
-    if (!mv->states[s]) continue;
+    if (!mv->states[s])
+      continue;
     ChainSlot *slot = &inst->chain[s];
     const UnitDef *def = mv->defs[s];
     if (def && def->is_source && def->note_on)
       def->note_on(mv->states[s], note, 100, slot->params);
   }
-  mv->note   = note;
+  mv->note = note;
   mv->vstate = 1;  // MV_PLAYING
-  mv->birth  = eng->midi_voice_clock++;
+  mv->birth = eng->midi_voice_clock++;
 }
 
 void audio_midi_note_off(AudioEngine *eng, uint8_t inst_idx, uint8_t note) {
   for (int v = 0; v < 8; v++) {
     struct MidiVoice *mv = &eng->midi_voices[v];
-    if (mv->vstate != 1 || mv->inst_idx != inst_idx || mv->note != note) continue;
+    if (mv->vstate != 1 || mv->inst_idx != inst_idx || mv->note != note)
+      continue;
     for (int s = 0; s < CHAIN_MAX; s++) {
-      if (!mv->states[s] || !mv->defs[s] || !mv->defs[s]->note_off) continue;
+      if (!mv->states[s] || !mv->defs[s] || !mv->defs[s]->note_off)
+        continue;
       mv->defs[s]->note_off(mv->states[s], note);
     }
-    mv->vstate  = 2;  // MV_RELEASED
+    mv->vstate = 2;  // MV_RELEASED
     mv->rel_age = eng->midi_voice_clock++;
   }
 }
@@ -533,7 +551,8 @@ void audio_midi_note_off(AudioEngine *eng, uint8_t inst_idx, uint8_t note) {
 void audio_midi_kill_all(AudioEngine *eng) {
   for (int v = 0; v < 8; v++) {
     struct MidiVoice *mv = &eng->midi_voices[v];
-    if (mv->vstate == 0) continue;
+    if (mv->vstate == 0)
+      continue;
     for (int s = 0; s < CHAIN_MAX; s++) {
       if (mv->states[s] && mv->defs[s] && mv->defs[s]->kill)
         mv->defs[s]->kill(mv->states[s]);
@@ -615,19 +634,24 @@ void audio_fill_buffer(AudioEngine *eng, float *out, uint32_t frames) {
     // MIDI poly voices
     for (int v = 0; v < 8; v++) {
       struct MidiVoice *mv = &eng->midi_voices[v];
-      if (mv->vstate == 0) continue;
+      if (mv->vstate == 0)
+        continue;
       TrackerInstrument *inst = &eng->song->instruments[mv->inst_idx];
       float pl[AUDIO_BLOCK_SIZE] = {0}, pr[AUDIO_BLOCK_SIZE] = {0};
       for (int s = 0; s < CHAIN_MAX; s++) {
-        if (!mv->states[s] || !inst->chain[s].enabled) continue;
+        if (!mv->states[s] || !inst->chain[s].enabled)
+          continue;
         const UnitDef *def = mv->defs[s];
-        if (!def || !def->is_source) continue;
+        if (!def || !def->is_source)
+          continue;
         def->render(mv->states[s], inst->chain[s].params, NULL, NULL, pl, pr, count);
       }
       for (int s = 0; s < CHAIN_MAX; s++) {
-        if (!mv->states[s] || !inst->chain[s].enabled) continue;
+        if (!mv->states[s] || !inst->chain[s].enabled)
+          continue;
         const UnitDef *def = mv->defs[s];
-        if (!def || def->is_source) continue;
+        if (!def || def->is_source)
+          continue;
         def->render(mv->states[s], inst->chain[s].params, pl, pr, pl, pr, count);
       }
       for (uint32_t f = 0; f < count; f++) {

@@ -34,7 +34,6 @@ static int col_w(int c) {
 static uint8_t clamp8(int v) { return v < 0 ? 0 : v > 255 ? 255
                                                           : (uint8_t)v; }
 
-
 static void preview(UIState *ui, uint8_t note) {
   audio_preview_kill(ui->engine);
   if (note == NOTE_EMPTY || note == NOTE_OFF)
@@ -59,7 +58,7 @@ void screen_pattern_update(UIState *ui) {
       ui->ctx_pattern++;
     if (ui_repeat(BTN_L) && ui->ctx_pattern > 0)
       ui->ctx_pattern--;
-    pat  = &ui->song->pattern_data[ui->ctx_pattern];
+    pat = &ui->song->pattern_data[ui->ctx_pattern];
     step = &pat->steps[ui->pattern_row];
   }
 
@@ -114,7 +113,8 @@ void screen_pattern_update(UIState *ui) {
         if (ui_repeat(BTN_UP)) {
           if (n == NOTE_EMPTY || n == NOTE_OFF) {
             step->note = scale_next_note(59, +1, si, sr);
-            if (!step->velocity) step->velocity = 0xFF;
+            if (!step->velocity)
+              step->velocity = 0xFF;
           } else {
             step->note = scale_next_note(n, +1, si, sr);
           }
@@ -123,7 +123,8 @@ void screen_pattern_update(UIState *ui) {
         if (ui_repeat(BTN_DOWN)) {
           if (n == NOTE_EMPTY || n == NOTE_OFF) {
             step->note = scale_next_note(61, -1, si, sr);
-            if (!step->velocity) step->velocity = 0xFF;
+            if (!step->velocity)
+              step->velocity = 0xFF;
           } else {
             step->note = scale_next_note(n, -1, si, sr);
           }
@@ -164,36 +165,56 @@ void screen_pattern_update(UIState *ui) {
         ui->ctx_instrument = step->instrument;
         break;
       case 3: {
-          uint8_t *f = &step->fx[0];
-          if (ui_repeat(BTN_UP))    *f = (*f == TRACKER_EMPTY) ? 0 : (*f < 0xFE ? *f + 1 : TRACKER_EMPTY);
-          if (ui_repeat(BTN_DOWN))  *f = (*f == TRACKER_EMPTY || *f == 0) ? TRACKER_EMPTY : *f - 1;
-          if (ui_repeat(BTN_RIGHT)) *f = (*f == TRACKER_EMPTY) ? 0 : (*f + 16 > 0xFE ? 0xFE : *f + 16);
-          if (ui_repeat(BTN_LEFT))  *f = (*f == TRACKER_EMPTY || *f < 16) ? TRACKER_EMPTY : *f - 16;
-          if (input_pressed(BTN_B)) *f = TRACKER_EMPTY;
-          break;
-        }
+        uint8_t *f = &step->fx[0];
+        if (ui_repeat(BTN_UP))
+          *f = (*f == TRACKER_EMPTY) ? 0 : (*f < 0xFE ? *f + 1 : TRACKER_EMPTY);
+        if (ui_repeat(BTN_DOWN))
+          *f = (*f == TRACKER_EMPTY || *f == 0) ? TRACKER_EMPTY : *f - 1;
+        if (ui_repeat(BTN_RIGHT))
+          *f = (*f == TRACKER_EMPTY) ? 0 : (*f + 16 > 0xFE ? 0xFE : *f + 16);
+        if (ui_repeat(BTN_LEFT))
+          *f = (*f == TRACKER_EMPTY || *f < 16) ? TRACKER_EMPTY : *f - 16;
+        if (input_pressed(BTN_B))
+          *f = TRACKER_EMPTY;
+        break;
+      }
       case 4:
-        if (ui_repeat(BTN_UP))    step->fxv[0]++;
-        if (ui_repeat(BTN_DOWN))  step->fxv[0]--;
-        if (ui_repeat(BTN_RIGHT)) step->fxv[0] = clamp8(step->fxv[0] + 16);
-        if (ui_repeat(BTN_LEFT))  step->fxv[0] = clamp8((int)step->fxv[0] - 16);
-        if (input_pressed(BTN_B)) step->fxv[0] = 0;
+        if (ui_repeat(BTN_UP))
+          step->fxv[0]++;
+        if (ui_repeat(BTN_DOWN))
+          step->fxv[0]--;
+        if (ui_repeat(BTN_RIGHT))
+          step->fxv[0] = clamp8(step->fxv[0] + 16);
+        if (ui_repeat(BTN_LEFT))
+          step->fxv[0] = clamp8((int)step->fxv[0] - 16);
+        if (input_pressed(BTN_B))
+          step->fxv[0] = 0;
         break;
       case 5: {
-          uint8_t *f = &step->fx[1];
-          if (ui_repeat(BTN_UP))    *f = (*f == TRACKER_EMPTY) ? 0 : (*f < 0xFE ? *f + 1 : TRACKER_EMPTY);
-          if (ui_repeat(BTN_DOWN))  *f = (*f == TRACKER_EMPTY || *f == 0) ? TRACKER_EMPTY : *f - 1;
-          if (ui_repeat(BTN_RIGHT)) *f = (*f == TRACKER_EMPTY) ? 0 : (*f + 16 > 0xFE ? 0xFE : *f + 16);
-          if (ui_repeat(BTN_LEFT))  *f = (*f == TRACKER_EMPTY || *f < 16) ? TRACKER_EMPTY : *f - 16;
-          if (input_pressed(BTN_B)) *f = TRACKER_EMPTY;
-          break;
-        }
+        uint8_t *f = &step->fx[1];
+        if (ui_repeat(BTN_UP))
+          *f = (*f == TRACKER_EMPTY) ? 0 : (*f < 0xFE ? *f + 1 : TRACKER_EMPTY);
+        if (ui_repeat(BTN_DOWN))
+          *f = (*f == TRACKER_EMPTY || *f == 0) ? TRACKER_EMPTY : *f - 1;
+        if (ui_repeat(BTN_RIGHT))
+          *f = (*f == TRACKER_EMPTY) ? 0 : (*f + 16 > 0xFE ? 0xFE : *f + 16);
+        if (ui_repeat(BTN_LEFT))
+          *f = (*f == TRACKER_EMPTY || *f < 16) ? TRACKER_EMPTY : *f - 16;
+        if (input_pressed(BTN_B))
+          *f = TRACKER_EMPTY;
+        break;
+      }
       case 6:
-        if (ui_repeat(BTN_UP))    step->fxv[1]++;
-        if (ui_repeat(BTN_DOWN))  step->fxv[1]--;
-        if (ui_repeat(BTN_RIGHT)) step->fxv[1] = clamp8(step->fxv[1] + 16);
-        if (ui_repeat(BTN_LEFT))  step->fxv[1] = clamp8((int)step->fxv[1] - 16);
-        if (input_pressed(BTN_B)) step->fxv[1] = 0;
+        if (ui_repeat(BTN_UP))
+          step->fxv[1]++;
+        if (ui_repeat(BTN_DOWN))
+          step->fxv[1]--;
+        if (ui_repeat(BTN_RIGHT))
+          step->fxv[1] = clamp8(step->fxv[1] + 16);
+        if (ui_repeat(BTN_LEFT))
+          step->fxv[1] = clamp8((int)step->fxv[1] - 16);
+        if (input_pressed(BTN_B))
+          step->fxv[1] = 0;
         break;
     }
   }
@@ -203,13 +224,29 @@ void screen_pattern_update(UIState *ui) {
     for (int i = 0; i < PATTERN_STEPS; i++) {
       PatternStep *s = &pat->steps[i];
       switch (ui->pattern_col) {
-        case 0: s->note = step->note; if (s->note != NOTE_EMPTY && s->note != NOTE_OFF && !s->velocity) s->velocity = 0xFF; break;
-        case 1: s->velocity = step->velocity; break;
-        case 2: s->instrument = step->instrument; break;
-        case 3: s->fx[0] = step->fx[0]; break;
-        case 4: s->fxv[0] = step->fxv[0]; break;
-        case 5: s->fx[1] = step->fx[1]; break;
-        case 6: s->fxv[1] = step->fxv[1]; break;
+        case 0:
+          s->note = step->note;
+          if (s->note != NOTE_EMPTY && s->note != NOTE_OFF && !s->velocity)
+            s->velocity = 0xFF;
+          break;
+        case 1:
+          s->velocity = step->velocity;
+          break;
+        case 2:
+          s->instrument = step->instrument;
+          break;
+        case 3:
+          s->fx[0] = step->fx[0];
+          break;
+        case 4:
+          s->fxv[0] = step->fxv[0];
+          break;
+        case 5:
+          s->fx[1] = step->fx[1];
+          break;
+        case 6:
+          s->fxv[1] = step->fxv[1];
+          break;
       }
     }
   }
@@ -219,13 +256,27 @@ void screen_pattern_update(UIState *ui) {
     for (int i = 0; i < PATTERN_STEPS; i++) {
       PatternStep *s = &pat->steps[i];
       switch (ui->pattern_col) {
-        case 0: s->note = NOTE_EMPTY; break;
-        case 1: s->velocity = 0xFF; break;
-        case 2: s->instrument = 0; break;
-        case 3: s->fx[0] = TRACKER_EMPTY; break;
-        case 4: s->fxv[0] = 0; break;
-        case 5: s->fx[1] = TRACKER_EMPTY; break;
-        case 6: s->fxv[1] = 0; break;
+        case 0:
+          s->note = NOTE_EMPTY;
+          break;
+        case 1:
+          s->velocity = 0xFF;
+          break;
+        case 2:
+          s->instrument = 0;
+          break;
+        case 3:
+          s->fx[0] = TRACKER_EMPTY;
+          break;
+        case 4:
+          s->fxv[0] = 0;
+          break;
+        case 5:
+          s->fx[1] = TRACKER_EMPTY;
+          break;
+        case 6:
+          s->fxv[1] = 0;
+          break;
       }
     }
   }
@@ -296,8 +347,14 @@ void screen_pattern_draw(UIState *ui) {
           fc = C_INST;
           break;
         case 3:
-          if (s->fx[0] == TRACKER_EMPTY) { txt = "--"; fc = cur_cell ? C_TEXT : C_DIM; }
-          else { snprintf(tmp, 8, "%02X", s->fx[0]); txt = tmp; fc = C_FX; }
+          if (s->fx[0] == TRACKER_EMPTY) {
+            txt = "--";
+            fc = cur_cell ? C_TEXT : C_DIM;
+          } else {
+            snprintf(tmp, 8, "%02X", s->fx[0]);
+            txt = tmp;
+            fc = C_FX;
+          }
           break;
         case 4:
           if (s->fx[0] == TRACKER_EMPTY) {
@@ -310,8 +367,14 @@ void screen_pattern_draw(UIState *ui) {
           }
           break;
         case 5:
-          if (s->fx[1] == TRACKER_EMPTY) { txt = "--"; fc = cur_cell ? C_TEXT : C_DIM; }
-          else { snprintf(tmp, 8, "%02X", s->fx[1]); txt = tmp; fc = C_FX; }
+          if (s->fx[1] == TRACKER_EMPTY) {
+            txt = "--";
+            fc = cur_cell ? C_TEXT : C_DIM;
+          } else {
+            snprintf(tmp, 8, "%02X", s->fx[1]);
+            txt = tmp;
+            fc = C_FX;
+          }
           break;
         case 6:
           if (s->fx[1] == TRACKER_EMPTY) {

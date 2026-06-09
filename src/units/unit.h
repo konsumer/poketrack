@@ -20,36 +20,36 @@ typedef struct {
   bool is_source;           // true=generates audio, false=processes audio
   int num_params;
   const char *param_names[UNIT_MAX_PARAMS];
-  uint8_t     param_defaults[UNIT_MAX_PARAMS];
+  uint8_t param_defaults[UNIT_MAX_PARAMS];
   // Optional enum labels. NULL = continuous 0-FF slider.
   // When set, param value is a direct index 0..(count-1).
-  const char * const *param_enums[UNIT_MAX_PARAMS];
-  uint8_t             param_enum_count[UNIT_MAX_PARAMS];
+  const char *const *param_enums[UNIT_MAX_PARAMS];
+  uint8_t param_enum_count[UNIT_MAX_PARAMS];
 
   // Optional: dynamic param count/name (for plugins with variable params like CLAP)
   int (*dyn_num_params)(UnitState *s);
   const char *(*dyn_param_name)(UnitState *s, int idx);
   uint8_t (*get_param_val)(UnitState *s, int idx);
-  void    (*set_param_val)(UnitState *s, int idx, uint8_t val);
+  void (*set_param_val)(UnitState *s, int idx, uint8_t val);
   uint8_t (*get_param_default)(UnitState *s, int idx);
   // Encode current param values back into slot->data (call after set_param_val)
-  void    (*sync_to_data)(UnitState *s, char *data_buf, size_t data_buf_sz);
+  void (*sync_to_data)(UnitState *s, char *data_buf, size_t data_buf_sz);
   // Return display string for a param value; NULL = use default %02X hex display.
   // "ON"/"OFF" → boolean toggle display (no bar). Any other string → stepped int display.
   const char *(*format_param_val)(UnitState *s, int idx, uint8_t val);
 
   // Param picker (ADD row → opens overlay to add a mapped param slot)
-  const char  *picker_title;                                  // overlay header (NULL = "ADD PARAM")
-  int          (*picker_count)(UnitState *s);                 // total params available to pick
-  const char  *(*picker_name)(UnitState *s, int picker_idx);  // name of picker entry
-  void         (*picker_add)(UnitState *s, int picker_idx);   // add picker entry as next mapping
-  void         (*mapping_remove)(UnitState *s, int map_idx);  // remove a mapped param
+  const char *picker_title;                                  // overlay header (NULL = "ADD PARAM")
+  int (*picker_count)(UnitState *s);                         // total params available to pick
+  const char *(*picker_name)(UnitState *s, int picker_idx);  // name of picker entry
+  void (*picker_add)(UnitState *s, int picker_idx);          // add picker entry as next mapping
+  void (*mapping_remove)(UnitState *s, int map_idx);         // remove a mapped param
 
   // Device picker (DATA row A → opens overlay to select a device/port)
-  const char  *dev_picker_title;                              // overlay header (NULL = "SELECT DEVICE")
-  int          (*dev_picker_count)(UnitState *s);
-  const char  *(*dev_picker_name)(UnitState *s, int idx);
-  void         (*dev_picker_set)(UnitState *s, int idx);      // select device at idx
+  const char *dev_picker_title;  // overlay header (NULL = "SELECT DEVICE")
+  int (*dev_picker_count)(UnitState *s);
+  const char *(*dev_picker_name)(UnitState *s, int idx);
+  void (*dev_picker_set)(UnitState *s, int idx);  // select device at idx
 
   UnitState *(*create)(float sample_rate);
   void (*destroy)(UnitState *s);

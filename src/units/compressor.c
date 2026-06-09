@@ -10,8 +10,8 @@
 #include "unit.h"
 
 struct UnitState {
-  float rms_l, rms_r;    // RMS estimator state
-  float gain_db;         // current gain in dB (smoothed)
+  float rms_l, rms_r;  // RMS estimator state
+  float gain_db;       // current gain in dB (smoothed)
   float sample_rate;
 };
 
@@ -23,9 +23,15 @@ static UnitState *comp_create(float sr) {
 }
 static void comp_destroy(UnitState *s) { free(s); }
 static void comp_note_on(UnitState *s, uint8_t n, uint8_t v, const uint8_t *p) {
-  (void)s; (void)n; (void)v; (void)p;
+  (void)s;
+  (void)n;
+  (void)v;
+  (void)p;
 }
-static void comp_note_off(UnitState *s, uint8_t n) { (void)s; (void)n; }
+static void comp_note_off(UnitState *s, uint8_t n) {
+  (void)s;
+  (void)n;
+}
 static void comp_kill(UnitState *s) {
   s->rms_l = s->rms_r = 0.0f;
   s->gain_db = 0.0f;
@@ -35,10 +41,10 @@ static void comp_render(UnitState *s, const uint8_t *p,
                         const float *in_l, const float *in_r,
                         float *out_l, float *out_r, uint32_t frames) {
   float threshold_db = p2f(p[0], -60.0f, 0.0f);
-  float ratio        = p2f(p[1], 1.0f, 20.0f);
-  float atk_ms       = p2f(p[2], 0.1f, 100.0f);
-  float rel_ms       = p2f(p[3], 10.0f, 2000.0f);
-  float makeup_db    = p2f(p[4], 0.0f, 24.0f);
+  float ratio = p2f(p[1], 1.0f, 20.0f);
+  float atk_ms = p2f(p[2], 0.1f, 100.0f);
+  float rel_ms = p2f(p[3], 10.0f, 2000.0f);
+  float makeup_db = p2f(p[4], 0.0f, 24.0f);
 
   float sr = s->sample_rate;
   // One-pole coefficient for attack and release

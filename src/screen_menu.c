@@ -6,7 +6,9 @@
 #include "tracker.h"
 #include "ui.h"
 
-typedef enum { MENU_FB_NONE, MENU_FB_LOAD, MENU_FB_SAVE } MenuFileBrowserMode;
+typedef enum { MENU_FB_NONE,
+               MENU_FB_LOAD,
+               MENU_FB_SAVE } MenuFileBrowserMode;
 static MenuFileBrowserMode g_fb_mode = MENU_FB_NONE;
 
 #define MENU_CONTENT_Y (STATUS_H + 2)
@@ -79,7 +81,8 @@ void screen_menu_update(UIState *ui) {
     return;  // don't re-process the A press that confirmed the dialog
   }
 
-  if (file_browser_active()) return;
+  if (file_browser_active())
+    return;
 
   if (!edit) {
     if (ui_repeat(BTN_UP) && ui->menu_row > 0)
@@ -185,7 +188,8 @@ void screen_menu_draw(UIState *ui) {
       case MENU_SAVE:
       case MENU_LOAD:
         DrawText(SONG_FILE, 100, y + (CH_H - FONT_S) / 2, FONT_S - 1, cur ? C_DIM : C_DIM);
-        if (cur) DrawText("[holdA+A]", WIN_W - 64, y + (CH_H - FONT_S) / 2, FONT_S - 1, C_DIM);
+        if (cur)
+          DrawText("[holdA+A]", WIN_W - 64, y + (CH_H - FONT_S) / 2, FONT_S - 1, C_DIM);
         break;
       case MENU_NEW:
         DrawText(cur ? "[holdA+A=confirm]" : "", 100, y + (CH_H - FONT_S) / 2, FONT_S - 1, C_DIM);

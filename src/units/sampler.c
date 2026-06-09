@@ -5,26 +5,26 @@
 // P3 TUNE:   00=-12st  80=center  FF=+12st
 // P4 STRT:   00=0%     FF=100% of sample (play start offset)
 #include <math.h>
+#include <raylib.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <raylib.h>
 #include "unit.h"
 
-#define LOOP_OFF      0
-#define LOOP_FWD      1
+#define LOOP_OFF 0
+#define LOOP_FWD 1
 #define LOOP_PINGPONG 2
-#define LOOP_REV      3
+#define LOOP_REV 3
 
 struct UnitState {
-  float *samples;    // mono float samples
+  float *samples;  // mono float samples
   uint32_t num_samples;
-  uint32_t wav_sr;   // sample rate from WAV header
+  uint32_t wav_sr;  // sample rate from WAV header
 
-  float phase;       // current read position (float for interpolation)
-  float rate;        // playback rate (samples per engine sample)
-  int direction;     // +1 or -1 (for ping-pong)
+  float phase;    // current read position (float for interpolation)
+  float rate;     // playback rate (samples per engine sample)
+  int direction;  // +1 or -1 (for ping-pong)
   bool playing;
   uint8_t last_note;
 
@@ -35,18 +35,23 @@ struct UnitState {
 // Returns malloc'd float array; caller frees with free().
 static float *load_audio(const char *path, uint32_t *out_count, uint32_t *out_sr) {
   Wave w = LoadWave(path);
-  if (w.frameCount == 0 || !w.data) return NULL;
+  if (w.frameCount == 0 || !w.data)
+    return NULL;
 
   *out_sr = w.sampleRate;
   WaveFormat(&w, w.sampleRate, 32, 1);  // convert in-place: mono, 32-bit float
 
-  float *smp = LoadWaveSamples(w);      // raylib alloc
+  float *smp = LoadWaveSamples(w);  // raylib alloc
   uint32_t n = w.frameCount;
   UnloadWave(w);
-  if (!smp) return NULL;
+  if (!smp)
+    return NULL;
 
   float *out = malloc(n * sizeof(float));
-  if (!out) { UnloadWaveSamples(smp); return NULL; }
+  if (!out) {
+    UnloadWaveSamples(smp);
+    return NULL;
+  }
   memcpy(out, smp, n * sizeof(float));
   UnloadWaveSamples(smp);
 
@@ -72,14 +77,16 @@ static void sampler_set_data(UnitState *s, const char *data, const char *base_di
   s->num_samples = 0;
   s->wav_sr = 44100;
 
-  if (!data || !data[0]) return;
+  if (!data || !data[0])
+    return;
 
   char path[1024];
   unit_resolve_path(base_dir, data, path, sizeof(path));
 
   uint32_t count = 0, wav_sr = 44100;
   float *smp = load_audio(path, &count, &wav_sr);
-  if (!smp) return;
+  if (!smp)
+    return;
 
   s->samples = smp;
   s->num_samples = count;
@@ -88,7 +95,8 @@ static void sampler_set_data(UnitState *s, const char *data, const char *base_di
 
 static void sampler_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t *p) {
   (void)vel;
-  if (!s->samples || s->num_samples == 0) return;
+  if (!s->samples || s->num_samples == 0)
+    return;
 
   float tune_semi = p2f(p[3], -12.0f, 12.0f);
   float pitch_ratio = powf(2.0f, (note + tune_semi - 60.0f) / 12.0f);
@@ -117,20 +125,26 @@ static void sampler_kill(UnitState *s) {
 static void sampler_render(UnitState *s, const uint8_t *p,
                            const float *in_l, const float *in_r,
                            float *out_l, float *out_r, uint32_t frames) {
-  (void)in_l; (void)in_r;
-  if (!s->playing || !s->samples || s->num_samples == 0) return;
+  (void)in_l;
+  (void)in_r;
+  if (!s->playing || !s->samples || s->num_samples == 0)
+    return;
 
   int loop_mode = p[0];
-  if (loop_mode > 3) loop_mode = 3;
+  if (loop_mode > 3)
+    loop_mode = 3;
 
   float ls_frac = p[1] / 255.0f;
   float le_frac = p[2] / 255.0f;
-  if (le_frac < ls_frac) le_frac = ls_frac;
+  if (le_frac < ls_frac)
+    le_frac = ls_frac;
 
   uint32_t loop_start = (uint32_t)(ls_frac * (s->num_samples - 1));
-  uint32_t loop_end   = (uint32_t)(le_frac * (s->num_samples - 1));
-  if (loop_end >= s->num_samples) loop_end = s->num_samples - 1;
-  if (loop_start > loop_end) loop_start = loop_end;
+  uint32_t loop_end = (uint32_t)(le_frac * (s->num_samples - 1));
+  if (loop_end >= s->num_samples)
+    loop_end = s->num_samples - 1;
+  if (loop_start > loop_end)
+    loop_start = loop_end;
 
   float phase = s->phase;
   int dir = s->direction;
@@ -138,14 +152,17 @@ static void sampler_render(UnitState *s, const uint8_t *p,
   uint32_t n = s->num_samples;
 
   for (uint32_t f = 0; f < frames; f++) {
-    if (!s->playing) break;
+    if (!s->playing)
+      break;
 
     // Linear interpolate
     uint32_t i0 = (uint32_t)phase;
     uint32_t i1 = i0 + 1;
     float frac = phase - (float)i0;
-    if (i0 >= n) i0 = n - 1;
-    if (i1 >= n) i1 = n - 1;
+    if (i0 >= n)
+      i0 = n - 1;
+    if (i1 >= n)
+      i1 = n - 1;
     float smp = s->samples[i0] * (1.0f - frac) + s->samples[i1] * frac;
     out_l[f] += smp;
     out_r[f] += smp;
@@ -187,7 +204,7 @@ static void sampler_render(UnitState *s, const uint8_t *p,
   s->direction = dir;
 }
 
-static const char * const sampler_loop_names[] = {"OFF", "FWD", "PING", "REV"};
+static const char *const sampler_loop_names[] = {"OFF", "FWD", "PING", "REV"};
 
 const UnitDef unit_sampler = {
     .id = "sampler",

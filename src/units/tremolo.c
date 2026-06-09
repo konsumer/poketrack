@@ -11,7 +11,7 @@
 #define TWO_PI 6.28318530718f
 
 struct UnitState {
-  float phase;      // 0..1
+  float phase;  // 0..1
   float sample_rate;
 };
 
@@ -22,20 +22,28 @@ static UnitState *tremolo_create(float sr) {
 }
 static void tremolo_destroy(UnitState *s) { free(s); }
 static void tremolo_note_on(UnitState *s, uint8_t n, uint8_t v, const uint8_t *p) {
-  (void)s; (void)n; (void)v; (void)p;
+  (void)s;
+  (void)n;
+  (void)v;
+  (void)p;
 }
-static void tremolo_note_off(UnitState *s, uint8_t n) { (void)s; (void)n; }
+static void tremolo_note_off(UnitState *s, uint8_t n) {
+  (void)s;
+  (void)n;
+}
 static void tremolo_kill(UnitState *s) { (void)s; }
 
 static void tremolo_render(UnitState *s, const uint8_t *p,
                            const float *in_l, const float *in_r,
                            float *out_l, float *out_r, uint32_t frames) {
-  float rate  = p2f(p[0], 0.1f, 20.0f);
+  float rate = p2f(p[0], 0.1f, 20.0f);
   float depth = p[1] / 255.0f;
-  int shape   = p[2];
-  if (shape > 3) shape = 3;
-  int mode    = p[3];
-  if (mode > 2) mode = 2;
+  int shape = p[2];
+  if (shape > 3)
+    shape = 3;
+  int mode = p[3];
+  if (mode > 2)
+    mode = 2;
 
   float phase_inc = rate / s->sample_rate;
   float phase = s->phase;
@@ -43,11 +51,21 @@ static void tremolo_render(UnitState *s, const uint8_t *p,
   for (uint32_t f = 0; f < frames; f++) {
     float lfo;
     switch (shape) {
-      case 0: lfo = sinf(TWO_PI * phase); break;
-      case 1: lfo = (phase < 0.5f) ? 1.0f : -1.0f; break;
-      case 2: lfo = 2.0f * phase - 1.0f; break;
-      case 3: lfo = 1.0f - 4.0f * fabsf(phase - 0.5f); break;
-      default: lfo = 0.0f; break;
+      case 0:
+        lfo = sinf(TWO_PI * phase);
+        break;
+      case 1:
+        lfo = (phase < 0.5f) ? 1.0f : -1.0f;
+        break;
+      case 2:
+        lfo = 2.0f * phase - 1.0f;
+        break;
+      case 3:
+        lfo = 1.0f - 4.0f * fabsf(phase - 0.5f);
+        break;
+      default:
+        lfo = 0.0f;
+        break;
     }
 
     float gl = 1.0f, gr = 1.0f;
@@ -60,26 +78,26 @@ static void tremolo_render(UnitState *s, const uint8_t *p,
         gr = 1.0f + depth * lfo * 0.5f;
         break;
       case 2:  // Both
-        {
-          float trem = 1.0f - depth * 0.5f * (1.0f + lfo);
-          gl = trem * (1.0f - depth * lfo * 0.5f);
-          gr = trem * (1.0f + depth * lfo * 0.5f);
-        }
-        break;
+      {
+        float trem = 1.0f - depth * 0.5f * (1.0f + lfo);
+        gl = trem * (1.0f - depth * lfo * 0.5f);
+        gr = trem * (1.0f + depth * lfo * 0.5f);
+      } break;
     }
 
     out_l[f] = in_l[f] * gl;
     out_r[f] = in_r[f] * gr;
 
     phase += phase_inc;
-    if (phase >= 1.0f) phase -= 1.0f;
+    if (phase >= 1.0f)
+      phase -= 1.0f;
   }
 
   s->phase = phase;
 }
 
-static const char * const tremolo_shape_names[] = {"SINE", "SQR", "SAW", "TRI"};
-static const char * const tremolo_mode_names[]  = {"TREM", "PAN", "BOTH"};
+static const char *const tremolo_shape_names[] = {"SINE", "SQR", "SAW", "TRI"};
+static const char *const tremolo_mode_names[] = {"TREM", "PAN", "BOTH"};
 
 const UnitDef unit_tremolo = {
     .id = "tremolo",

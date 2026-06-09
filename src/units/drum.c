@@ -119,7 +119,7 @@ static void drum_render(UnitState *s, const uint8_t *p,
   }
 }
 
-static const char * const drum_type_names[] = {"KICK","SNARE","HIHAT","HIHAT-O"};
+static const char *const drum_type_names[] = {"KICK", "SNARE", "HIHAT", "HIHAT-O"};
 
 const UnitDef unit_drum = {
     .id = "drum",

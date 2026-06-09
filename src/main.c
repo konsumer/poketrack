@@ -28,18 +28,22 @@ static void stream_callback(void *buf, unsigned int frames) {
 static void poll_midi_in(void) {
   MidiInMsg msg;
   while (midi_in_poll(&msg)) {
-    uint8_t type     = msg.status & 0xF0;
-    uint8_t msg_ch   = (msg.status & 0x0F) + 1;  // 1-16
-    bool is_note_on  = (type == 0x90) && msg.data2 > 0;
+    uint8_t type = msg.status & 0xF0;
+    uint8_t msg_ch = (msg.status & 0x0F) + 1;  // 1-16
+    bool is_note_on = (type == 0x90) && msg.data2 > 0;
     bool is_note_off = (type == 0x80) || (type == 0x90 && msg.data2 == 0);
-    bool is_cc       = (type == 0xB0);
-    if (!is_note_on && !is_note_off && !is_cc) continue;
+    bool is_cc = (type == 0xB0);
+    if (!is_note_on && !is_note_off && !is_cc)
+      continue;
     const char *port_name = midi_in_port_name(msg.port_idx);
     for (int i = 0; i < NUM_INSTRUMENTS; i++) {
       TrackerInstrument *inst = &g_engine.song->instruments[i];
-      if (!inst->midi_in_device[0]) continue;
-      if (strcmp(inst->midi_in_device, port_name) != 0) continue;
-      if (inst->midi_in_channel != 0 && inst->midi_in_channel != msg_ch) continue;
+      if (!inst->midi_in_device[0])
+        continue;
+      if (strcmp(inst->midi_in_device, port_name) != 0)
+        continue;
+      if (inst->midi_in_channel != 0 && inst->midi_in_channel != msg_ch)
+        continue;
       if (is_note_on) {
         audio_midi_note_on(&g_engine, (uint8_t)i, msg.data1);
       } else if (is_note_off) {
@@ -51,7 +55,8 @@ static void poll_midi_in(void) {
         for (int s = 0; s < CHAIN_MAX; s++) {
           ChainSlot *sl = &inst->chain[s];
           for (int p = 0; p < UNIT_MAX_PARAMS; p++) {
-            if (sl->cc_map[p] != cc_num) continue;
+            if (sl->cc_map[p] != cc_num)
+              continue;
             sl->params[p] = (uint8_t)(cc_val * 2);  // 0-127 → 0-254
           }
         }
@@ -91,7 +96,8 @@ int main(int argc, char **argv) {
     if (strcmp(argv[i], "--fullscreen") == 0 || strcmp(argv[i], "-f") == 0)
       start_fullscreen = true;
 #else
-  (void)argc; (void)argv;
+  (void)argc;
+  (void)argv;
 #endif
 
   midi_in_global_init();
@@ -113,7 +119,8 @@ int main(int argc, char **argv) {
   g_target = LoadRenderTexture(WIN_W, WIN_H);
   SetTextureFilter(g_target.texture, TEXTURE_FILTER_POINT);
 #ifndef __EMSCRIPTEN__
-  if (start_fullscreen) ToggleFullscreen();
+  if (start_fullscreen)
+    ToggleFullscreen();
 #endif
   InitAudioDevice();
 
