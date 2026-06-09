@@ -1,6 +1,6 @@
 # I use this as a wrapper around common taks.
 
-.PHONY: help build build-web serve format
+.PHONY: help build build-web clean serve format
 .DEFAULT_GOAL := help
 
 help: ## Show this help
@@ -14,7 +14,13 @@ build-web: ## Build web (Emscripten) release
 	emcmake cmake -B build-web -DCMAKE_BUILD_TYPE=Release -DPLATFORM=Web
 	cmake --build build-web --parallel
 
-serve: ## Run live-server watching web build
+clean: ## Delete built files
+	rm -rf build-web build
+
+run: build ## Build & run native build
+	./build/raypoketrack || ./build/raypoketrack.app/Contents/MacOS/raypoketrack
+
+serve: build-web ## Build & run watching web build
 	npx -y live-server webroot --mount=/raypoketrack.mjs:./build-web/raypoketrack.mjs
 
 format: ## Format all C/H source files with clang-format

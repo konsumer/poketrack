@@ -258,6 +258,8 @@ static void clap_sync_to_data(UnitState *s, char *data_buf, size_t data_buf_sz) 
     tab2 = data_buf + cur_len;
   }
   char *hex_start = tab2 + 1;
+  size_t hex_offset = (size_t)(hex_start - data_buf);
+  if (hex_offset + (size_t)s->num_mappings * 10 + 1 > data_buf_sz) return;
   for (int i = 0; i < s->num_mappings; i++)
     sprintf(hex_start + i * 10, "%08X%02X", s->mappings[i].id, s->mappings[i].val);
   hex_start[s->num_mappings * 10] = '\0';

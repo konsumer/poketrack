@@ -237,7 +237,7 @@ void screen_instrument_update(UIState *ui) {
     if (file_browser_active())
       return;
 
-    // A on DATA row: open device picker, param picker, or file browser
+    // A on DATA row: open device picker or file browser
     if (on_data && input_pressed(BTN_A)) {
       if (def->dev_picker_count && def->dev_picker_set && state) {
 #ifdef __EMSCRIPTEN__
@@ -245,9 +245,6 @@ void screen_instrument_update(UIState *ui) {
 #endif
         ui->dev_picker_active = true;
         ui->dev_picker_row = 0;
-      } else if (def->picker_count && def->picker_add && state) {
-        ui->clap_picker_active = true;
-        ui->clap_picker_row = 0;
       } else {
         g_file_slot = slot;
         file_browser_open("Select file", def->file_filter ? def->file_filter : "");

@@ -24,6 +24,7 @@ typedef void *dl_handle_t;
 
 struct ClapPlugin {
   dl_handle_t lib;
+  const clap_plugin_entry_t *entry;
   const clap_plugin_t *plugin;
   const clap_plugin_audio_ports_t *audio_ports;
   const clap_plugin_note_ports_t *note_ports;
@@ -165,6 +166,7 @@ ClapPlugin *clap_host_load(const char *path, const char *plugin_id, float sample
 
   ClapPlugin *cp = calloc(1, sizeof(ClapPlugin));
   cp->lib = lib;
+  cp->entry = entry;
   cp->plugin = plugin;
   cp->sample_rate = sample_rate;
   cp->block_size = block_size;
@@ -195,6 +197,7 @@ void clap_host_unload(ClapPlugin *p) {
   p->plugin->stop_processing(p->plugin);
   p->plugin->deactivate(p->plugin);
   p->plugin->destroy(p->plugin);
+  if (p->entry) p->entry->deinit();
   DL_CLOSE(p->lib);
   free(p->buf_out_l);
   free(p->buf_out_r);
