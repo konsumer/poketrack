@@ -308,4 +308,15 @@ void midi_web_request_access(void) {
       "typeof window._midiWebRequestAccess==='function'&&window._midiWebRequestAccess();");
 }
 
+
+// ============================================================
+// Fallback — no MIDI input support
+// ============================================================
+#else
+
+void midi_in_global_init(void) {}
+void midi_in_global_shutdown(void) {}
+int midi_in_port_count(void) { return 0; }
+const char *midi_in_port_name(int idx) { (void)idx; return "?"; }
+
 #endif
