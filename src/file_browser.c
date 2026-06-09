@@ -19,7 +19,7 @@ EMSCRIPTEN_KEEPALIVE void c_file_browser_ready(const char *path) {
 EM_JS(void, js_file_open, (const char *filter_c), {
   var filterStr = UTF8ToString(filter_c);
   var accept = filterStr.split(' ').map(function(p) {
-                                     return p.replace('*', '');
+                                     return p.replace("*", "");
                                    })
                    .join(',');
   var input = document.createElement('input');

@@ -13,12 +13,9 @@
       html, body { background: #000; overflow: hidden; width: 100%; height: 100%; }
 
       canvas {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: min(100vw, calc(100vh * 480 / 320)) !important;
-        height: min(100vh, calc(100vw * 320 / 480)) !important;
+        display: block !important;
+        position: fixed !important;
+        image-rendering: pixelated;
       }
 
       /* ── Mobile controller ──────────────────────────────── */
@@ -146,14 +143,8 @@
       .gp-btn-a { grid-column: 3; grid-row: 2; border-color: #cc3333; color: #cc3333; }
       .gp-btn-b { grid-column: 2; grid-row: 3; border-color: #cc8800; color: #cc8800; }
 
-      /* Shift canvas up to make room for controller on touch devices */
       @media (pointer: coarse) {
         #gamepad { display: flex; }
-        canvas {
-          top: 31vh !important;
-          width: min(100vw, calc(62vh * 480 / 320)) !important;
-          height: min(62vh, calc(100vw * 320 / 480)) !important;
-        }
       }
     </style>
   </head>
@@ -203,6 +194,40 @@
     <script type="module">
       import raypoketrack from './raypoketrack.mjs'
 
+      const AW = 480, AH = 320  // game internal resolution aspect
+
+      function layoutCanvas() {
+        const canvas = document.getElementById('canvas')
+        if (!canvas) return
+        const isMobile = window.matchMedia('(pointer: coarse)').matches
+        const vw = window.innerWidth
+        const vh = window.innerHeight
+        const gpH = isMobile ? (document.getElementById('gamepad')?.offsetHeight ?? 0) : 0
+        const availW = vw
+        const availH = vh - gpH
+
+        let w, h
+        if (availW / availH > AW / AH) {
+          h = availH; w = h * AW / AH
+        } else {
+          w = availW; h = w * AH / AW
+        }
+        const top = (availH - h) / 2
+        const left = (vw - w) / 2
+
+        const s = canvas.style
+        s.setProperty('position', 'fixed', 'important')
+        s.setProperty('top',    top  + 'px', 'important')
+        s.setProperty('left',   left + 'px', 'important')
+        s.setProperty('width',  w    + 'px', 'important')
+        s.setProperty('height', h    + 'px', 'important')
+        s.setProperty('transform', 'none', 'important')
+        s.setProperty('margin',  '0', 'important')
+      }
+
+      window.addEventListener('resize', layoutCanvas)
+      layoutCanvas()
+
       // Fetch song from URL hash before starting wasm (preRun must be sync)
       let songBytes = null
       const hash = document.location.hash?.slice(1)
@@ -228,6 +253,7 @@
           }
         }
       })
+      layoutCanvas()  // re-apply after Emscripten init may have reset canvas styles
 
       // Called lazily from C (midi_web_request_access) when user opens a MIDI device picker.
       // Idempotent — does nothing if already requested.

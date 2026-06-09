@@ -323,7 +323,7 @@ EM_JS(void, midi_out_web_send_js, (int idx, const uint8_t *msg, int len), {
   if (!outputs || idx < 0 || idx >= outputs.length)
     return;
   var port = outputs[idx];
-  if (port &&port.state == = 'connected')
+  if (port && port.state === "connected")
     port.send(HEAPU8.subarray(msg, msg + len));
 });
 
@@ -334,5 +334,21 @@ void midi_out_send(MidiOut *m, const uint8_t *msg, int len) {
 }
 
 int midi_out_port_idx(const MidiOut *m) { return m ? m->port_idx : -1; }
+
+// ============================================================
+// Fallback — no MIDI output support
+// ============================================================
+#else
+
+struct MidiOut { int port_idx; };
+
+void midi_out_global_init(void) {}
+void midi_out_global_shutdown(void) {}
+int midi_out_port_count(void) { return 0; }
+const char *midi_out_port_name(int idx) { (void)idx; return "?"; }
+MidiOut *midi_out_open(int idx) { (void)idx; return NULL; }
+void midi_out_close(MidiOut *m) { (void)m; }
+void midi_out_send(MidiOut *m, const uint8_t *msg, int len) { (void)m; (void)msg; (void)len; }
+int midi_out_port_idx(const MidiOut *m) { (void)m; return -1; }
 
 #endif
