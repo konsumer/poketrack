@@ -380,7 +380,7 @@ void screen_instrument_update(UIState *ui) {
         }
         if (changed) {
           if (use_dyn) {
-            def->set_param_val(state, param, cur_v);
+            audio_set_dyn_param(ui->engine, (uint8_t)ui->ctx_instrument, slot, param, cur_v);
             if (def->sync_to_data)
               def->sync_to_data(state, sl->data, sizeof(sl->data));
           } else if (param < UNIT_MAX_PARAMS) {
