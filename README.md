@@ -117,10 +117,17 @@ C-4  00  00 80
 
 which sequences cutoff.
 
-At some point, I will try to make a bunch of simpler 1-function CLAP units that can be dropped in easier. In general, I think it's actually better to chain several differnt units together, and there are a lot of built-ins that should just work. The idea is that we eventually have an ecosystem of open plugins that can be used in other things, if you like, that are pretty easy to setup.
-
+On linux, this didn't seem to work for me, but neither did the official Surge XT standalone (could not change reso/cut.) I did test linux with a simple CLAP plugin, so I think it's an issue with Surge XT.
 
 ## development
 
 I use `make` to record common tasks (and `cmake` to actually build) so you can run `make` to get documentation.
+
+## todo
+
+- simple set of cross-platform single-purpose CLAP plugins
+- [WebCLAP](https://github.com/WebCLAP/) support for web & native
+- "bundle" a save for distribution, that creates a zip with song + all referenced files
+
+
 
