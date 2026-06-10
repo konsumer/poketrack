@@ -295,6 +295,11 @@ static void clap_mapping_remove(UnitState *s, int map_idx) {
   s->num_mappings--;
 }
 
+static void clap_main_thread_work(UnitState *s) {
+  if (s->plugin)
+    clap_host_do_main_thread_work(s->plugin);
+}
+
 static void clap_unit_render(UnitState *s, const uint8_t *p,
                              const float *in_l, const float *in_r,
                              float *out_l, float *out_r, uint32_t frames) {
@@ -340,6 +345,7 @@ const UnitDef unit_clap = {
     .picker_name = clap_picker_name,
     .picker_add = clap_picker_add,
     .mapping_remove = clap_mapping_remove,
+    .main_thread_work = clap_main_thread_work,
     .create = clap_unit_create,
     .destroy = clap_unit_destroy,
     .set_data = clap_unit_set_data,

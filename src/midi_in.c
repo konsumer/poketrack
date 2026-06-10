@@ -123,6 +123,7 @@ static snd_seq_t *g_in_seq = NULL;
 static int g_in_myport = -1;
 static pthread_t g_in_thread;
 static bool g_in_running = false;
+static bool g_in_thread_started = false;
 
 static void refresh_in_ports(void) {
   g_in_nports = 0;
@@ -192,7 +193,7 @@ void midi_in_global_init(void) {
                                            SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION);
   refresh_in_ports();
   g_in_running = true;
-  pthread_create(&g_in_thread, NULL, alsa_in_thread, NULL);
+  g_in_thread_started = (pthread_create(&g_in_thread, NULL, alsa_in_thread, NULL) == 0);
 }
 
 void midi_in_global_shutdown(void) {
@@ -201,7 +202,11 @@ void midi_in_global_shutdown(void) {
     snd_seq_close(g_in_seq);
     g_in_seq = NULL;
   }
-  pthread_join(g_in_thread, NULL);
+  if (g_in_thread_started) {
+    pthread_cancel(g_in_thread);
+    pthread_join(g_in_thread, NULL);
+    g_in_thread_started = false;
+  }
 }
 
 int midi_in_port_count(void) { return g_in_nports; }

@@ -67,6 +67,7 @@ static void poll_midi_in(void) {
 }
 
 static void main_loop(void) {
+  audio_do_main_thread_work(&g_engine);
   poll_midi_in();
   input_update();
   ui_update(&g_ui);

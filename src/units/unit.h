@@ -60,6 +60,9 @@ typedef struct {
   // data is the raw string from ChainSlot.data (may be empty).
   void (*set_data)(UnitState *s, const char *data, const char *base_dir);
 
+  // Called from main thread each frame; use for deferred work (e.g. CLAP on_main_thread).
+  void (*main_thread_work)(UnitState *s);
+
   void (*note_on)(UnitState *s, uint8_t note, uint8_t vel, const uint8_t *params);
   void (*note_off)(UnitState *s, uint8_t note);
   void (*kill)(UnitState *s);

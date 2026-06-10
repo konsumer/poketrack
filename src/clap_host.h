@@ -44,3 +44,5 @@ bool clap_host_param_flags(ClapPlugin *p, uint32_t idx, uint32_t *out_flags);
 bool clap_host_param_is_stepped(ClapPlugin *p, uint32_t idx);
 // Queue a param value change for next process() call
 void clap_host_queue_param(ClapPlugin *p, uint32_t param_id, double value);
+// Call from main thread each frame to deliver deferred on_main_thread() work
+void clap_host_do_main_thread_work(ClapPlugin *p);

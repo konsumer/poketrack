@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.15)
 if(APPLE)
   project(raypoketrack VERSION 0.2.0 LANGUAGES C OBJC)
 else()
@@ -138,6 +138,17 @@ else()
     endif()
     if(WIN32)
         target_link_libraries(${PROJECT_NAME} PRIVATE winmm)
+    endif()
+    if(UNIX AND NOT APPLE)
+        # Test CLAP plugin (diagnostic tool)
+        add_library(test_clap SHARED test_clap_plugin/test_clap.c)
+        target_include_directories(test_clap PRIVATE ${clap_SOURCE_DIR}/include)
+        target_link_libraries(test_clap PRIVATE m)
+        set_target_properties(test_clap PROPERTIES
+            PREFIX ""
+            OUTPUT_NAME "test_clap"
+            SUFFIX ".clap"
+        )
     endif()
     if(APPLE)
         target_sources(${PROJECT_NAME} PRIVATE src/macos_dialog.m)

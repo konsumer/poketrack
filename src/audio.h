@@ -84,5 +84,13 @@ void audio_midi_kill_all(AudioEngine *eng);
 
 void audio_fill_buffer(AudioEngine *eng, float *out, uint32_t frames);
 
+// Call from the main thread each frame to deliver deferred plugin work (CLAP on_main_thread)
+void audio_do_main_thread_work(AudioEngine *eng);
+
+// Propagate a dynamic param change to every active UnitState instance for
+// (inst_idx, slot_idx) — preview, all channel states, all MIDI voices.
+// Call this instead of set_param_val directly from the UI.
+void audio_set_dyn_param(AudioEngine *eng, uint8_t inst_idx, int slot_idx, int param, uint8_t val);
+
 // Per-instrument RMS level for sidechain ducking (indexed by instrument index 0-255)
 extern float g_sidechain_rms[NUM_INSTRUMENTS];

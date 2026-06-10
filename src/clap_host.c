@@ -22,9 +22,51 @@ typedef void *dl_handle_t;
 
 #include "clap/clap.h"
 
-struct ClapPlugin {
+// Per-library reference count so entry->init/deinit are called once per .clap file
+typedef struct LibEntry {
+  char path[512];
   dl_handle_t lib;
   const clap_plugin_entry_t *entry;
+  int ref_count;
+} LibEntry;
+
+#define MAX_LOADED_LIBS 32
+static LibEntry s_libs[MAX_LOADED_LIBS];
+static int s_num_libs = 0;
+
+static LibEntry *lib_acquire(const char *path) {
+  for (int i = 0; i < s_num_libs; i++) {
+    if (strcmp(s_libs[i].path, path) == 0) {
+      s_libs[i].ref_count++;
+      return &s_libs[i];
+    }
+  }
+  if (s_num_libs >= MAX_LOADED_LIBS) return NULL;
+  dl_handle_t lib = DL_OPEN(path);
+  if (!lib) return NULL;
+  const clap_plugin_entry_t *entry = (const clap_plugin_entry_t *)DL_SYM(lib, "clap_entry");
+  if (!entry || !entry->init(path)) { DL_CLOSE(lib); return NULL; }
+  LibEntry *le = &s_libs[s_num_libs++];
+  strncpy(le->path, path, sizeof(le->path) - 1);
+  le->lib = lib;
+  le->entry = entry;
+  le->ref_count = 1;
+  return le;
+}
+
+static void lib_release(LibEntry *le) {
+  if (!le || --le->ref_count > 0) return;
+  le->entry->deinit();
+  DL_CLOSE(le->lib);
+  int idx = (int)(le - s_libs);
+  for (int i = idx; i < s_num_libs - 1; i++)
+    s_libs[i] = s_libs[i + 1];
+  s_num_libs--;
+}
+
+struct ClapPlugin {
+  clap_host_t host;  // per-instance; host.host_data = this ClapPlugin*
+  LibEntry *lib_entry;
   const clap_plugin_t *plugin;
   const clap_plugin_audio_ports_t *audio_ports;
   const clap_plugin_note_ports_t *note_ports;
@@ -33,6 +75,7 @@ struct ClapPlugin {
   float sample_rate;
   uint32_t block_size;
   bool is_instrument;
+  bool main_thread_requested;
   char name[128];
 
   // Pending note events for next process call
@@ -55,19 +98,50 @@ static const char *host_get_name(const clap_host_t *host) {
   return "raypoketrack";
 }
 
+// CLAP_EXT_PARAMS host side — plugins call these to notify the host of param changes.
+// We don't cache param state, so rescan/clear are no-ops.
+// request_flush signals the plugin wants flush() called; we handle it inline next process().
+static void host_params_rescan(const clap_host_t *h, clap_param_rescan_flags f) {
+  (void)h; (void)f;
+}
+static void host_params_clear(const clap_host_t *h, clap_id id, clap_param_clear_flags f) {
+  (void)h; (void)id; (void)f;
+}
+static void host_params_request_flush(const clap_host_t *h) {
+  (void)h;
+}
+static const clap_host_params_t s_host_params = {
+    host_params_rescan,
+    host_params_clear,
+    host_params_request_flush,
+};
+
+// CLAP_EXT_LOG — lets plugins emit diagnostics
+static void host_log(const clap_host_t *h, clap_log_severity sev, const char *msg) {
+  (void)h;
+  const char *labels[] = {"DEBUG","INFO","WARNING","ERROR","FATAL","HOSTSEV4","HOSTSEV5"};
+  const char *label = (sev < 7) ? labels[sev] : "LOG";
+  fprintf(stderr, "[CLAP %s] %s\n", label, msg);
+}
+static const clap_host_log_t s_host_log = { host_log };
+
 static const void *host_get_extension(const clap_host_t *host, const char *ext_id) {
   (void)host;
-  (void)ext_id;
+  if (strcmp(ext_id, CLAP_EXT_PARAMS) == 0) return &s_host_params;
+  if (strcmp(ext_id, CLAP_EXT_LOG)    == 0) return &s_host_log;
   return NULL;
 }
 
 static void host_request_restart(const clap_host_t *host) { (void)host; }
 static void host_request_process(const clap_host_t *host) { (void)host; }
-static void host_request_callback(const clap_host_t *host) { (void)host; }
+static void host_request_callback(const clap_host_t *host) {
+  ClapPlugin *cp = (ClapPlugin *)host->host_data;
+  if (cp) cp->main_thread_requested = true;
+}
 
-static clap_host_t s_host = {
+static const clap_host_t s_host_template = {
     CLAP_VERSION_INIT,
-    NULL,
+    NULL,  // host_data — set per-instance in clap_host_load
     "raypoketrack",
     "raypoketrack",
     "",
@@ -107,32 +181,17 @@ ClapPlugin *clap_host_load(const char *path, const char *plugin_id, float sample
   char real_path[512];
   resolve_clap_path(path, real_path, sizeof(real_path));
 
-  dl_handle_t lib = DL_OPEN(real_path);
-  if (!lib) {
-    fprintf(stderr, "clap_host: cannot open '%s'\n", real_path);
-    return NULL;
-  }
-
-  const clap_plugin_entry_t *entry =
-      (const clap_plugin_entry_t *)DL_SYM(lib, "clap_entry");
-  if (!entry) {
-    fprintf(stderr, "clap_host: no clap_entry in '%s'\n", real_path);
-    DL_CLOSE(lib);
-    return NULL;
-  }
-
-  if (!entry->init(real_path)) {
-    fprintf(stderr, "clap_host: entry->init failed\n");
-    DL_CLOSE(lib);
+  LibEntry *le = lib_acquire(real_path);
+  if (!le) {
+    fprintf(stderr, "clap_host: cannot load '%s'\n", real_path);
     return NULL;
   }
 
   const clap_plugin_factory_t *factory =
-      (const clap_plugin_factory_t *)entry->get_factory(CLAP_PLUGIN_FACTORY_ID);
+      (const clap_plugin_factory_t *)le->entry->get_factory(CLAP_PLUGIN_FACTORY_ID);
   if (!factory) {
     fprintf(stderr, "clap_host: no plugin factory\n");
-    entry->deinit();
-    DL_CLOSE(lib);
+    lib_release(le);
     return NULL;
   }
 
@@ -149,24 +208,25 @@ ClapPlugin *clap_host_load(const char *path, const char *plugin_id, float sample
 
   if (!desc) {
     fprintf(stderr, "clap_host: plugin id '%s' not found\n", plugin_id ? plugin_id : "(any)");
-    entry->deinit();
-    DL_CLOSE(lib);
-    return NULL;
-  }
-
-  const clap_plugin_t *plugin = factory->create_plugin(factory, &s_host, desc->id);
-  if (!plugin || !plugin->init(plugin)) {
-    fprintf(stderr, "clap_host: plugin init failed\n");
-    if (plugin)
-      plugin->destroy(plugin);
-    entry->deinit();
-    DL_CLOSE(lib);
+    lib_release(le);
     return NULL;
   }
 
   ClapPlugin *cp = calloc(1, sizeof(ClapPlugin));
-  cp->lib = lib;
-  cp->entry = entry;
+  cp->host = s_host_template;
+  cp->host.host_data = cp;
+
+  const clap_plugin_t *plugin = factory->create_plugin(factory, &cp->host, desc->id);
+  if (!plugin || !plugin->init(plugin)) {
+    fprintf(stderr, "clap_host: plugin init failed\n");
+    if (plugin)
+      plugin->destroy(plugin);
+    lib_release(le);
+    free(cp);
+    return NULL;
+  }
+
+  cp->lib_entry = le;
   cp->plugin = plugin;
   cp->sample_rate = sample_rate;
   cp->block_size = block_size;
@@ -182,8 +242,15 @@ ClapPlugin *clap_host_load(const char *path, const char *plugin_id, float sample
   cp->params_ext = (const clap_plugin_params_t *)
                        plugin->get_extension(plugin, CLAP_EXT_PARAMS);
 
-  plugin->activate(plugin, sample_rate, 1, block_size);
-  plugin->start_processing(plugin);
+  if (!plugin->activate(plugin, sample_rate, 1, block_size)) {
+    fprintf(stderr, "[CLAP] activate() failed for '%s'\n", real_path);
+    plugin->destroy(plugin);
+    lib_release(le);
+    free(cp);
+    return NULL;
+  }
+  if (!plugin->start_processing(plugin))
+    fprintf(stderr, "[CLAP] start_processing() failed for '%s' (continuing anyway)\n", real_path);
 
   cp->buf_out_l = calloc(block_size, sizeof(float));
   cp->buf_out_r = calloc(block_size, sizeof(float));
@@ -196,9 +263,15 @@ void clap_host_unload(ClapPlugin *p) {
     return;
   p->plugin->stop_processing(p->plugin);
   p->plugin->deactivate(p->plugin);
+  // Drain any pending main-thread work before destroy; safe here because
+  // audio has stopped and we're on the main thread.
+  for (int i = 0; i < 4 && p->main_thread_requested; i++) {
+    p->main_thread_requested = false;
+    if (p->plugin->on_main_thread)
+      p->plugin->on_main_thread(p->plugin);
+  }
   p->plugin->destroy(p->plugin);
-  if (p->entry) p->entry->deinit();
-  DL_CLOSE(p->lib);
+  lib_release(p->lib_entry);
   free(p->buf_out_l);
   free(p->buf_out_r);
   free(p);
@@ -376,4 +449,14 @@ void clap_host_queue_param(ClapPlugin *p, uint32_t param_id, double value) {
   ev->port_index = -1;
   ev->channel = -1;
   ev->key = -1;
+}
+
+// Call this from the main thread each frame (not the audio thread).
+// Delivers any deferred on_main_thread() work the plugin requested.
+void clap_host_do_main_thread_work(ClapPlugin *p) {
+  if (!p || !p->main_thread_requested)
+    return;
+  p->main_thread_requested = false;
+  if (p->plugin->on_main_thread)
+    p->plugin->on_main_thread(p->plugin);
 }

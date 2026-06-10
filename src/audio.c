@@ -561,6 +561,38 @@ void audio_midi_kill_all(AudioEngine *eng) {
   }
 }
 
+void audio_set_dyn_param(AudioEngine *eng, uint8_t inst_idx, int slot_idx, int param, uint8_t val) {
+  const UnitDef *def = unit_find(eng->song->instruments[inst_idx].chain[slot_idx].unit_id);
+  if (!def || !def->set_param_val)
+    return;
+  if (eng->preview_inst == inst_idx && eng->preview_states[slot_idx])
+    def->set_param_val(eng->preview_states[slot_idx], param, val);
+  for (int ch = 0; ch < SONG_CHANNELS; ch++)
+    if (eng->active_inst[ch] == inst_idx && eng->chan_states[ch][slot_idx])
+      def->set_param_val(eng->chan_states[ch][slot_idx], param, val);
+  for (int v = 0; v < 8; v++) {
+    struct MidiVoice *mv = &eng->midi_voices[v];
+    if (mv->inst_idx == inst_idx && mv->states[slot_idx])
+      def->set_param_val(mv->states[slot_idx], param, val);
+  }
+}
+
+void audio_do_main_thread_work(AudioEngine *eng) {
+  for (int s = 0; s < CHAIN_MAX; s++) {
+    if (eng->preview_states[s] && eng->preview_defs[s] && eng->preview_defs[s]->main_thread_work)
+      eng->preview_defs[s]->main_thread_work(eng->preview_states[s]);
+    for (int ch = 0; ch < SONG_CHANNELS; ch++) {
+      if (eng->chan_states[ch][s] && eng->chan_defs[ch][s] && eng->chan_defs[ch][s]->main_thread_work)
+        eng->chan_defs[ch][s]->main_thread_work(eng->chan_states[ch][s]);
+    }
+    for (int v = 0; v < 8; v++) {
+      struct MidiVoice *mv = &eng->midi_voices[v];
+      if (mv->states[s] && mv->defs[s] && mv->defs[s]->main_thread_work)
+        mv->defs[s]->main_thread_work(mv->states[s]);
+    }
+  }
+}
+
 void audio_fill_buffer(AudioEngine *eng, float *out, uint32_t frames) {
   memset(out, 0, frames * 2 * sizeof(float));
   eng->samples_per_tick = calc_samples_per_tick(eng->song->bpm);
