@@ -4,13 +4,15 @@
 
 #include "units/unit.h"
 
-#define SONG_CHANNELS 16
-#define SONG_LENGTH 255
-#define NUM_PATTERNS 255
-#define PATTERN_STEPS 16
-#define NUM_INSTRUMENTS 256
-#define FX_PER_STEP 2
-#define TRACKER_EMPTY 0xFF
+#define SONG_CHANNELS       16
+#define MAX_SONG_LEN        1024
+#define DEFAULT_SONG_LEN    1
+#define NUM_PATTERNS        255
+#define MAX_PATTERN_STEPS   1024
+#define DEFAULT_PATTERN_STEPS 16
+#define NUM_INSTRUMENTS     256
+#define FX_PER_STEP         2
+#define TRACKER_EMPTY       0xFF
 
 #define NOTE_EMPTY 0x00
 #define NOTE_OFF 0xFE
@@ -39,7 +41,8 @@ typedef struct {
 } PatternStep;
 
 typedef struct {
-  PatternStep steps[PATTERN_STEPS];
+  uint16_t len;                       // active step count (1..MAX_PATTERN_STEPS)
+  PatternStep steps[MAX_PATTERN_STEPS];
 } Pattern;
 
 // One slot in an instrument's unit chain
@@ -63,7 +66,8 @@ typedef struct {
 } TrackerInstrument;
 
 typedef struct {
-  uint8_t patterns[SONG_CHANNELS][SONG_LENGTH];
+  uint16_t song_len;                            // active song row count (1..MAX_SONG_LEN)
+  uint8_t patterns[SONG_CHANNELS][MAX_SONG_LEN];
   Pattern pattern_data[NUM_PATTERNS];
   TrackerInstrument instruments[NUM_INSTRUMENTS];
   uint8_t bpm;
