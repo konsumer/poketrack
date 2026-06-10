@@ -44,16 +44,9 @@ It may seem a bit inscrutable at first, but input is meant to be consistent and 
 | ←/→ | Move cursor column (note → vel → inst → fx…) |
 | X / Y | Fill / clear entire column |
 | START | Loop current pattern (not full song) |
-
-Column-specific actions while holding **A**:
-
-| Column | A + ↑/↓ | A + ←/→ | B |
-|---|---|---|---|
-| Note | Step up/down by scale | Octave up/down | Clear (A+B = NOTE-OFF) |
-| Velocity | ±1 | ±16 | Reset to 100 |
-| Instrument | Change number | — | Reset to 0 |
-| FX type | Cycle type | — | Clear |
-| FX value | ±1 | ±16 | Clear |
+| B | Clear cell |
+| A + ↑/↓ | Set node/param number in cell |
+| A + B | OFF or instrument-stop |
 
 **Instrument**
 
