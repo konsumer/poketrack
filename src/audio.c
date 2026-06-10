@@ -191,7 +191,7 @@ static void preload_chan_states_for_pattern(AudioEngine *eng, int ch, uint8_t pi
   if (pi == TRACKER_EMPTY)
     return;
   Pattern *pat = &eng->song->pattern_data[pi];
-  for (int step = 0; step < PATTERN_STEPS; step++) {
+  for (int step = 0; step < pat->len; step++) {
     PatternStep *s = &pat->steps[step];
     if (s->note != NOTE_EMPTY && s->note != NOTE_OFF) {
       ensure_chan_states(eng, ch, s->instrument);
@@ -203,11 +203,11 @@ static void preload_chan_states_for_pattern(AudioEngine *eng, int ch, uint8_t pi
 // Pre-load chan_states for all channels in the song arrangement (call before playing).
 static void preload_all_chan_states(AudioEngine *eng) {
   for (int ch = 0; ch < SONG_CHANNELS; ch++) {
-    for (int row = 0; row < SONG_LENGTH; row++) {
+    for (int row = 0; row < eng->song->song_len; row++) {
       uint8_t pi = eng->song->patterns[ch][row];
       if (pi != TRACKER_EMPTY) {
         preload_chan_states_for_pattern(eng, ch, pi);
-        break;  // only need first pattern per channel to prime the state
+        break;
       }
     }
   }
@@ -224,25 +224,29 @@ static PatternStep *get_current_step(AudioEngine *eng, int ch) {
       return NULL;
     pi = eng->loop_pattern_idx;
   } else {
-    if (cur->song_row >= SONG_LENGTH)
-      cur->song_row = SONG_LENGTH - 1;
+    if (cur->song_row >= s->song_len)
+      cur->song_row = s->song_len > 0 ? s->song_len - 1 : 0;
     pi = s->patterns[ch][cur->song_row];
   }
   if (pi == TRACKER_EMPTY)
     return NULL;
-  if (cur->pattern_step >= PATTERN_STEPS)
+  Pattern *pat = &s->pattern_data[pi];
+  if (cur->pattern_step >= pat->len)
     cur->pattern_step = 0;
-  return &s->pattern_data[pi].steps[cur->pattern_step];
+  return &pat->steps[cur->pattern_step];
 }
 
-static void advance_cursor(AudioEngine *eng, ChannelCursor *cur) {
+static void advance_cursor(AudioEngine *eng, int ch, ChannelCursor *cur) {
+  TrackerSong *s = eng->song;
+  uint8_t pi = eng->pattern_loop ? eng->loop_pattern_idx : s->patterns[ch][cur->song_row];
+  uint16_t pat_len = (pi != TRACKER_EMPTY) ? s->pattern_data[pi].len : 1;
   cur->pattern_step++;
-  if (cur->pattern_step >= PATTERN_STEPS) {
+  if (cur->pattern_step >= pat_len) {
     cur->pattern_step = 0;
     if (!eng->pattern_loop) {
       cur->song_row++;
-      if (cur->song_row > eng->song_last_row) {
-        if (eng->song->loop)
+      if (cur->song_row > (uint16_t)eng->song_last_row) {
+        if (s->loop)
           cur->song_row = 0;
         else
           eng->playing = false;
@@ -348,7 +352,7 @@ void audio_play(AudioEngine *eng) {
 
   // Find last song row with any non-empty pattern across all channels
   int last = 0;
-  for (int row = 0; row < SONG_LENGTH; row++)
+  for (int row = 0; row < eng->song->song_len; row++)
     for (int ch = 0; ch < SONG_CHANNELS; ch++)
       if (eng->song->patterns[ch][row] != TRACKER_EMPTY)
         last = row;
@@ -373,7 +377,7 @@ void audio_play_pattern(AudioEngine *eng, uint8_t pattern_idx) {
   // Only play channels that actually use this pattern in the song arrangement
   eng->loop_channel_mask = 0;
   for (int ch = 0; ch < SONG_CHANNELS; ch++)
-    for (int row = 0; row < SONG_LENGTH; row++)
+    for (int row = 0; row < eng->song->song_len; row++)
       if (eng->song->patterns[ch][row] == pattern_idx) {
         eng->loop_channel_mask |= (1u << ch);
         break;
@@ -610,7 +614,7 @@ void audio_fill_buffer(AudioEngine *eng, float *out, uint32_t frames) {
         for (int ch = 0; ch < SONG_CHANNELS; ch++) {
           PatternStep *step = get_current_step(eng, ch);
           fire_step(eng, ch, step);
-          advance_cursor(eng, &eng->cursors[ch]);  // always advance, even on empty rows
+          advance_cursor(eng, ch, &eng->cursors[ch]);
         }
         eng->tick_counter++;
       }

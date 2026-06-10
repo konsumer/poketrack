@@ -12,8 +12,8 @@
 #define AUDIO_BLOCK_SIZE 512
 
 typedef struct {
-  int song_row;
-  int pattern_step;
+  uint16_t song_row;
+  uint16_t pattern_step;
 } ChannelCursor;
 
 typedef struct {
