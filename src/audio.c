@@ -236,23 +236,29 @@ static PatternStep *get_current_step(AudioEngine *eng, int ch) {
   return &pat->steps[cur->pattern_step];
 }
 
+// Max pattern length across all channels in a given song row (minimum 1).
+static uint16_t row_max_len(AudioEngine *eng, uint16_t song_row) {
+  TrackerSong *s = eng->song;
+  uint16_t max = 1;
+  for (int c = 0; c < SONG_CHANNELS; c++) {
+    uint8_t pi = s->patterns[c][song_row];
+    if (pi != TRACKER_EMPTY) {
+      uint16_t l = s->pattern_data[pi].len;
+      if (l > max) max = l;
+    }
+  }
+  return max;
+}
+
+// Advance only the per-channel pattern_step; song_row is managed globally.
 static void advance_cursor(AudioEngine *eng, int ch, ChannelCursor *cur) {
   TrackerSong *s = eng->song;
   uint8_t pi = eng->pattern_loop ? eng->loop_pattern_idx : s->patterns[ch][cur->song_row];
-  uint16_t pat_len = (pi != TRACKER_EMPTY) ? s->pattern_data[pi].len : 1;
+  if (pi == TRACKER_EMPTY) return;
+  uint16_t pat_len = s->pattern_data[pi].len;
   cur->pattern_step++;
-  if (cur->pattern_step >= pat_len) {
+  if (cur->pattern_step >= pat_len)
     cur->pattern_step = 0;
-    if (!eng->pattern_loop) {
-      cur->song_row++;
-      if (cur->song_row > (uint16_t)eng->song_last_row) {
-        if (s->loop)
-          cur->song_row = 0;
-        else
-          eng->playing = false;
-      }
-    }
-  }
 }
 
 static void fire_step(AudioEngine *eng, int ch, PatternStep *step) {
@@ -348,6 +354,7 @@ void audio_play(AudioEngine *eng) {
   }
   eng->pattern_loop = false;
   eng->tick_counter = 0;
+  eng->row_tick = 0;
   eng->sample_acc = eng->samples_per_tick;
 
   // Find last song row with any non-empty pattern across all channels
@@ -615,6 +622,27 @@ void audio_fill_buffer(AudioEngine *eng, float *out, uint32_t frames) {
           PatternStep *step = get_current_step(eng, ch);
           fire_step(eng, ch, step);
           advance_cursor(eng, ch, &eng->cursors[ch]);
+        }
+        // Global song-row advancement: all channels share one song_row.
+        // Advance after row_max_len ticks so shorter patterns loop within the row.
+        if (!eng->pattern_loop) {
+          uint16_t row_len = row_max_len(eng, eng->cursors[0].song_row);
+          if (++eng->row_tick >= row_len) {
+            eng->row_tick = 0;
+            uint16_t next = eng->cursors[0].song_row + 1;
+            if (next > (uint16_t)eng->song_last_row) {
+              if (eng->song->loop)
+                next = 0;
+              else {
+                eng->playing = false;
+                next = eng->cursors[0].song_row;
+              }
+            }
+            for (int c = 0; c < SONG_CHANNELS; c++) {
+              eng->cursors[c].song_row = next;
+              eng->cursors[c].pattern_step = 0;
+            }
+          }
         }
         eng->tick_counter++;
       }

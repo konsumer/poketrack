@@ -29,6 +29,7 @@ typedef struct {
   uint64_t tick_counter;
   uint32_t samples_per_tick;
   uint32_t sample_acc;
+  uint16_t row_tick;
   uint8_t active_note[SONG_CHANNELS];
   uint8_t active_inst[SONG_CHANNELS];  // which instrument is loaded per channel
 
