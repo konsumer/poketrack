@@ -19,52 +19,63 @@ You should be able to track quickly with a joystick, or keys:
 It may seem a bit inscrutable at first, but input is meant to be consistent and fast with a joystick, so once you get the hang of it, it should work well. A is "edit/change value", B is "delete/reset/cancel", X is "fill column", Y is "clear column", SELECT + arrow is "change screen", and START is "play song/pattern".
 
 
-| Input | Screen | Purpose |
-|---|---|---|
-| SELECT + ←/↑/↓/→ | Any | Switch to Song / Pattern / Instrument / Menu screen |
-| START | Any | Play/stop |
-| START | Pattern | Loop current pattern only (not full song) |
-| ↑/↓ | Song | Move cursor row |
-| ←/→ | Song | Scroll visible channels |
-| A + ↑/↓ | Song | Set pattern number in focused cell |
-| B | Song | Clear cell |
-| L / R | Pattern | Previous / next pattern |
-| ↑/↓ | Pattern | Move cursor row |
-| ←/→ | Pattern | Move cursor column (note → vel → inst → fx…) |
-| A + ↑/↓ | Pattern, note col | Step note up/down by current scale |
-| A + ←/→ | Pattern, note col | Octave up/down |
-| A + B | Pattern, note col | Insert NOTE-OFF |
-| B | Pattern, note col | Clear note |
-| A + ↑/↓ | Pattern, velocity col | Change velocity ±1 |
-| A + ←/→ | Pattern, velocity col | Change velocity ±16 |
-| B | Pattern, velocity col | Reset velocity to 100 |
-| A + ↑/↓ | Pattern, instrument col | Change instrument number |
-| B | Pattern, instrument col | Reset instrument to 0 |
-| A + ↑/↓ | Pattern, FX col | Cycle FX type |
-| A + ↑/↓ | Pattern, FX value col | Change FX value ±1 |
-| A + ←/→ | Pattern, FX value col | Change FX value ±16 |
-| B | Pattern, FX col | Clear FX |
-| X | Pattern | Fill entire column with current row's value |
-| Y | Pattern | Clear entire column |
-| L / R | Instrument | Previous / next instrument |
-| ↑/↓ | Instrument, slot panel | Navigate chain slots |
-| → | Instrument, slot panel | Enter param panel for selected slot |
-| A + ↑/↓ | Instrument, slot panel | Cycle unit type in slot |
-| A + B | Instrument, slot panel | Toggle slot enabled/disabled |
-| B | Instrument, slot panel | Clear slot |
-| ↑/↓ | Instrument, param panel | Navigate params |
-| ← | Instrument, param panel | Back to slot panel |
-| A + ↑/↓ | Instrument, param panel | Change param value ±1 |
-| A + ←/→ | Instrument, param panel | Change param value ±16 |
-| B | Instrument, param panel | Reset param to default |
-| A | Instrument, FILE row | Open file picker |
-| B | Instrument, FILE row | Clear file path |
-| ↑/↓ | Menu | Navigate items |
-| A + ↑/↓ | Menu, BPM | Change BPM ±1 |
-| A + ←/→ | Menu, BPM | Change BPM ±10 |
-| A + ↑/↓ | Menu, KEY | Change scale root note |
-| A + ↑/↓ | Menu, SCALE | Cycle scale (chromatic, major, minor, Persian…) |
-| A | Menu | Confirm action |
+**Any screen**
+
+| Input | Purpose |
+|---|---|
+| SELECT + ←/↑/↓/→ | Switch to Song / Pattern / Instrument / Menu |
+| START | Play/stop |
+
+**Song**
+
+| Input | Purpose |
+|---|---|
+| START | Loop current pattern (not full song) |
+| ↑/↓ | Move cursor row |
+| ←/→ | Scroll channels |
+| A + ↑/↓ | Set pattern number in cell |
+| B | Clear cell |
+
+**Pattern**
+
+| Input | Purpose |
+|---|---|
+| L / R | Previous / next pattern |
+| ↑/↓ | Move cursor row |
+| ←/→ | Move cursor column (note → vel → inst → fx…) |
+| X / Y | Fill / clear entire column |
+
+Column-specific actions while holding **A**:
+
+| Column | A + ↑/↓ | A + ←/→ | B |
+|---|---|---|---|
+| Note | Step up/down by scale | Octave up/down | Clear (A+B = NOTE-OFF) |
+| Velocity | ±1 | ±16 | Reset to 100 |
+| Instrument | Change number | — | Reset to 0 |
+| FX type | Cycle type | — | Clear |
+| FX value | ±1 | ±16 | Clear |
+
+**Instrument**
+
+| Input | Purpose |
+|---|---|
+| L / R | Previous / next instrument |
+| ↑/↓ | Navigate slots / params |
+| → / ← | Enter / leave param panel |
+| A + ↑/↓ | Cycle unit type (slot) · Change value ±1 (param) |
+| A + ←/→ | Change value ±16 (param) |
+| A + B | Toggle slot enabled/disabled |
+| A | Open file picker (FILE row) |
+| B | Clear slot / reset param / clear file path |
+
+**Menu**
+
+| Input | Purpose |
+|---|---|
+| ↑/↓ | Navigate items |
+| A + ↑/↓ | Change value ±1 (BPM / KEY / SCALE) |
+| A + ←/→ | Change BPM ±10 |
+| A | Confirm action |
 
 Here are some videos:
 
