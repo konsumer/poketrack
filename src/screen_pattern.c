@@ -46,21 +46,21 @@ void screen_pattern_update(UIState *ui) {
   Pattern *pat = &ui->song->pattern_data[ui->ctx_pattern];
   PatternStep *step = &pat->steps[ui->pattern_row];
   bool edit = input_held(BTN_A);
-  bool sel = input_held(BTN_SELECT);
 
   // Kill preview voice when A released
   if (input_released(BTN_A))
     audio_preview_kill(ui->engine);
 
-  // L/R shoulder: cycle pattern
+  // L/R shoulder: cycle pattern (A+L/R not allowed — A is edit hold)
   if (!input_held(BTN_A)) {
     if (ui_repeat(BTN_R) && ui->ctx_pattern < NUM_PATTERNS - 1)
       ui->ctx_pattern++;
     if (ui_repeat(BTN_L) && ui->ctx_pattern > 0)
       ui->ctx_pattern--;
-    pat = &ui->song->pattern_data[ui->ctx_pattern];
-    step = &pat->steps[ui->pattern_row];
   }
+
+  pat = &ui->song->pattern_data[ui->ctx_pattern];
+  step = &pat->steps[ui->pattern_row];
 
   if (!edit) {
     int old_row = ui->pattern_row;
@@ -297,12 +297,22 @@ void screen_pattern_draw(UIState *ui) {
   DrawText("V", PX_F2V + 2, hy + (CH_H - FONT_S) / 2, FONT_S, C_HEADER);
   DrawLine(0, hy + CH_H, WIN_W, hy + CH_H, C_SEP);
 
-  // Playing step
+  // Playing step: find any channel currently playing ctx_pattern
   int playing_step = -1;
   if (audio_is_playing(ui->engine)) {
-    ChannelCursor *cur = &ui->engine->cursors[ui->ctx_channel];
-    if (ui->song->patterns[ui->ctx_channel][cur->song_row] == (uint8_t)ui->ctx_pattern)
-      playing_step = cur->pattern_step;
+    AudioEngine *eng = ui->engine;
+    if (eng->pattern_loop) {
+      if (eng->loop_pattern_idx == ui->ctx_pattern)
+        playing_step = eng->cursors[0].pattern_step;
+    } else {
+      for (int ch = 0; ch < SONG_CHANNELS; ch++) {
+        ChannelCursor *cur = &eng->cursors[ch];
+        if (ui->song->patterns[ch][cur->song_row] == (uint8_t)ui->ctx_pattern) {
+          playing_step = cur->pattern_step;
+          break;
+        }
+      }
+    }
   }
 
   for (int i = 0; i < PATTERN_STEPS; i++) {
