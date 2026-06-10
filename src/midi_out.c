@@ -221,8 +221,8 @@ int midi_out_port_idx(const MidiOut *m) { return m ? m->port_idx : -1; }
 #elif defined(_WIN32)
 
 #define WIN32_LEAN_AND_MEAN
-#include <mmsystem.h>
 #include <windows.h>
+#include <mmsystem.h>
 
 struct MidiOut {
   HMIDIOUT handle;
