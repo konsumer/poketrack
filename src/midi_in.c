@@ -218,8 +218,8 @@ const char *midi_in_port_name(int idx) { return (idx >= 0 && idx < g_in_nports) 
 #elif defined(_WIN32)
 
 #define WIN32_LEAN_AND_MEAN
-#include <mmsystem.h>
 #include <windows.h>
+#include <mmsystem.h>
 
 #define MAX_IN_DEVS 32
 static HMIDIIN g_in_handles[MAX_IN_DEVS];
