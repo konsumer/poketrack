@@ -24,13 +24,12 @@ It may seem a bit inscrutable at first, but input is meant to be consistent and 
 | Input | Purpose |
 |---|---|
 | SELECT + ←/↑/↓/→ | Switch to Song / Pattern / Instrument / Menu |
-| START | Play/stop |
+| START | Play/stop song |
 
 **Song**
 
 | Input | Purpose |
 |---|---|
-| START | Loop current pattern (not full song) |
 | ↑/↓ | Move cursor row |
 | ←/→ | Scroll channels |
 | A + ↑/↓ | Set pattern number in cell |
@@ -44,6 +43,7 @@ It may seem a bit inscrutable at first, but input is meant to be consistent and 
 | ↑/↓ | Move cursor row |
 | ←/→ | Move cursor column (note → vel → inst → fx…) |
 | X / Y | Fill / clear entire column |
+| START | Loop current pattern (not full song) |
 
 Column-specific actions while holding **A**:
 
