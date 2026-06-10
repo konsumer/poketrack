@@ -78,6 +78,14 @@ jobs:
           Compress-Archive -Path raypoketrack.exe -DestinationPath ${{ matrix.name }}.zip
 
       - name: Upload to release
+        if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.name }}.zip
+
+      - name: Upload artifact
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}.zip
