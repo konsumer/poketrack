@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 static char g_result[512] = {0};
 static int g_ready = 0;
@@ -97,6 +98,7 @@ bool file_browser_active(void) { return false; }
 #include <dirent.h>
 #include <sys/stat.h>
 
+#include "bip39_en.h"
 #include "input.h"
 #include "raylib.h"
 
@@ -152,10 +154,10 @@ static const char *FB_KB_CHARS[FB_KB_CHAR_ROWS] = {
 static const int FB_KB_CHAR_COLS[FB_KB_CHAR_ROWS] = {10, 10, 10, 9};
 #define FB_KB_SPECIAL 4
 #define FB_KB_ROWS    5
-// Special row cols: 0=SHIFT 1=SPACE 2=DEL 3=OK
-#define FB_KB_SPECIAL_COLS 4
-static int  g_kb_row   = 1;
-static int  g_kb_col   = 0;
+// Special row cols: 0=SHIFT 1=SPACE 2=DEL 3=SUGGEST 4=OK
+#define FB_KB_SPECIAL_COLS 5
+static int  g_kb_row   = FB_KB_SPECIAL;
+static int  g_kb_col   = 3;
 static bool g_kb_shift = false;
 
 static int fb_kb_max_col(int row) {
@@ -181,6 +183,17 @@ static void fb_fname_confirm(void) {
   g_ready = 1;
   g_mode = FB_NONE;
   g_fname_ed = false;
+}
+static void fb_suggest(void) {
+  static bool seeded = false;
+  if (!seeded) { srand((unsigned int)time(NULL)); seeded = true; }
+  int a = rand() % 2048, b = rand() % 2048, c = rand() % 2048;
+  snprintf(g_fname, sizeof(g_fname), "%s-%s-%s", bip39_en[a], bip39_en[b], bip39_en[c]);
+}
+static void fb_enter_kb(void) {
+  g_fname_ed = true;
+  g_kb_row   = FB_KB_SPECIAL;
+  g_kb_col   = 3;  // SUGGEST preselected
 }
 
 bool file_browser_active(void) { return g_mode != FB_NONE; }
@@ -352,7 +365,8 @@ void file_browser_tick(void) {
           case 0: g_kb_shift = !g_kb_shift; break;
           case 1: fb_fname_append(' ');     break;
           case 2: fb_fname_backspace();     break;
-          case 3: fb_fname_confirm();       break;
+          case 3: fb_suggest();             break;
+          case 4: fb_fname_confirm();       break;
         }
       }
     }
@@ -396,7 +410,7 @@ void file_browser_tick(void) {
         // Save: use this file's name (without .rpt) in keyboard editor
         strncpy(g_fname, e->name, sizeof(g_fname) - 1);
         fb_strip_rpt(g_fname);
-        g_fname_ed = true;
+        fb_enter_kb();
       }
     }
   }
@@ -406,10 +420,10 @@ void file_browser_tick(void) {
 
   if (g_mode == FB_SAVE) {
     if (input_pressed(BTN_Y))
-      g_fname_ed = true;
+      fb_enter_kb();
     if (input_pressed(BTN_START)) {
       if (g_fname[0]) fb_fname_confirm();
-      else g_fname_ed = true;
+      else fb_enter_kb();
     }
   }
 }
@@ -472,31 +486,36 @@ void file_browser_draw(void) {
       }
     }
 
-    // Special row: SHIFT | SPACE | DEL | OK
+    // Special row: SHIFT | SPACE | DEL | SUGGEST | OK
     int sy      = kb_y + FB_KB_CHAR_ROWS * (FB_KB_KEY_H + FB_KB_GAP);
-    int sh_x    = 8,   sh_w  = 86;
-    int sp_x    = sh_x + sh_w + 4, sp_w = 128;
-    int del_x   = sp_x + sp_w + 4, del_w = 88;
-    int ok_x    = del_x + del_w + 4, ok_w = FB_W - ok_x - 8;
+    int sh_x    = 8,           sh_w  = 72;
+    int sp_x    = sh_x + sh_w + 3, sp_w = 100;
+    int del_x   = sp_x + sp_w + 3, del_w = 66;
+    int sug_x   = del_x + del_w + 3, sug_w = 112;
+    int ok_x    = sug_x + sug_w + 3, ok_w = FB_W - ok_x - 8;
 
     bool sh_cur  = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 0);
     bool sp_cur  = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 1);
     bool del_cur = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 2);
-    bool ok_cur  = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 3);
+    bool sug_cur = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 3);
+    bool ok_cur  = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 4);
 
     Color sh_bg = g_kb_shift ? (Color){0x60, 0x40, 0x00, 0xFF} : kb_key;
     DrawRectangle(sh_x,  sy, sh_w,  FB_KB_KEY_H, sh_cur  ? kb_cur : sh_bg);
     DrawRectangle(sp_x,  sy, sp_w,  FB_KB_KEY_H, sp_cur  ? kb_cur : kb_key);
     DrawRectangle(del_x, sy, del_w, FB_KB_KEY_H, del_cur ? kb_cur : kb_key);
+    DrawRectangle(sug_x, sy, sug_w, FB_KB_KEY_H, sug_cur ? kb_cur : (Color){0x00,0x28,0x40,0xFF});
     DrawRectangle(ok_x,  sy, ok_w,  FB_KB_KEY_H, ok_cur  ? kb_cur : kb_key);
 
-    DrawText("SHIFT", sh_x  + (sh_w  - MeasureText("SHIFT", FB_FS)) / 2,
-             sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, sh_cur ? C_WHT : (g_kb_shift ? (Color){0xFF,0xC0,0x00,0xFF} : C_TXT));
-    DrawText("SPACE", sp_x  + (sp_w  - MeasureText("SPACE", FB_FS)) / 2,
+    DrawText("SHIFT",   sh_x  + (sh_w  - MeasureText("SHIFT",   FB_FS)) / 2,
+             sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, sh_cur  ? C_WHT : (g_kb_shift ? (Color){0xFF,0xC0,0x00,0xFF} : C_TXT));
+    DrawText("SPACE",   sp_x  + (sp_w  - MeasureText("SPACE",   FB_FS)) / 2,
              sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, sp_cur  ? C_WHT : C_TXT);
-    DrawText("DEL",   del_x + (del_w - MeasureText("DEL",   FB_FS)) / 2,
+    DrawText("DEL",     del_x + (del_w - MeasureText("DEL",     FB_FS)) / 2,
              sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, del_cur ? C_WHT : (Color){0xFF, 0x50, 0x50, 0xFF});
-    DrawText("OK",    ok_x  + (ok_w  - MeasureText("OK",    FB_FS)) / 2,
+    DrawText("SUGGEST", sug_x + (sug_w - MeasureText("SUGGEST", FB_FS)) / 2,
+             sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, sug_cur ? C_WHT : (Color){0x40, 0xC0, 0xFF, 0xFF});
+    DrawText("OK",      ok_x  + (ok_w  - MeasureText("OK",      FB_FS)) / 2,
              sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, ok_cur  ? C_WHT : (Color){0x00, 0xFF, 0x60, 0xFF});
 
     DrawText("DPAD=navigate   A=type   B=back to list   Enter=save",
