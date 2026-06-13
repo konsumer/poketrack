@@ -131,7 +131,7 @@ void tracker_init(TrackerSong *song) {
   song->bpm = 120;
   song->swing = 0;
   song->loop = true;
-  strncpy(song->name, "UNTITLED", 32);
+  song->name[0] = '\0';
 }
 
 void tracker_clear(TrackerSong *song) {
