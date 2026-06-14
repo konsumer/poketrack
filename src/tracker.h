@@ -97,7 +97,7 @@ uint8_t scale_next_note(uint8_t note, int dir, uint8_t scale_idx, uint8_t root);
 void tracker_init(TrackerSong *song);
 void tracker_clear(TrackerSong *song);
 
-void tracker_inst_set_slot(TrackerInstrument *inst, int slot, const char *unit_id);
+void tracker_inst_set_slot(TrackerInstrument *inst, int slot, const char *unit_id, int inst_idx);
 
 // Returns true on success
 bool tracker_save(const TrackerSong *song, const char *path);
