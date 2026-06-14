@@ -1,24 +1,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
+#include "bip39_en.h"
 #include "file_browser.h"
 #include "tracker.h"
 #include "ui.h"
 
 typedef enum { MENU_FB_NONE,
-               MENU_FB_LOAD,
-               MENU_FB_SAVE } MenuFileBrowserMode;
+               MENU_FB_LOAD } MenuFileBrowserMode;
 static MenuFileBrowserMode g_fb_mode = MENU_FB_NONE;
 
 #define MENU_CONTENT_Y (STATUS_H + 2)
 
 typedef enum {
-  MENU_SONG_NAME = 0,
-  MENU_BPM,
+  MENU_BPM = 0,
   MENU_SCALE_ROOT,
   MENU_SCALE,
   MENU_LOOP,
+  MENU_SONG_NAME,
   MENU_SAVE,
   MENU_LOAD,
   MENU_NEW,
@@ -30,14 +31,14 @@ typedef enum {
 } MenuItem;
 
 static const char *menu_labels[] = {
-    "NAME",
     "BPM",
     "KEY",
     "SCALE",
     "LOOP",
+    "NAME",
     "SAVE",
     "LOAD",
-    "NEW SONG",
+    "NEW",
 #ifndef __EMSCRIPTEN__
     "FULLSCREEN",
     "EXIT",
@@ -58,18 +59,36 @@ static const char *KB_CHARS[KB_CHAR_ROWS] = {
 };
 static const int KB_CHAR_COLS[KB_CHAR_ROWS] = {10, 10, 10, 9};
 
-// Row 4 = special: 0=SPACE 1=DEL 2=OK
-#define KB_SPECIAL_ROW 4
-#define KB_TOTAL_ROWS  5
+// Row 4 = special: 0=SHIFT 1=SPACE 2=DEL 3=SUGGEST 4=OK
+#define KB_SPECIAL_ROW  4
+#define KB_TOTAL_ROWS   5
+#define KB_SPECIAL_COLS 5
 
 static char status_msg[48] = "";
 static int  status_timer   = 0;
 static bool g_name_editing = false;
-static int  g_kb_row       = 1;  // start on letter row
-static int  g_kb_col       = 0;
+static int  g_kb_row       = KB_SPECIAL_ROW;
+static int  g_kb_col       = 3;  // SUGGEST preselected
+static bool g_kb_shift     = false;
 
 static int kb_max_col(int row) {
-  return (row < KB_CHAR_ROWS) ? KB_CHAR_COLS[row] : 3;
+  return (row < KB_CHAR_ROWS) ? KB_CHAR_COLS[row] : KB_SPECIAL_COLS;
+}
+
+static void enter_name_editing(TrackerSong *song) {
+  if (!song->name[0])
+    strncpy(song->name, "song", sizeof(song->name) - 1);
+  g_name_editing = true;
+  g_kb_row       = KB_SPECIAL_ROW;
+  g_kb_col       = 3;  // SUGGEST
+  while (GetCharPressed() > 0) {}
+}
+
+static void name_suggest(TrackerSong *song) {
+  static bool seeded = false;
+  if (!seeded) { srand((unsigned int)time(NULL)); seeded = true; }
+  int a = rand() % 2048, b = rand() % 2048;
+  snprintf(song->name, sizeof(song->name), "%s-%s", bip39_en[a], bip39_en[b]);
 }
 
 // Build save filename from song name, defaulting to "song.rpt"
@@ -118,17 +137,6 @@ void screen_menu_update(UIState *ui) {
       }
       free(tmp);
       status_timer = 180;
-    } else if (g_fb_mode == MENU_FB_SAVE) {
-      g_fb_mode = MENU_FB_NONE;
-      bool ok = tracker_save(ui->song, fb_path);
-      if (ok) {
-        audio_set_save_dir(ui->engine, fb_path);
-        char dl_name[64];
-        song_save_path(ui->song, dl_name, sizeof(dl_name));
-        file_browser_download(fb_path, dl_name);
-      }
-      snprintf(status_msg, sizeof(status_msg), ok ? "SAVED" : "SAVE FAILED");
-      status_timer = 180;
     }
     return;
   }
@@ -138,18 +146,6 @@ void screen_menu_update(UIState *ui) {
 
   // Name editing mode: on-screen keyboard + physical keyboard
   if (g_name_editing) {
-    int ch;
-    while ((ch = GetCharPressed()) > 0) {
-      if (ch >= 32)
-        name_append(ui->song, (char)ch);
-    }
-    if (IsKeyPressed(KEY_BACKSPACE))
-      name_backspace(ui->song);
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
-      g_name_editing = false;
-      return;
-    }
-
     // On-screen keyboard navigation
     if (ui_repeat(BTN_LEFT)) {
       g_kb_col--;
@@ -176,16 +172,33 @@ void screen_menu_update(UIState *ui) {
         g_kb_col = kb_max_col(g_kb_row) - 1;
     }
 
-    // BTN_A: type selected key
+    // BTN_A: type selected on-screen key; flush char queue so the keypress doesn't also type
     if (input_pressed(BTN_A)) {
+      while (GetCharPressed() > 0) {}
       if (g_kb_row < KB_CHAR_ROWS) {
-        name_append(ui->song, KB_CHARS[g_kb_row][g_kb_col]);
+        char c = KB_CHARS[g_kb_row][g_kb_col];
+        name_append(ui->song, g_kb_shift ? c : (char)(c | 0x20));
       } else {
         switch (g_kb_col) {
-          case 0: name_append(ui->song, ' '); break;
-          case 1: name_backspace(ui->song);   break;
-          case 2: g_name_editing = false;     break;
+          case 0: g_kb_shift = !g_kb_shift;  break;
+          case 1: name_append(ui->song, ' '); break;
+          case 2: name_backspace(ui->song);   break;
+          case 3: name_suggest(ui->song);     break;
+          case 4: g_name_editing = false;     break;
         }
+      }
+    } else {
+      // Physical keyboard input (only when BTN_A not pressed)
+      int ch;
+      while ((ch = GetCharPressed()) > 0) {
+        if (ch >= 32)
+          name_append(ui->song, (char)ch);
+      }
+      if (IsKeyPressed(KEY_BACKSPACE))
+        name_backspace(ui->song);
+      if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
+        g_name_editing = false;
+        return;
       }
     }
 
@@ -202,17 +215,13 @@ void screen_menu_update(UIState *ui) {
     if (ui_repeat(BTN_DOWN) && ui->menu_row < MENU_COUNT - 1)
       ui->menu_row++;
     // BTN_Y anywhere on menu screen enters name editing
-    if (input_pressed(BTN_Y)) {
-      g_name_editing = true;
-      while (GetCharPressed() > 0) {}  // flush char queue so the keypress doesn't type
-    }
+    if (input_pressed(BTN_Y))
+      enter_name_editing(ui->song);
   } else {
     switch (ui->menu_row) {
       case MENU_SONG_NAME:
-        if (input_pressed(BTN_A)) {
-          g_name_editing = true;
-          while (GetCharPressed() > 0) {}
-        }
+        if (input_pressed(BTN_A))
+          enter_name_editing(ui->song);
         break;
 
       case MENU_BPM:
@@ -247,10 +256,16 @@ void screen_menu_update(UIState *ui) {
 
       case MENU_SAVE: {
         if (input_pressed(BTN_A)) {
-          g_fb_mode = MENU_FB_SAVE;
-          char def[64];
-          song_save_path(ui->song, def, sizeof(def));
-          file_browser_save_as("Save song", def);
+          char fname[64], path[576];
+          song_save_path(ui->song, fname, sizeof(fname));
+          snprintf(path, sizeof(path), "%s%s", ui->engine->save_dir, fname);
+          bool ok = tracker_save(ui->song, path);
+          if (ok) {
+            audio_set_save_dir(ui->engine, path);
+            file_browser_download(path, fname);
+          }
+          snprintf(status_msg, sizeof(status_msg), ok ? "SAVED" : "SAVE FAILED");
+          status_timer = 180;
         }
         break;
       }
@@ -327,32 +342,45 @@ static void draw_keyboard(const TrackerSong *song) {
       int  x   = sx + c * (KB_KEY_W + KB_GAP);
       bool cur = (g_kb_row == r && g_kb_col == c);
       DrawRectangle(x, y, KB_KEY_W, KB_KEY_H, cur ? key_cur : key_bg);
-      char label[2] = {KB_CHARS[r][c], 0};
+      char raw = KB_CHARS[r][c];
+      char label[2] = {g_kb_shift ? raw : (char)(raw | 0x20), 0};
       int  tw       = MeasureText(label, FONT_S);
       DrawText(label, x + (KB_KEY_W - tw) / 2, y + (KB_KEY_H - FONT_S) / 2, FONT_S,
                cur ? C_TITLE : C_TEXT);
     }
   }
 
-  // Special row
-  int sy    = y0 + KB_CHAR_ROWS * (KB_KEY_H + KB_GAP);
-  int sp_x  = 8,  sp_w  = 196;
-  int del_x = sp_x + sp_w + 4, del_w = 116;
-  int ok_x  = del_x + del_w + 4, ok_w = WIN_W - ok_x - 8;
+  // Special row: SHIFT | SPACE | DEL | SUGGEST | OK
+  int sy     = y0 + KB_CHAR_ROWS * (KB_KEY_H + KB_GAP);
+  int sh_x   = 8,              sh_w  = 56;
+  int sp_x   = sh_x + sh_w  + 2, sp_w  = 88;
+  int del_x  = sp_x + sp_w  + 2, del_w = 56;
+  int sug_x  = del_x + del_w + 2, sug_w = 108;
+  int ok_x   = sug_x + sug_w + 2, ok_w  = WIN_W - ok_x - 8;
 
-  bool sp_cur  = (g_kb_row == KB_SPECIAL_ROW && g_kb_col == 0);
-  bool del_cur = (g_kb_row == KB_SPECIAL_ROW && g_kb_col == 1);
-  bool ok_cur  = (g_kb_row == KB_SPECIAL_ROW && g_kb_col == 2);
+  bool sh_cur  = (g_kb_row == KB_SPECIAL_ROW && g_kb_col == 0);
+  bool sp_cur  = (g_kb_row == KB_SPECIAL_ROW && g_kb_col == 1);
+  bool del_cur = (g_kb_row == KB_SPECIAL_ROW && g_kb_col == 2);
+  bool sug_cur = (g_kb_row == KB_SPECIAL_ROW && g_kb_col == 3);
+  bool ok_cur  = (g_kb_row == KB_SPECIAL_ROW && g_kb_col == 4);
 
+  Color sh_bg = g_kb_shift ? (Color){0x60, 0x40, 0x00, 0xFF} : key_bg;
+  DrawRectangle(sh_x,  sy, sh_w,  KB_KEY_H, sh_cur  ? key_cur : sh_bg);
   DrawRectangle(sp_x,  sy, sp_w,  KB_KEY_H, sp_cur  ? key_cur : key_bg);
   DrawRectangle(del_x, sy, del_w, KB_KEY_H, del_cur ? key_cur : key_bg);
+  DrawRectangle(sug_x, sy, sug_w, KB_KEY_H, sug_cur ? key_cur : (Color){0x00, 0x28, 0x40, 0xFF});
   DrawRectangle(ok_x,  sy, ok_w,  KB_KEY_H, ok_cur  ? key_cur : key_bg);
 
-  DrawText("SPACE", sp_x  + (sp_w  - MeasureText("SPACE", FONT_S)) / 2,
+  Color sh_txt = sh_cur ? C_TITLE : (g_kb_shift ? (Color){0xFF, 0xC0, 0x00, 0xFF} : C_TEXT);
+  DrawText("SHIFT",   sh_x  + (sh_w  - MeasureText("SHIFT",   FONT_S)) / 2,
+           sy + (KB_KEY_H - FONT_S) / 2, FONT_S, sh_txt);
+  DrawText("SPACE",   sp_x  + (sp_w  - MeasureText("SPACE",   FONT_S)) / 2,
            sy + (KB_KEY_H - FONT_S) / 2, FONT_S, sp_cur  ? C_TITLE : C_TEXT);
-  DrawText("DEL",   del_x + (del_w - MeasureText("DEL",   FONT_S)) / 2,
+  DrawText("DEL",     del_x + (del_w - MeasureText("DEL",     FONT_S)) / 2,
            sy + (KB_KEY_H - FONT_S) / 2, FONT_S, del_cur ? C_NOTE_OFF : C_TEXT);
-  DrawText("OK",    ok_x  + (ok_w  - MeasureText("OK",    FONT_S)) / 2,
+  DrawText("SUGGEST", sug_x + (sug_w - MeasureText("SUGGEST", FONT_S)) / 2,
+           sy + (KB_KEY_H - FONT_S) / 2, FONT_S, sug_cur ? C_TITLE : (Color){0x40, 0xC0, 0xFF, 0xFF});
+  DrawText("OK",      ok_x  + (ok_w  - MeasureText("OK",      FONT_S)) / 2,
            sy + (KB_KEY_H - FONT_S) / 2, FONT_S, ok_cur  ? C_PLAY : C_TEXT);
 }
 
@@ -406,14 +434,10 @@ void screen_menu_draw(UIState *ui) {
                  100, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_TEXT);
         break;
       case MENU_SAVE:
-      case MENU_LOAD: {
-        char def[64];
-        song_save_path(ui->song, def, sizeof(def));
-        DrawText(def, 100, y + (CH_H - FONT_S) / 2, FONT_S - 1, cur ? C_DIM : C_DIM);
+      case MENU_LOAD:
         if (cur)
           DrawText("[holdA+A]", WIN_W - 64, y + (CH_H - FONT_S) / 2, FONT_S - 1, C_DIM);
         break;
-      }
       case MENU_NEW:
         DrawText(cur ? "[holdA+A=confirm]" : "",
                  100, y + (CH_H - FONT_S) / 2, FONT_S - 1, C_DIM);
@@ -427,13 +451,14 @@ void screen_menu_draw(UIState *ui) {
     }
   }
 
-  // Status message
+  // Status message in bottom toolbar
   if (status_timer > 0 && !g_name_editing) {
-    int y = MENU_CONTENT_Y + MENU_COUNT * (CH_H + 2) + CH_H;
-    DrawRectangle(0, y, WIN_W, CH_H, C_BG_ALT);
-    DrawText(status_msg, 4, y + (CH_H - FONT_S) / 2, FONT_S,
-             strncmp(status_msg, "SAVE", 4) == 0 || strncmp(status_msg, "LOAD", 4) == 0 || strncmp(status_msg, "NEW", 3) == 0
-                 ? C_PLAY
-                 : C_NOTE_OFF);
+    int    y   = WIN_H - STATUS_H;
+    Color  col = (strncmp(status_msg, "SAVE", 4) == 0 || strncmp(status_msg, "LOAD", 4) == 0 || strncmp(status_msg, "NEW", 3) == 0)
+                     ? C_PLAY
+                     : C_NOTE_OFF;
+    DrawRectangle(0, y, WIN_W, STATUS_H, C_BG_ALT);
+    DrawLine(0, y, WIN_W, y, C_SEP);
+    DrawText(status_msg, 4, y + (STATUS_H - FONT_S) / 2, FONT_S, col);
   }
 }
