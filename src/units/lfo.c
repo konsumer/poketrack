@@ -95,6 +95,10 @@ static void lfo_render(UnitState *s, const uint8_t *p,
   while (s->phase >= 1.0f) s->phase -= 1.0f;
 }
 
+static void lfo_init_params(uint8_t *params, int inst_idx) {
+  params[3] = (uint8_t)(inst_idx & 0xFF);
+}
+
 static const char *const lfo_shape_names[] = {"SINE", "SQR", "SAW", "TRI"};
 static const char *const lfo_on_names[] = {"OFF", "ON"};
 
@@ -107,6 +111,7 @@ const UnitDef unit_lfo = {
     .param_defaults = {0x20, 0x40, 0, 0, 0, 0x80, 0},
     .param_enums = {NULL, NULL, lfo_shape_names, NULL, NULL, NULL, lfo_on_names},
     .param_enum_count = {0, 0, 4, 0, 0, 0, 2},
+    .init_params = lfo_init_params,
     .create = lfo_create,
     .destroy = lfo_destroy,
     .note_on = lfo_note_on,

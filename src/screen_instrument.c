@@ -111,7 +111,7 @@ void screen_instrument_update(UIState *ui) {
         else
           cur_idx = (cur_idx + 1) % nf;
         audio_rebuild_instrument(ui->engine, (uint8_t)ui->ctx_instrument);
-        tracker_inst_set_slot(inst, slot, defs[cur_idx]->id);
+        tracker_inst_set_slot(inst, slot, defs[cur_idx]->id, ui->ctx_instrument);
       }
       if (input_pressed(BTN_B) && sl->unit_id[0])
         sl->enabled = !sl->enabled;

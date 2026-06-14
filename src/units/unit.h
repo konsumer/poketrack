@@ -51,6 +51,9 @@ typedef struct {
   const char *(*dev_picker_name)(UnitState *s, int idx);
   void (*dev_picker_set)(UnitState *s, int idx);  // select device at idx
 
+  // Optional: override defaults after placement (inst_idx = which instrument this is in)
+  void (*init_params)(uint8_t *params, int inst_idx);
+
   UnitState *(*create)(float sample_rate);
   void (*destroy)(UnitState *s);
 

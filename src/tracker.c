@@ -95,7 +95,7 @@ uint8_t scale_next_note(uint8_t note, int dir, uint8_t scale_idx, uint8_t root) 
   return note;
 }
 
-void tracker_inst_set_slot(TrackerInstrument *inst, int slot, const char *unit_id) {
+void tracker_inst_set_slot(TrackerInstrument *inst, int slot, const char *unit_id, int inst_idx) {
   if (slot < 0 || slot >= CHAIN_MAX)
     return;
   ChainSlot *s = &inst->chain[slot];
@@ -109,6 +109,8 @@ void tracker_inst_set_slot(TrackerInstrument *inst, int slot, const char *unit_i
   if (def) {
     for (int i = 0; i < UNIT_MAX_PARAMS; i++)
       s->params[i] = def->param_defaults[i];
+    if (def->init_params)
+      def->init_params(s->params, inst_idx);
   }
 }
 
