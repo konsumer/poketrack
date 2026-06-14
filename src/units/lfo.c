@@ -1,10 +1,10 @@
 // LFO param modulator — modulates a param on any instrument each render block
 // P0 RATE:  00=0.1Hz  FF=20Hz
-// P1 DPTH:  00=0      FF=127 (added to/subtracted from center)
-// P2 SHPE:  0=Sine 1=Square 2=Saw 3=Tri
-// P3 INST:  target instrument 0-FF
-// P4 PARAM: target param (global index across chain slots, 0-FF)
-// P5 CNTR:  center value for modulation (default 0x80)
+// P1 SHPE:  0=Sine 1=Square 2=Saw 3=Tri
+// P2 INST:  target instrument 0-FF
+// P3 PARAM: target param (global index across chain slots, 0-FF)
+// P4 CNTR:  center value for modulation (default 0x80)
+// P5 DPTH:  00=0      FF=127 (added to/subtracted from center)
 // P6 ON:    0=off 1=on
 #include <math.h>
 #include <stdlib.h>
@@ -65,11 +65,11 @@ static void lfo_render(UnitState *s, const uint8_t *p,
     return;
 
   float rate  = p2f(p[0], 0.1f, 20.0f);
-  float depth = p[1] / 2.0f;   // 0-127 swing each side
-  int   shape = p[2] > 3 ? 3 : p[2];
-  int   inst  = p[3];
-  int   prm   = p[4];
-  float cntr  = (float)p[5];
+  int   shape = p[1] > 3 ? 3 : p[1];
+  int   inst  = p[2];
+  int   prm   = p[3];
+  float cntr  = (float)p[4];
+  float depth = p[5] / 2.0f;   // 0-127 swing each side
 
   float phase_inc = rate / s->sample_rate;
 
@@ -96,7 +96,7 @@ static void lfo_render(UnitState *s, const uint8_t *p,
 }
 
 static void lfo_init_params(uint8_t *params, int inst_idx) {
-  params[3] = (uint8_t)(inst_idx & 0xFF);
+  params[2] = (uint8_t)(inst_idx & 0xFF);
 }
 
 static const char *const lfo_shape_names[] = {"SINE", "SQR", "SAW", "TRI"};
@@ -107,10 +107,10 @@ const UnitDef unit_lfo = {
     .name = "LFO",
     .is_source = false,
     .num_params = 7,
-    .param_names = {"RATE", "DPTH", "SHPE", "INST", "PARAM", "CNTR", "ON"},
-    .param_defaults = {0x20, 0x40, 0, 0, 0, 0x80, 0},
-    .param_enums = {NULL, NULL, lfo_shape_names, NULL, NULL, NULL, lfo_on_names},
-    .param_enum_count = {0, 0, 4, 0, 0, 0, 2},
+    .param_names = {"RATE", "SHPE", "INST", "PARAM", "CNTR", "DPTH", "ON"},
+    .param_defaults = {0x20, 0, 0, 0, 0x80, 0x40, 0},
+    .param_enums = {NULL, lfo_shape_names, NULL, NULL, NULL, NULL, lfo_on_names},
+    .param_enum_count = {0, 4, 0, 0, 0, 0, 2},
     .init_params = lfo_init_params,
     .create = lfo_create,
     .destroy = lfo_destroy,
