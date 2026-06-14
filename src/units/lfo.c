@@ -3,7 +3,7 @@
 // P1 DPTH:  00=0      FF=127 (added to/subtracted from center)
 // P2 SHPE:  0=Sine 1=Square 2=Saw 3=Tri
 // P3 INST:  target instrument 0-FF
-// P4 PRMP:  target param (global index across chain slots, 0-FF)
+// P4 PARAM: target param (global index across chain slots, 0-FF)
 // P5 CNTR:  center value for modulation (default 0x80)
 // P6 ON:    0=off 1=on
 #include <math.h>
@@ -107,7 +107,7 @@ const UnitDef unit_lfo = {
     .name = "LFO",
     .is_source = false,
     .num_params = 7,
-    .param_names = {"RATE", "DPTH", "SHPE", "INST", "PRMP", "CNTR", "ON"},
+    .param_names = {"RATE", "DPTH", "SHPE", "INST", "PARAM", "CNTR", "ON"},
     .param_defaults = {0x20, 0x40, 0, 0, 0, 0x80, 0},
     .param_enums = {NULL, NULL, lfo_shape_names, NULL, NULL, NULL, lfo_on_names},
     .param_enum_count = {0, 0, 4, 0, 0, 0, 2},
