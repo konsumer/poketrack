@@ -6,6 +6,7 @@
 
 // Per-instrument RMS for sidechain ducking (NUM_INSTRUMENTS=16)
 float g_sidechain_rms[NUM_INSTRUMENTS] = {0};
+TrackerSong *g_lfo_song = NULL;
 
 static void midi_voice_destroy(AudioEngine *eng, int v);
 void audio_midi_kill_all(AudioEngine *eng);
@@ -322,6 +323,7 @@ static void fire_step(AudioEngine *eng, int ch, PatternStep *step) {
 void audio_init(AudioEngine *eng, TrackerSong *song) {
   memset(eng, 0, sizeof(AudioEngine));
   eng->song = song;
+  g_lfo_song = song;
   eng->samples_per_tick = calc_samples_per_tick(song->bpm);
   memset(eng->active_inst, TRACKER_EMPTY, sizeof(eng->active_inst));
   eng->preview_inst = TRACKER_EMPTY;

@@ -86,6 +86,7 @@ set(SOURCES
     src/units/tremolo.c
     src/units/compressor.c
     src/units/ducker.c
+    src/units/lfo.c
     src/units/unit_registry.c
 )
 

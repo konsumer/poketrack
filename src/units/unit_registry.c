@@ -23,6 +23,7 @@ static const UnitDef *REGISTRY[] = {
     &unit_compressor,
     &unit_ducker,
     &unit_midi,
+    &unit_lfo,
     NULL,
 };
 

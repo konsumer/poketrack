@@ -95,3 +95,5 @@ void audio_set_dyn_param(AudioEngine *eng, uint8_t inst_idx, int slot_idx, int p
 
 // Per-instrument RMS level for sidechain ducking (indexed by instrument index 0-255)
 extern float g_sidechain_rms[NUM_INSTRUMENTS];
+// Global song pointer for LFO param modulation
+extern TrackerSong *g_lfo_song;

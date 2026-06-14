@@ -21,6 +21,7 @@ extern const UnitDef unit_tremolo;
 extern const UnitDef unit_compressor;
 extern const UnitDef unit_ducker;
 extern const UnitDef unit_midi;
+extern const UnitDef unit_lfo;
 
 const UnitDef *unit_find(const char *id);
 void unit_list(const UnitDef **out, int *count);
