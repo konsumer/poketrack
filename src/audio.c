@@ -345,6 +345,31 @@ void audio_shutdown(AudioEngine *eng) {
   memset(eng, 0, sizeof(AudioEngine));
 }
 
+void audio_play_from(AudioEngine *eng, uint16_t start_row) {
+  if (eng->playing)
+    return;
+  audio_preview_kill(eng);
+  for (int ch = 0; ch < SONG_CHANNELS; ch++) {
+    eng->cursors[ch].song_row = start_row;
+    eng->cursors[ch].pattern_step = 0;
+    eng->active_note[ch] = 0;
+  }
+  eng->pattern_loop = false;
+  eng->tick_counter = 0;
+  eng->row_tick = 0;
+  eng->sample_acc = eng->samples_per_tick;
+
+  int last = 0;
+  for (int row = 0; row < eng->song->song_len; row++)
+    for (int ch = 0; ch < SONG_CHANNELS; ch++)
+      if (eng->song->patterns[ch][row] != TRACKER_EMPTY)
+        last = row;
+  eng->song_last_row = last;
+  preload_all_chan_states(eng);
+
+  eng->playing = true;
+}
+
 void audio_play(AudioEngine *eng) {
   if (eng->playing)
     return;

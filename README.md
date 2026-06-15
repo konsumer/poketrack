@@ -36,6 +36,7 @@ It may seem a bit inscrutable at first, but input is meant to be consistent and 
 | ←/→ | Scroll channels |
 | A + ↑/↓ | Set pattern number in cell |
 | B | Clear cell |
+| SELECT + START | Play from current row |
 
 **Pattern**
 
