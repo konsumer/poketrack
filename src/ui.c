@@ -112,6 +112,12 @@ void ui_update(UIState *ui) {
         audio_play(ui->engine);
       }
     }
+    if (input_pressed(BTN_START) && input_held(BTN_SELECT) && !audio_is_playing(ui->engine)) {
+      if (ui->screen == SCREEN_SONG)
+        audio_play_from(ui->engine, (uint16_t)ui->song_row);
+      else
+        audio_play(ui->engine);
+    }
 
     // SELECT + direction = switch screen (takes priority, no A held)
     if (input_held(BTN_SELECT) && !input_held(BTN_A)) {

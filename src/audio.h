@@ -65,6 +65,7 @@ void audio_shutdown(AudioEngine *eng);
 // Set base directory for relative path resolution (call after load/save)
 void audio_set_save_dir(AudioEngine *eng, const char *save_file_path);
 void audio_play(AudioEngine *eng);
+void audio_play_from(AudioEngine *eng, uint16_t start_row);
 void audio_play_pattern(AudioEngine *eng, uint8_t pattern_idx);
 void audio_stop(AudioEngine *eng);
 bool audio_is_playing(const AudioEngine *eng);
