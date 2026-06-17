@@ -119,27 +119,31 @@ void screen_pattern_update(UIState *ui) {
         uint8_t sr = ui->song->scale_root % 12;
         if (ui_repeat(BTN_UP)) {
           if (n == NOTE_EMPTY || n == NOTE_OFF) {
-            step->note = scale_next_note(59, +1, si, sr);
+            uint8_t base = ui->last_note ? ui->last_note - 1 : 59;
+            step->note = scale_next_note(base, +1, si, sr);
             if (!step->velocity) step->velocity = 0xFF;
           } else {
             step->note = scale_next_note(n, +1, si, sr);
           }
+          ui->last_note = step->note;
           preview(ui, step->note);
         }
         if (ui_repeat(BTN_DOWN)) {
           if (n == NOTE_EMPTY || n == NOTE_OFF) {
-            step->note = scale_next_note(61, -1, si, sr);
+            uint8_t base = ui->last_note ? ui->last_note + 1 : 61;
+            step->note = scale_next_note(base, -1, si, sr);
             if (!step->velocity) step->velocity = 0xFF;
           } else {
             step->note = scale_next_note(n, -1, si, sr);
           }
+          ui->last_note = step->note;
           preview(ui, step->note);
         }
         if (ui_repeat(BTN_RIGHT) && n != NOTE_EMPTY && n != NOTE_OFF && n + 12 <= 127) {
-          step->note += 12; preview(ui, step->note);
+          step->note += 12; ui->last_note = step->note; preview(ui, step->note);
         }
         if (ui_repeat(BTN_LEFT)  && n != NOTE_EMPTY && n != NOTE_OFF && n >= 13) {
-          step->note -= 12; preview(ui, step->note);
+          step->note -= 12; ui->last_note = step->note; preview(ui, step->note);
         }
         if (input_pressed(BTN_B)) step->note = NOTE_OFF;
         break;
