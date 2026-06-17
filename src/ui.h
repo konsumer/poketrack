@@ -76,6 +76,9 @@ typedef struct {
   bool midi_in_picker_active;
   int midi_in_picker_row;
   bool inst_param_cc_col;  // true = cursor is on the CC field of a param row
+
+  uint8_t last_note;     // last note entered in pattern screen
+  uint8_t last_pattern;  // last pattern index entered in song screen
 } UIState;
 
 void ui_init(UIState *ui, TrackerSong *song, AudioEngine *engine);

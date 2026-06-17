@@ -5,6 +5,9 @@ extern const UnitDef unit_osc;
 extern const UnitDef unit_drum;
 extern const UnitDef unit_sf2;
 #ifndef __EMSCRIPTEN__
+extern const UnitDef unit_sfz;
+#endif
+#ifndef __EMSCRIPTEN__
 extern const UnitDef unit_clap;
 #endif
 extern const UnitDef unit_delay;

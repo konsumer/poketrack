@@ -92,12 +92,14 @@ void screen_song_update(UIState *ui) {
   } else {
     uint8_t *cell = &song->patterns[ui->song_col][ui->song_row];
     if (ui_repeat(BTN_UP)) {
-      if (*cell == TRACKER_EMPTY) *cell = 0;
+      if (*cell == TRACKER_EMPTY) *cell = ui->last_pattern;
       else if (*cell < NUM_PATTERNS - 1) (*cell)++;
+      ui->last_pattern = *cell;
     }
     if (ui_repeat(BTN_DOWN)) {
-      if (*cell == TRACKER_EMPTY) *cell = 0;
+      if (*cell == TRACKER_EMPTY) *cell = ui->last_pattern;
       else if (*cell > 0) (*cell)--;
+      ui->last_pattern = *cell;
     }
     if (input_pressed(BTN_B)) *cell = TRACKER_EMPTY;
   }

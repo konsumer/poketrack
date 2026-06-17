@@ -93,7 +93,7 @@ set(SOURCES
 # CLAP and tinyfiledialogs — desktop only
 list(APPEND SOURCES src/midi_out.c src/units/midi_unit.c)
 if(NOT EMSCRIPTEN)
-    list(APPEND SOURCES src/clap_host.c src/units/clap_unit.c)
+    list(APPEND SOURCES src/clap_host.c src/units/clap_unit.c src/units/sfz.c)
     list(APPEND SOURCES ${TFD_DIR}/tinyfiledialogs.c)
 endif()
 

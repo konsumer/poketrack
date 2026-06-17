@@ -7,6 +7,9 @@ static const UnitDef *REGISTRY[] = {
     &unit_drum,
     &unit_sf2,
 #ifndef __EMSCRIPTEN__
+    &unit_sfz,
+#endif
+#ifndef __EMSCRIPTEN__
     &unit_clap,
 #endif
     &unit_delay,
