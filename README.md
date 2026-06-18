@@ -118,7 +118,7 @@ C-4  00  00 80
 
 which sequences cutoff.
 
-On linux, this didn't seem to work for me, but neither did the official Surge XT standalone (could not change reso/cut.) I did test linux with a simple CLAP plugin, so I think it's an issue with Surge XT.
+On linux, this didn't seem to work for me, but neither did the official Surge XT standalone (could not change reso/cut.) I did test linux with [a simple CLAP plugin](https://github.com/konsumer/raypoketrack/tree/main/test_clap_plugin) that worked fine, so I think it's an issue with Surge XT.
 
 ## development
 
