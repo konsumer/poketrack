@@ -137,7 +137,7 @@ void tracker_init(TrackerSong *song) {
 }
 
 void tracker_clear(TrackerSong *song) {
-  uint8_t bpm = song->bpm;
+  uint16_t bpm = song->bpm;
   char name[32];
   strncpy(name, song->name, 32);
   tracker_init(song);
@@ -293,10 +293,11 @@ bool tracker_save(const TrackerSong *song, const char *path) {
   // META
   { size_t co = wb_chunk_start(&b, "META");
     wb_strn(&b, song->name, 32);
-    wb_u8(&b, song->bpm); wb_u8(&b, song->swing);
+    wb_u8(&b, (uint8_t)(song->bpm & 0xFF)); wb_u8(&b, song->swing);
     wb_u8(&b, song->scale_root); wb_u8(&b, song->scale_idx);
     wb_u8(&b, song->loop ? 1 : 0);
-    for (int i = 0; i < 3; i++) wb_u8(&b, 0); // padding
+    wb_u8(&b, (uint8_t)(song->bpm >> 8)); // bpm high byte (old readers treat as padding)
+    wb_u8(&b, 0); wb_u8(&b, 0);
     wb_chunk_end(&b, co); ns++; }
 
   // SONG
@@ -397,9 +398,12 @@ bool tracker_load(TrackerSong *song, const char *path) {
 
     if (strcmp(tag, "META") == 0) {
       rb_strn(&c, song->name, 32);
-      song->bpm = rb_u8(&c); song->swing = rb_u8(&c);
+      uint8_t bpm_lo = rb_u8(&c); song->swing = rb_u8(&c);
       song->scale_root = rb_u8(&c); song->scale_idx = rb_u8(&c);
       song->loop = rb_u8(&c) & 1;
+      uint8_t bpm_hi = rb_u8(&c);  // first padding slot
+      song->bpm = (uint16_t)bpm_lo | ((uint16_t)bpm_hi << 8);
+      if (song->bpm == 0) song->bpm = 120;
 
     } else if (strcmp(tag, "SONG") == 0) {
       uint16_t slen = rb_u16(&c);
