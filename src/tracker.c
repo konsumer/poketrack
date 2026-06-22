@@ -528,3 +528,49 @@ bool tracker_load_instrument(TrackerInstrument *inst, const char *path) {
   UnloadFileData(raw);
   return true;
 }
+
+bool tracker_save_pattern(const Pattern *pat, const char *path) {
+  WBuf b = {0};
+  wb_raw(&b, "RPTP", 4);
+  wb_u16(&b, 1);  // version
+  wb_u16(&b, pat->len);
+  for (int i = 0; i < (int)pat->len; i++) {
+    const PatternStep *s = &pat->steps[i];
+    wb_u8(&b, s->note);
+    wb_u8(&b, s->velocity);
+    wb_u8(&b, s->instrument);
+    for (int f = 0; f < FX_PER_STEP; f++) {
+      wb_u8(&b, s->fx[f]);
+      wb_u8(&b, s->fxv[f]);
+    }
+  }
+  bool ok = b.data && SaveFileData(path, b.data, (int)b.len);
+  free(b.data);
+  return ok;
+}
+
+bool tracker_load_pattern(Pattern *pat, const char *path) {
+  int sz = 0;
+  unsigned char *raw = LoadFileData(path, &sz);
+  if (!raw || sz < 8) { if (raw) UnloadFileData(raw); return false; }
+  RBuf r = { raw, raw + sz };
+  uint8_t magic[4]; rb_raw(&r, magic, 4);
+  if (memcmp(magic, "RPTP", 4) != 0) { UnloadFileData(raw); return false; }
+  uint16_t version = rb_u16(&r); (void)version;
+  uint16_t len = rb_u16(&r);
+  if (len > MAX_PATTERN_STEPS) len = MAX_PATTERN_STEPS;
+  if (len == 0) len = 1;
+  pat->len = len;
+  for (int i = 0; i < len; i++) {
+    PatternStep *s = &pat->steps[i];
+    s->note       = rb_u8(&r);
+    s->velocity   = rb_u8(&r);
+    s->instrument = rb_u8(&r);
+    for (int f = 0; f < FX_PER_STEP; f++) {
+      s->fx[f]  = rb_u8(&r);
+      s->fxv[f] = rb_u8(&r);
+    }
+  }
+  UnloadFileData(raw);
+  return true;
+}

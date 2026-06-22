@@ -1,7 +1,12 @@
 #include <stdio.h>
+#include <string.h>
 
+#include "file_browser.h"
+#include "tracker.h"
 #include "ui.h"
 #include "units/unit_registry.h"
+
+static int g_pat_fb_mode = 0;  // 0=none 1=save 2=load
 
 // Column layout
 #define PX_ROW  0
@@ -48,8 +53,25 @@ void screen_pattern_update(UIState *ui) {
   if (input_released(BTN_A))
     audio_preview_kill(ui->engine);
 
-  // Footer row is the virtual row at index pat->len (below last step)
+  // Footer row: pat->len  (cols: 0=+ 1=- 2=SAVE 3=LOAD)
   bool in_footer = (ui->pattern_row == (int)pat->len);
+
+  // Poll file browser
+  const char *fb = file_browser_poll();
+  if (fb) {
+    if (g_pat_fb_mode == 1) {
+      char fname[24];
+      snprintf(fname, sizeof(fname), "PAT%02X.rptp", (uint8_t)ui->ctx_pattern);
+      tracker_save_pattern(pat, fb);
+      file_browser_download(fb, fname);
+    } else if (g_pat_fb_mode == 2) {
+      tracker_load_pattern(pat, fb);
+      if (ui->pattern_row >= (int)pat->len) ui->pattern_row = (int)pat->len - 1;
+    }
+    g_pat_fb_mode = 0;
+    return;
+  }
+  if (file_browser_active()) return;
 
   // L/R shoulder: cycle patterns (not while editing)
   if (!edit) {
@@ -67,20 +89,26 @@ void screen_pattern_update(UIState *ui) {
     }
   }
 
-  // Handle footer before edit check — A press would otherwise be eaten by edit mode
+  // Handle footer before edit check — cols: 0=+ 1=- 2=SAVE 3=LOAD
   if (in_footer) {
-    if (ui_repeat(BTN_UP))   { ui->pattern_row = pat->len > 0 ? pat->len - 1 : 0; return; }
-    if (ui_repeat(BTN_LEFT))  ui->pattern_col = 0;
-    if (ui_repeat(BTN_RIGHT)) ui->pattern_col = 1;
-    if (ui->pattern_col > 1)  ui->pattern_col = 1;
-
-    // col 0 = "+", col 1 = "-"
+    if (ui_repeat(BTN_UP))   { ui->pattern_row = pat->len > 0 ? (int)pat->len - 1 : 0; return; }
+    if (ui_repeat(BTN_LEFT))  { if (ui->pattern_col > 0) ui->pattern_col--; }
+    if (ui_repeat(BTN_RIGHT)) { if (ui->pattern_col < 3) ui->pattern_col++; }
     if (input_pressed(BTN_A)) {
       if (ui->pattern_col == 0 && pat->len < MAX_PATTERN_STEPS)
         pat->len++;
       else if (ui->pattern_col == 1 && pat->len > 1)
         pat->len--;
-      ui->pattern_row = pat->len;  // stay in footer
+      else if (ui->pattern_col == 2) {
+        char fname[24];
+        snprintf(fname, sizeof(fname), "PAT%02X.rptp", (uint8_t)ui->ctx_pattern);
+        g_pat_fb_mode = 1;
+        file_browser_save_as("Save pattern", fname);
+      } else if (ui->pattern_col == 3) {
+        g_pat_fb_mode = 2;
+        file_browser_open("Load pattern", "*.rptp");
+      }
+      if (ui->pattern_col < 2) ui->pattern_row = (int)pat->len;
     }
     return;
   }
@@ -92,7 +120,7 @@ void screen_pattern_update(UIState *ui) {
       ui->pattern_row--;
     if (ui_repeat(BTN_DOWN)) {
       if (ui->pattern_row < (int)pat->len - 1) ui->pattern_row++;
-      else ui->pattern_row = pat->len;  // enter footer
+      else ui->pattern_row = (int)pat->len;  // enter resize row
     }
     if (ui_repeat(BTN_LEFT)  && ui->pattern_col > 0)          ui->pattern_col--;
     if (ui_repeat(BTN_RIGHT) && ui->pattern_col < PT_NCOLS-1) ui->pattern_col++;
@@ -214,7 +242,7 @@ void screen_pattern_update(UIState *ui) {
     }
   }
 
-  if (input_pressed(BTN_Y)) {
+  if (!file_browser_active() && input_pressed(BTN_Y)) {
     for (int i = 0; i < pat->len; i++) {
       PatternStep *s = &pat->steps[i];
       switch (ui->pattern_col) {
@@ -278,23 +306,22 @@ void screen_pattern_draw(UIState *ui) {
     int y = PT_CONTENT_Y + vi * CH_H;
 
     if (i == (int)pat->len) {
-      // Footer: "[len_hex]  [+]  [-]"
-      bool fc = in_footer;
+      // Footer: "[len_hex]  [+]  [-]  [SAVE]  [LOAD]"
       DrawRectangle(0, y, WIN_W, CH_H, C_BG_ALT);
-
-      // Length in 2-digit hex (in the row-number column)
       DrawText(TextFormat("%02X", pat->len), PX_ROW + 2, y + (CH_H-FONT_S)/2, FONT_S,
-               fc ? C_TEXT : C_HEADER);
-
-      // col 0 = "+"
-      bool plus_sel  = fc && ui->pattern_col == 0;
-      if (plus_sel)  DrawRectangle(PX_NOTE, y, PW_NOTE - 1, CH_H, C_CURSOR);
-      DrawText("+", PX_NOTE + 2, y + (CH_H-FONT_S)/2, FONT_S, plus_sel  ? C_TITLE : C_DIM);
-
-      // col 1 = "-"
-      bool minus_sel = fc && ui->pattern_col == 1;
-      if (minus_sel) DrawRectangle(PX_VEL, y, PW_VEL - 1, CH_H, C_CURSOR);
-      DrawText("-", PX_VEL  + 2, y + (CH_H-FONT_S)/2, FONT_S, minus_sel ? C_TITLE : C_DIM);
+               in_footer ? C_TEXT : C_HEADER);
+      bool c0 = in_footer && ui->pattern_col == 0;
+      bool c1 = in_footer && ui->pattern_col == 1;
+      bool c2 = in_footer && ui->pattern_col == 2;
+      bool c3 = in_footer && ui->pattern_col == 3;
+      if (c0) DrawRectangle(PX_NOTE, y, PW_NOTE - 1, CH_H, C_CURSOR);
+      DrawText("+",    PX_NOTE + 2,      y + (CH_H-FONT_S)/2, FONT_S, c0 ? C_TITLE : C_DIM);
+      if (c1) DrawRectangle(PX_VEL,  y, PW_VEL  - 1, CH_H, C_CURSOR);
+      DrawText("-",    PX_VEL  + 2,      y + (CH_H-FONT_S)/2, FONT_S, c1 ? C_TITLE : C_DIM);
+      if (c2) DrawRectangle(PX_INST, y, PW_INST + PW_FXT - 1, CH_H, C_CURSOR);
+      DrawText("SAVE", PX_INST + 2,      y + (CH_H-FONT_S)/2, FONT_S, c2 ? C_TITLE : C_DIM);
+      if (c3) DrawRectangle(PX_F1V,  y, PW_FXV + PW_FXT - 1, CH_H, C_CURSOR);
+      DrawText("LOAD", PX_F1V  + 2,      y + (CH_H-FONT_S)/2, FONT_S, c3 ? C_TITLE : C_DIM);
       continue;
     }
 
