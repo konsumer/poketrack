@@ -4,6 +4,7 @@
 
 static const UnitDef *REGISTRY[] = {
     &unit_osc,
+    &unit_fm,
     &unit_drum,
     &unit_sf2,
 #ifndef __EMSCRIPTEN__

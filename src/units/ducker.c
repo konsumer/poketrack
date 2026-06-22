@@ -1,6 +1,6 @@
 // Sidechain volume ducker effect unit
 // P0 AMNT: 00=no duck  FF=full duck
-// P1 SRC:  instrument index 0-15 (scaled from 0-FF)
+// P1 SRC:  instrument index 00-FF
 // P2 REL:  00=10ms  FF=500ms
 // P3 INV:  0=duck when src plays  1=duck when src silent
 #include <math.h>
@@ -8,8 +8,7 @@
 
 #include "unit.h"
 
-// Global sidechain RMS per instrument (16 instruments)
-extern float g_sidechain_rms[16];
+extern float g_sidechain_rms[256];
 
 struct UnitState {
   float env;  // current envelope (0=silent, 1=loud)

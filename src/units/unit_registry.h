@@ -2,6 +2,7 @@
 #include "unit.h"
 
 extern const UnitDef unit_osc;
+extern const UnitDef unit_fm;
 extern const UnitDef unit_drum;
 extern const UnitDef unit_sf2;
 #ifndef __EMSCRIPTEN__

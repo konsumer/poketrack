@@ -77,9 +77,14 @@ Here are some videos:
 
 [![built-in synths](https://img.youtube.com/vi/3JeYaVriygU/0.jpg)](https://www.youtube.com/playlist?list=PLDE2Ywpu1J__p2yBXrMOoKCgtIYQgfGo7)
 
+### units
+
+There are some built-in units (effects/sound-generators) that are documented [here](./src//units/README.md).
+
+
 ### plugins
 
-There are some built-in units (effects/sound-generators) but you can also use CLAP plugins.
+You can also use CLAP plugins.
 
 **Instruments**
 - [Surge XT](https://surge-synthesizer.github.io/) — subtractive/wavetable synth; good first test

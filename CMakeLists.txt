@@ -71,6 +71,7 @@ set(SOURCES
     src/screen_instrument.c
     src/screen_menu.c
     src/units/osc.c
+    src/units/fm.c
     src/units/drum.c
     src/units/sf2.c
     src/units/delay.c
