@@ -11,7 +11,8 @@ TrackerSong *g_lfo_song = NULL;
 static void midi_voice_destroy(AudioEngine *eng, int v);
 void audio_midi_kill_all(AudioEngine *eng);
 
-static uint32_t calc_samples_per_tick(uint8_t bpm) {
+static uint32_t calc_samples_per_tick(uint16_t bpm) {
+  if (bpm == 0) bpm = 120;
   return (AUDIO_SAMPLE_RATE * 60u) / ((uint32_t)bpm * 4u);
 }
 

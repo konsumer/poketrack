@@ -70,7 +70,7 @@ typedef struct {
   uint8_t patterns[SONG_CHANNELS][MAX_SONG_LEN];
   Pattern pattern_data[NUM_PATTERNS];
   TrackerInstrument instruments[NUM_INSTRUMENTS];
-  uint8_t bpm;
+  uint16_t bpm;
   uint8_t swing;
   char name[32];
   uint8_t scale_root;  // 0=C .. 11=B

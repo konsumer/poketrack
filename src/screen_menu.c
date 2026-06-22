@@ -228,14 +228,16 @@ void screen_menu_update(UIState *ui) {
         break;
 
       case MENU_BPM:
-        if (ui_repeat(BTN_UP) && ui->song->bpm < 250)
+        if (ui_repeat(BTN_UP) && ui->song->bpm < 999)
           ui->song->bpm++;
-        if (ui_repeat(BTN_DOWN) && ui->song->bpm > 40)
+        if (ui_repeat(BTN_DOWN) && ui->song->bpm > 1)
           ui->song->bpm--;
-        if (ui_repeat(BTN_RIGHT) && ui->song->bpm <= 240)
+        if (ui_repeat(BTN_RIGHT) && ui->song->bpm <= 989)
           ui->song->bpm += 10;
-        if (ui_repeat(BTN_LEFT) && ui->song->bpm >= 50)
+        if (ui_repeat(BTN_LEFT) && ui->song->bpm > 10)
           ui->song->bpm -= 10;
+        else if (ui_repeat(BTN_LEFT) && ui->song->bpm > 1)
+          ui->song->bpm = 1;
         break;
 
       case MENU_SCALE_ROOT:
