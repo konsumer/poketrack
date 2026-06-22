@@ -209,14 +209,17 @@ void screen_menu_update(UIState *ui) {
     return;
   }
 
+  // BTN_Y anywhere on menu screen enters name editing (works with or without A held)
+  if (input_pressed(BTN_Y)) {
+    enter_name_editing(ui->song);
+    return;
+  }
+
   if (!edit) {
     if (ui_repeat(BTN_UP) && ui->menu_row > 0)
       ui->menu_row--;
     if (ui_repeat(BTN_DOWN) && ui->menu_row < MENU_COUNT - 1)
       ui->menu_row++;
-    // BTN_Y anywhere on menu screen enters name editing
-    if (input_pressed(BTN_Y))
-      enter_name_editing(ui->song);
   } else {
     switch (ui->menu_row) {
       case MENU_SONG_NAME:

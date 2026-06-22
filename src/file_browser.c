@@ -133,6 +133,7 @@ typedef struct {
 static FBMode g_mode = FB_NONE;
 static char g_dir[MAX_PATH] = {0};
 static char g_filt[128] = {0};
+static char g_ext[16] = "rpt";
 static Ent g_ents[MAX_ENT];
 static int g_cnt = 0;
 static int g_cur = 0;
@@ -164,10 +165,10 @@ static int fb_kb_max_col(int row) {
   return (row < FB_KB_CHAR_ROWS) ? FB_KB_CHAR_COLS[row] : FB_KB_SPECIAL_COLS;
 }
 
-static void fb_strip_rpt(char *name) {
-  size_t l = strlen(name);
-  if (l > 4 && strcasecmp(name + l - 4, ".rpt") == 0)
-    name[l - 4] = '\0';
+static void fb_strip_ext(char *name) {
+  size_t l = strlen(name), el = strlen(g_ext);
+  if (el && l > el + 1 && name[l - el - 1] == '.' && strcasecmp(name + l - el, g_ext) == 0)
+    name[l - el - 1] = '\0';
 }
 static void fb_fname_append(char c) {
   size_t l = strlen(g_fname);
@@ -179,7 +180,7 @@ static void fb_fname_backspace(void) {
 }
 static void fb_fname_confirm(void) {
   if (!g_fname[0]) return;
-  snprintf(g_result, sizeof(g_result), "%s/%s.rpt", g_dir, g_fname);
+  snprintf(g_result, sizeof(g_result), "%s/%s.%s", g_dir, g_fname, g_ext);
   g_ready = 1;
   g_mode = FB_NONE;
   g_fname_ed = false;
@@ -313,9 +314,12 @@ void file_browser_save_as(const char *title, const char *def_name) {
   g_fname_ed = false;
   if (!g_dir[0])
     strncpy(g_dir, GetWorkingDirectory(), MAX_PATH - 1);
-  strncpy(g_filt, "*.rpt", sizeof(g_filt) - 1);
+  // Derive extension from def_name (e.g. "song.rpt" → "rpt", "inst.rpti" → "rpti")
+  const char *dot = def_name ? strrchr(def_name, '.') : NULL;
+  strncpy(g_ext, (dot && dot[1]) ? dot + 1 : "rpt", sizeof(g_ext) - 1);
+  snprintf(g_filt, sizeof(g_filt), "*.%s", g_ext);
   strncpy(g_fname, def_name ? def_name : "song", sizeof(g_fname) - 1);
-  fb_strip_rpt(g_fname);
+  fb_strip_ext(g_fname);
   scan();
 }
 
@@ -402,16 +406,10 @@ void file_browser_tick(void) {
         scan();
       }
     } else {
-      if (g_mode == FB_OPEN) {
-        snprintf(g_result, sizeof(g_result), "%s/%s", g_dir, e->name);
-        g_ready = 1;
-        g_mode = FB_NONE;
-      } else {
-        // Save: use this file's name (without .rpt) in keyboard editor
-        strncpy(g_fname, e->name, sizeof(g_fname) - 1);
-        fb_strip_rpt(g_fname);
-        fb_enter_kb();
-      }
+      // Both open and save: selecting existing file sets result directly
+      snprintf(g_result, sizeof(g_result), "%s/%s", g_dir, e->name);
+      g_ready = 1;
+      g_mode = FB_NONE;
     }
   }
 

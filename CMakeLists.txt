@@ -46,18 +46,6 @@ if(NOT EXISTS "${TSF_HEADER}")
 endif()
 set(TSF_INCLUDE_DIR "${CMAKE_BINARY_DIR}/tsf_include")
 
-# tinyfiledialogs (native OS file picker dialog)
-set(TFD_DIR "${CMAKE_BINARY_DIR}/tfd_include")
-if(NOT EXISTS "${TFD_DIR}/tinyfiledialogs.c")
-    file(MAKE_DIRECTORY "${TFD_DIR}")
-    file(DOWNLOAD
-        "https://raw.githubusercontent.com/native-toolkit/libtinyfiledialogs/master/tinyfiledialogs.c"
-        "${TFD_DIR}/tinyfiledialogs.c" STATUS TFD_STATUS_C)
-    file(DOWNLOAD
-        "https://raw.githubusercontent.com/native-toolkit/libtinyfiledialogs/master/tinyfiledialogs.h"
-        "${TFD_DIR}/tinyfiledialogs.h" STATUS TFD_STATUS_H)
-endif()
-
 set(SOURCES
     src/main.c
     src/tracker.c
@@ -91,11 +79,10 @@ set(SOURCES
     src/units/unit_registry.c
 )
 
-# CLAP and tinyfiledialogs — desktop only
+# CLAP & SFZ — desktop only
 list(APPEND SOURCES src/midi_out.c src/units/midi_unit.c)
 if(NOT EMSCRIPTEN)
     list(APPEND SOURCES src/clap_host.c src/units/clap_unit.c src/units/sfz.c)
-    list(APPEND SOURCES ${TFD_DIR}/tinyfiledialogs.c)
 endif()
 
 add_executable(${PROJECT_NAME} ${SOURCES})

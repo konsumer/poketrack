@@ -460,3 +460,71 @@ bool tracker_load(TrackerSong *song, const char *path) {
   UnloadFileData(raw);
   return true;
 }
+
+bool tracker_save_instrument(const TrackerInstrument *inst, const char *path, const char *save_dir) {
+  char dir[512];
+  song_dir(path, dir, sizeof(dir));
+  // Use save_dir for relativising if path dir is empty (e.g. relative path)
+  if (!dir[0] && save_dir && save_dir[0])
+    strncpy(dir, save_dir, sizeof(dir) - 1);
+
+  WBuf b = {0};
+  wb_raw(&b, "RPTI", 4);
+  wb_u16(&b, 1);  // version
+  wb_strn(&b, inst->name, 16);
+  wb_strn(&b, inst->midi_in_device, 128);
+  wb_u8(&b, inst->midi_in_channel);
+  for (int s = 0; s < CHAIN_MAX; s++) {
+    const ChainSlot *sl = &inst->chain[s];
+    wb_strn(&b, sl->unit_id, UNIT_ID_LEN);
+    wb_u8(&b, sl->enabled ? 1 : 0);
+    wb_raw(&b, sl->params, UNIT_MAX_PARAMS);
+    wb_raw(&b, sl->cc_map, UNIT_MAX_PARAMS);
+    char tmp[240]; strncpy(tmp, sl->data, 239); tmp[239] = '\0';
+    if (tmp[0] == '/' || tmp[0] == '\\' || (tmp[0] && tmp[1] == ':'))
+      rewrite_path(tmp, 240, dir, path_make_relative);
+    uint16_t dl = (uint16_t)strlen(tmp);
+    wb_u16(&b, dl);
+    if (dl) wb_raw(&b, tmp, dl);
+  }
+
+  bool ok = b.data && SaveFileData(path, b.data, (int)b.len);
+  free(b.data);
+  return ok;
+}
+
+bool tracker_load_instrument(TrackerInstrument *inst, const char *path) {
+  int sz = 0;
+  unsigned char *raw = LoadFileData(path, &sz);
+  if (!raw || sz < 6) { if (raw) UnloadFileData(raw); return false; }
+
+  char dir[512];
+  song_dir(path, dir, sizeof(dir));
+
+  RBuf r = { raw, raw + sz };
+  uint8_t magic[4]; rb_raw(&r, magic, 4);
+  if (memcmp(magic, "RPTI", 4) != 0) { UnloadFileData(raw); return false; }
+  uint16_t version = rb_u16(&r); (void)version;
+
+  memset(inst, 0, sizeof(*inst));
+  rb_strn(&r, inst->name, 16);
+  rb_strn(&r, inst->midi_in_device, 128);
+  inst->midi_in_channel = rb_u8(&r);
+  for (int s = 0; s < CHAIN_MAX; s++) {
+    ChainSlot *sl = &inst->chain[s];
+    rb_strn(&r, sl->unit_id, UNIT_ID_LEN);
+    sl->enabled = rb_u8(&r) != 0;
+    rb_raw(&r, sl->params, UNIT_MAX_PARAMS);
+    rb_raw(&r, sl->cc_map, UNIT_MAX_PARAMS);
+    uint16_t dl = rb_u16(&r);
+    if (dl >= sizeof(sl->data)) dl = (uint16_t)(sizeof(sl->data) - 1);
+    rb_raw(&r, sl->data, dl);
+    sl->data[dl] = '\0';
+    if (sl->data[0] && sl->data[0] != '/' && sl->data[0] != '\\' &&
+        !(sl->data[0] && sl->data[1] == ':'))
+      rewrite_path(sl->data, (int)sizeof(sl->data), dir, path_resolve);
+  }
+
+  UnloadFileData(raw);
+  return true;
+}

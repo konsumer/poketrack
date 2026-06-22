@@ -102,3 +102,8 @@ void tracker_inst_set_slot(TrackerInstrument *inst, int slot, const char *unit_i
 // Returns true on success
 bool tracker_save(const TrackerSong *song, const char *path);
 bool tracker_load(TrackerSong *song, const char *path);
+
+// Save/load a single instrument to/from a .rpti file.
+// save_dir: directory used to relativise data paths (e.g. engine->save_dir).
+bool tracker_save_instrument(const TrackerInstrument *inst, const char *path, const char *save_dir);
+bool tracker_load_instrument(TrackerInstrument *inst, const char *path);
