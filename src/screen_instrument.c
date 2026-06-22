@@ -4,11 +4,17 @@
 #include "audio.h"
 #include "file_browser.h"
 #include "midi_in.h"
+#include "tracker.h"
 #include "ui.h"
 #include "units/unit_registry.h"
 
 // Slot awaiting a file-browser result (-1 = none pending)
 static int g_file_slot = -1;
+
+typedef enum { INST_FB_NONE, INST_FB_SAVE, INST_FB_LOAD } InstFBMode;
+static InstFBMode g_inst_fb_mode = INST_FB_NONE;
+
+static KBModal g_inst_kb;
 
 #define PANEL_W (WIN_W / 2)
 #define INST_CONTENT_Y (STATUS_H + 2)
@@ -20,7 +26,9 @@ static int g_file_slot = -1;
 //   INST_PARAM_BASE+     : right-panel param rows
 #define INST_MIDI_DEV_ROW CHAIN_MAX
 #define INST_MIDI_CH_ROW (CHAIN_MAX + 1)
-#define INST_PARAM_BASE (CHAIN_MAX + 2)
+#define INST_SAVE_ROW (CHAIN_MAX + 2)
+#define INST_LOAD_ROW (CHAIN_MAX + 3)
+#define INST_PARAM_BASE (CHAIN_MAX + 4)
 
 static const UnitDef *slot_def(TrackerInstrument *inst, int s) {
   if (!inst->chain[s].unit_id[0])
@@ -35,9 +43,29 @@ void screen_instrument_update(UIState *ui) {
   midi_web_request_access();  // idempotent — fires once, gives promise time to resolve before picker opens
 #endif
 
+  // Instrument name keyboard modal
+  if (g_inst_kb.active) {
+    kb_modal_update(&g_inst_kb);
+    return;
+  }
+  if (!file_browser_active() && input_pressed(BTN_Y)) {
+    // Strip .rpti extension if present, use default "INST##" if name empty
+    TrackerInstrument *inst0 = &ui->song->instruments[ui->ctx_instrument];
+    if (!inst0->name[0])
+      snprintf(inst0->name, sizeof(inst0->name), "INST%02X", ui->ctx_instrument);
+    else {
+      size_t nl = strlen(inst0->name);
+      if (nl > 5 && strcasecmp(inst0->name + nl - 5, ".rpti") == 0)
+        inst0->name[nl - 5] = '\0';
+    }
+    kb_modal_open(&g_inst_kb, inst0->name, sizeof(inst0->name));
+    return;
+  }
+
   bool edit = input_held(BTN_A);
   bool in_params = (ui->inst_row >= INST_PARAM_BASE);
-  bool in_midi = (!in_params && ui->inst_row >= INST_MIDI_DEV_ROW);
+  bool in_io   = (!in_params && ui->inst_row >= INST_SAVE_ROW);
+  bool in_midi = (!in_params && !in_io && ui->inst_row >= INST_MIDI_DEV_ROW);
 
   // L/R shoulder: cycle instrument (not while editing or in param/midi rows)
   if (!edit && !in_params && !in_midi) {
@@ -76,7 +104,7 @@ void screen_instrument_update(UIState *ui) {
   }
 
   // ---- Slot rows (0..CHAIN_MAX-1) ----
-  if (!in_params && !in_midi) {
+  if (!in_params && !in_midi && !in_io) {
     int slot = ui->inst_row;
     if (!edit) {
       if (ui_repeat(BTN_UP) && slot > 0)
@@ -133,7 +161,8 @@ void screen_instrument_update(UIState *ui) {
         ui->inst_row--;  // DEV → slot 7, CHN → DEV
       if (ui->inst_row == INST_MIDI_DEV_ROW && ui_repeat(BTN_DOWN))
         ui->inst_row = INST_MIDI_CH_ROW;
-      // CHN row DOWN: stay
+      if (ui->inst_row == INST_MIDI_CH_ROW && ui_repeat(BTN_DOWN))
+        ui->inst_row = INST_SAVE_ROW;
       if (ui_repeat(BTN_RIGHT) && slot_def(inst, ui->ctx_instrument_slot))
         ui->inst_row = INST_PARAM_BASE;
 
@@ -151,6 +180,49 @@ void screen_instrument_update(UIState *ui) {
           inst->midi_in_channel++;
         if (ui_repeat(BTN_DOWN) && inst->midi_in_channel > 0)
           inst->midi_in_channel--;
+      }
+    }
+
+    // ---- Save/Load rows ----
+  } else if (in_io) {
+    // Poll file browser
+    const char *fb = file_browser_poll();
+    if (fb) {
+      if (g_inst_fb_mode == INST_FB_SAVE) {
+        char fname[64];
+        const char *nm = inst->name[0] ? inst->name : "inst";
+        snprintf(fname, sizeof(fname), "%s.rpti", nm);
+        tracker_save_instrument(inst, fb, ui->engine->save_dir);
+        file_browser_download(fb, fname);
+      } else if (g_inst_fb_mode == INST_FB_LOAD) {
+        TrackerInstrument tmp;
+        if (tracker_load_instrument(&tmp, fb)) {
+          *inst = tmp;
+          audio_rebuild_instrument(ui->engine, (uint8_t)ui->ctx_instrument);
+        }
+      }
+      g_inst_fb_mode = INST_FB_NONE;
+      return;
+    }
+    if (file_browser_active()) return;
+
+    if (!edit) {
+      if (ui_repeat(BTN_UP))
+        ui->inst_row--;  // LOAD → SAVE, SAVE → CHN
+      if (ui->inst_row == INST_SAVE_ROW && ui_repeat(BTN_DOWN))
+        ui->inst_row = INST_LOAD_ROW;
+      if (ui_repeat(BTN_RIGHT) && slot_def(inst, ui->ctx_instrument_slot))
+        ui->inst_row = INST_PARAM_BASE;
+    }
+    if (input_pressed(BTN_A)) {
+      if (ui->inst_row == INST_SAVE_ROW) {
+        char fname[64];
+        snprintf(fname, sizeof(fname), "%s.rpti", inst->name[0] ? inst->name : "inst");
+        g_inst_fb_mode = INST_FB_SAVE;
+        file_browser_save_as("Save instrument", fname);
+      } else if (ui->inst_row == INST_LOAD_ROW) {
+        g_inst_fb_mode = INST_FB_LOAD;
+        file_browser_open("Load instrument", "*.rpti");
       }
     }
 
@@ -398,15 +470,14 @@ void screen_instrument_update(UIState *ui) {
 void screen_instrument_draw(UIState *ui) {
   TrackerInstrument *inst = &ui->song->instruments[ui->ctx_instrument];
   bool in_params = (ui->inst_row >= INST_PARAM_BASE);
-  bool in_midi = (!in_params && ui->inst_row >= INST_MIDI_DEV_ROW);
-  int cur_slot = in_params ? ui->ctx_instrument_slot
-                 : in_midi ? ui->ctx_instrument_slot
-                           : ui->inst_row;
+  bool in_io   = (!in_params && ui->inst_row >= INST_SAVE_ROW);
+  bool in_midi = (!in_params && !in_io && ui->inst_row >= INST_MIDI_DEV_ROW);
+  int cur_slot = (in_params || in_midi || in_io) ? ui->ctx_instrument_slot : ui->inst_row;
 
   // Left panel: chain slots
   for (int s = 0; s < CHAIN_MAX; s++) {
     int y = INST_CONTENT_Y + s * CH_H;
-    bool cur = (!in_params && !in_midi && s == ui->inst_row);
+    bool cur = (!in_params && !in_midi && !in_io && s == ui->inst_row);
     bool sel = (s == cur_slot);
     Color bg = cur ? C_CURSOR : (sel ? C_BG_ALT : (s % 2 == 0 ? C_BG_ALT : C_BG));
     DrawRectangle(0, y, PANEL_W - 1, CH_H, bg);
@@ -451,6 +522,24 @@ void screen_instrument_draw(UIState *ui) {
     DrawText(ch_str, 28, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_VEL);
     if (cur)
       DrawText("holdA+UP/DN", PANEL_W - 68, y + (CH_H - FONT_S) / 2, FONT_S - 1, C_DIM);
+  }
+
+  // SAVE row
+  {
+    int y = INST_CONTENT_Y + INST_SAVE_ROW * CH_H;
+    bool cur = (ui->inst_row == INST_SAVE_ROW);
+    DrawRectangle(0, y, PANEL_W - 1, CH_H, cur ? C_CURSOR : C_BG_ALT);
+    DrawText("SAVE", 2, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_TITLE : C_HEADER);
+    if (cur) DrawText("[A]", PANEL_W - 24, y + (CH_H - FONT_S) / 2, FONT_S - 1, C_DIM);
+  }
+
+  // LOAD row
+  {
+    int y = INST_CONTENT_Y + INST_LOAD_ROW * CH_H;
+    bool cur = (ui->inst_row == INST_LOAD_ROW);
+    DrawRectangle(0, y, PANEL_W - 1, CH_H, cur ? C_CURSOR : C_BG);
+    DrawText("LOAD", 2, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_TITLE : C_HEADER);
+    if (cur) DrawText("[A]", PANEL_W - 24, y + (CH_H - FONT_S) / 2, FONT_S - 1, C_DIM);
   }
 
   DrawLine(PANEL_W, INST_CONTENT_Y, PANEL_W, WIN_H - STATUS_H, C_SEP);
@@ -696,4 +785,6 @@ draw_overlays:
                cur ? C_TITLE : (pi == 0 ? C_DIM : C_TEXT));
     }
   }
+
+  kb_modal_draw(&g_inst_kb, "NAME:");
 }

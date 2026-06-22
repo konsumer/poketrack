@@ -86,6 +86,29 @@ void ui_update(UIState *ui);
 void ui_draw(UIState *ui);
 
 bool ui_repeat(TrackerButton btn);
+
+// Shared on-screen keyboard modal (SHIFT SPACE DEL OK, no suggest)
+#define KBM_KEY_W     44
+#define KBM_KEY_H     18
+#define KBM_GAP       2
+#define KBM_CHAR_ROWS 4
+#define KBM_SPECIAL_ROW 4
+#define KBM_TOTAL_ROWS  5
+// Special cols: 0=SHIFT 1=SPACE 2=DEL 3=OK
+#define KBM_SPECIAL_COLS 4
+
+typedef struct {
+  bool  active;
+  char *buf;      // pointer to target string (edited in place)
+  int   buf_sz;   // sizeof(buf)
+  int   row, col;
+  bool  shift;
+} KBModal;
+
+void kb_modal_open(KBModal *kb, char *buf, int buf_sz);
+// Returns true when modal closes (OK or BTN_B). Caller checks buf for result.
+bool kb_modal_update(KBModal *kb);
+void kb_modal_draw(KBModal *kb, const char *label);
 const char *note_str(uint8_t note);
 const char *fx_cmd_str(uint8_t fx);
 void draw_cell(int x, int y, int w, int h, Color bg, const char *text, int fs, Color fg);
