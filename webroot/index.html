@@ -143,7 +143,7 @@
       .gp-btn-a { grid-column: 3; grid-row: 2; border-color: #cc3333; color: #cc3333; }
       .gp-btn-b { grid-column: 2; grid-row: 3; border-color: #cc8800; color: #cc8800; }
 
-      @media (pointer: coarse) {
+      @media (pointer: coarse) and (orientation: portrait) {
         #gamepad { display: flex; }
       }
     </style>
@@ -200,9 +200,10 @@
         const canvas = document.getElementById('canvas')
         if (!canvas) return
         const isMobile = window.matchMedia('(pointer: coarse)').matches
+        const isLandscape = window.matchMedia('(orientation: landscape)').matches
         const vw = window.innerWidth
         const vh = window.innerHeight
-        const gpH = isMobile ? (document.getElementById('gamepad')?.offsetHeight ?? 0) : 0
+        const gpH = (isMobile && !isLandscape) ? (document.getElementById('gamepad')?.offsetHeight ?? 0) : 0
         const availW = vw
         const availH = vh - gpH
 
@@ -226,6 +227,7 @@
       }
 
       window.addEventListener('resize', layoutCanvas)
+      window.addEventListener('orientationchange', layoutCanvas)
       layoutCanvas()
 
       // Fetch song from URL hash before starting wasm (preRun must be sync)
