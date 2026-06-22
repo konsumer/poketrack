@@ -107,3 +107,7 @@ bool tracker_load(TrackerSong *song, const char *path);
 // save_dir: directory used to relativise data paths (e.g. engine->save_dir).
 bool tracker_save_instrument(const TrackerInstrument *inst, const char *path, const char *save_dir);
 bool tracker_load_instrument(TrackerInstrument *inst, const char *path);
+
+// Save/load a single pattern to/from a .rptp file.
+bool tracker_save_pattern(const Pattern *pat, const char *path);
+bool tracker_load_pattern(Pattern *pat, const char *path);
