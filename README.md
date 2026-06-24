@@ -73,6 +73,9 @@ It may seem a bit inscrutable at first, but input is meant to be consistent and 
 | A + ←/→ | Change BPM ±10 |
 | A | Confirm action |
 
+
+Read about [specific devices](DEVICES.md).
+
 Here are some videos:
 
 [![built-in synths](https://img.youtube.com/vi/3JeYaVriygU/0.jpg)](https://www.youtube.com/playlist?list=PLDE2Ywpu1J__p2yBXrMOoKCgtIYQgfGo7)
