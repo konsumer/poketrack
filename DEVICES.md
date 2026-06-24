@@ -8,7 +8,7 @@ For many cheap ARM handhelds, I like [dArkOS](https://github.com/christianhaitia
 
 ### steamdeck
 
-This is a x86-64 device, running SteamOS (Arch-based linux.) Setup is fairly straitforward. Check out [this video](https://youtu.be/d_ZJUXr0rRQ).
+This is a x86-64 device, running SteamOS (Arch-based linux.) Setup is fairly straightforward. Check out [this video](https://youtu.be/d_ZJUXr0rRQ).
 
 
 ### R36Max
