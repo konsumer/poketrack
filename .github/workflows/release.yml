@@ -29,7 +29,7 @@ jobs:
           - os: ubuntu-24.04-arm
             name: raypoketrack-linux-arm64-sdl
             linux_deps: libsdl2-dev libgles2-mesa-dev libasound2-dev
-            cmake_flags: -DPLATFORM=SDL
+            cmake_flags: -DPLATFORM=SDL -DGRAPHICS=GRAPHICS_API_OPENGL_ES2
           - os: macos-latest
             name: raypoketrack-macos
             linux_deps: ""
