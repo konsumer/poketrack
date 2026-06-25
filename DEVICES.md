@@ -4,20 +4,13 @@ This is device-specific directions for setting up raypoketrack.
 
 The basic idea is you need a Linux-based device. It will work on windows/mac, but that should be pretty straightforward. There are prebuilt versions for arm64 drm/x11 that should work on most devices. Adding `--fullscreen` CLI flag will improve experience on most devices.
 
-For many cheap ARM handhelds, I like [dArkOS](https://github.com/christianhaitian/dArkOS).
-
 ### steamdeck
 
-This is a x86-64 device, running SteamOS (Arch-based linux.) Setup is fairly straightforward. Check out [this video](https://youtu.be/d_ZJUXr0rRQ).
+This is a x86-64 device, running SteamOS (Arch-based linux.) Setup is fairly straightforward. Check out [my video](https://youtu.be/d_ZJUXr0rRQ) for setup instructions.
 
+### cheap handhelds
 
-### R36Max
-
-This is a cheap clone, that you can get all over (I got [this](https://www.amazon.com/gp/product/B0G3PB3R5K) for $43, on sale.)
-
-- Essentially, just follow [these directions](https://www.reddit.com/r/R36S/comments/1q2mgtk/darkos_in_clon_r36s/). Make note of the comment about the download for boot-partition, as it will save you some time.
-- go to "EmulationStation" section and finish setting it up.
-
+These are things that look like a gameboy. I got [this](https://www.amazon.com/gp/product/B0G3PB3R5K) for $43, on sale. They generally come with some random linux setup, but I like [dArkOS](https://github.com/christianhaitian/dArkOS). For that particular device, [follow these directions](https://www.youtube.com/watch?v=xszUofpKNRc). After that, follow EmulationStation directions, below.
 
 ### EmulationStation
 
