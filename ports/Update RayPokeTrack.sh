@@ -9,11 +9,11 @@ API="https://api.github.com/repos/$REPO/releases/latest"
 RAW="https://raw.githubusercontent.com/$REPO/refs/tags"
 LOG="$SCRIPT_DIR/update.log"
 
-exec >> "$LOG" 2>&1
-echo "=== Update started $(date) ==="
+log()    { echo "$1" | tee -a "$LOG"; }
+notify() { log "[INFO] $1"; dialog --infobox "$1" 5 50; }
+error()  { log "[ERROR] $1"; dialog --msgbox "Error: $1" 7 50; exit 1; }
 
-notify() { echo "[INFO] $1"; dialog --infobox "$1" 5 50 2>/dev/null || true; }
-error()  { echo "[ERROR] $1"; dialog --msgbox "Error: $1" 7 50 2>/dev/null || true; exit 1; }
+log "=== Update started $(date) ==="
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
@@ -36,32 +36,33 @@ case "$OS" in
 esac
 
 notify "Fetching latest release..."
-RELEASE="$(curl -sf "$API")"
+RELEASE="$(curl -sf "$API" 2>>"$LOG")"
 [ -z "$RELEASE" ] && error "Could not reach GitHub API"
 
 TAG="$(echo "$RELEASE" | grep -o '"tag_name": *"[^"]*"' | grep -o '"[^"]*"$' | tr -d '"')"
 [ -z "$TAG" ] && error "Could not determine latest tag"
-echo "Latest tag: $TAG"
+log "Latest tag: $TAG"
 
 URL="$(echo "$RELEASE" | grep -o "\"browser_download_url\": *\"[^\"]*$ASSET\"" | grep -o 'https://[^"]*')"
 [ -z "$URL" ] && error "Could not find asset: $ASSET"
 
 notify "Updating port scripts..."
 for SCRIPT in "RayPokeTrack.sh" "Update RayPokeTrack.sh" "Enable SSH.sh"; do
-  ENCODED="$(python3 -c "import urllib.parse; print(urllib.parse.quote('$SCRIPT'))" 2>/dev/null || echo "$SCRIPT" | sed 's/ /%20/g')"
-  curl -sf "$RAW/$TAG/ports/$ENCODED" -o "$SCRIPT_DIR/$SCRIPT" && echo "updated: $SCRIPT" || echo "warning: could not update $SCRIPT"
+  ENCODED="$(echo "$SCRIPT" | sed 's/ /%20/g')"
+  curl -sf "$RAW/$TAG/ports/$ENCODED" -o "$SCRIPT_DIR/$SCRIPT" 2>>"$LOG" \
+    && log "updated: $SCRIPT" || log "warning: could not update $SCRIPT"
   chmod +x "$SCRIPT_DIR/$SCRIPT" 2>/dev/null
 done
 
 notify "Downloading $ASSET..."
 TMP="$(mktemp -d)"
-curl -L "$URL" -o "$TMP/$ASSET" || error "Download failed"
+curl -L "$URL" -o "$TMP/$ASSET" 2>>"$LOG" || error "Download failed"
 
 notify "Extracting..."
 rm -rf "$DEST"
 mkdir -p "$DEST"
-unzip -q "$TMP/$ASSET" -d "$DEST" || error "Extract failed"
+unzip -q "$TMP/$ASSET" -d "$DEST" 2>>"$LOG" || error "Extract failed"
 chmod +x "$DEST"/raypoketrack* 2>/dev/null
 
 rm -rf "$TMP"
-dialog --msgbox "RayPokeTrack updated to $TAG." 5 50 2>/dev/null || echo "Done: $TAG"
+dialog --msgbox "RayPokeTrack updated to $TAG." 5 50
