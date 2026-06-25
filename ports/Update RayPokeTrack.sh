@@ -6,9 +6,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEST="$SCRIPT_DIR/raypoketrack"
 REPO="konsumer/raypoketrack"
 API="https://api.github.com/repos/$REPO/releases/latest"
+LOG="$SCRIPT_DIR/update.log"
 
-notify() { dialog --infobox "$1" 5 50; }
-error()  { dialog --msgbox "Error: $1" 7 50; exit 1; }
+exec > >(tee -a "$LOG") 2>&1
+echo "=== Update started $(date) ==="
+echo "OS=$(uname -s) ARCH=$(uname -m) DISPLAY=$DISPLAY WAYLAND_DISPLAY=$WAYLAND_DISPLAY"
+
+notify() { echo "[INFO] $1"; dialog --infobox "$1" 5 50 2>/dev/null || true; }
+error()  { echo "[ERROR] $1"; dialog --msgbox "Error: $1" 7 50 2>/dev/null || true; exit 1; }
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
@@ -18,7 +23,7 @@ case "$OS" in
     case "$ARCH" in
       aarch64|arm64)
         if [ -z "$DISPLAY" ] && [ -z "$WAYLAND_DISPLAY" ]; then
-          ASSET="raypoketrack-linux-arm64-drm.zip"
+          ASSET="raypoketrack-linux-arm64-sdl.zip"
         else
           ASSET="raypoketrack-linux-arm64.zip"
         fi
