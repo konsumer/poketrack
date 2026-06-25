@@ -13,6 +13,12 @@ log()    { echo "$1" | tee -a "$LOG"; }
 notify() { log "[INFO] $1"; dialog --infobox "$1" 5 50; }
 error()  { log "[ERROR] $1"; dialog --msgbox "Error: $1" 7 50; exit 1; }
 
+# Redirect to framebuffer console if no terminal
+if [ ! -t 1 ] && [ -w /dev/tty1 ]; then
+  export TERM=linux
+  exec > /dev/tty1 2>&1
+fi
+
 log "=== Update started $(date) ==="
 
 OS="$(uname -s)"
