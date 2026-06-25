@@ -32,4 +32,11 @@ echo "user: $(id)"
 echo "dri devices:"
 ls -la /dev/dri/ 2>&1
 
+if [ -z "$DISPLAY" ] && [ -z "$WAYLAND_DISPLAY" ]; then
+  export SDL_VIDEODRIVER=kmsdrm
+  export SDL_VIDEO_EGL_DRIVER=libEGL.so
+fi
+echo "SDL_VIDEODRIVER=$SDL_VIDEODRIVER SDL_VIDEO_EGL_DRIVER=$SDL_VIDEO_EGL_DRIVER"
+echo "ES still running: $(pgrep -c emulationstation 2>/dev/null || echo 0)"
+export SDL_LOGGING=all
 exec "${BIN}" --fullscreen
