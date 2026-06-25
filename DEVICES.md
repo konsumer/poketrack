@@ -8,9 +8,15 @@ The basic idea is you need a Linux-based device. It will work on windows/mac, bu
 
 This is a x86-64 device, running SteamOS (Arch-based linux.) Setup is fairly straightforward. Check out [my video](https://youtu.be/d_ZJUXr0rRQ) for setup instructions.
 
-### cheap handhelds
+### cheap handhelds (R36Max, R36S, etc.)
 
-These are things that look like a gameboy. I got [this](https://www.amazon.com/gp/product/B0G3PB3R5K) for $43, on sale. They generally come with some random linux setup, but I like [dArkOS](https://github.com/christianhaitian/dArkOS). For that particular device, [follow these directions](https://www.youtube.com/watch?v=xszUofpKNRc). After that, follow EmulationStation directions, below.
+These are gameboy-style ARM handhelds. I use the [R36Max](https://www.amazon.com/gp/product/B0G3PB3R5K) (~$43) with [dArkOS](https://github.com/christianhaitian/dArkOS).
+
+Notes for dArkOS / Rockchip BSP kernel (4.4.x):
+- Use the `raypoketrack-linux-arm64-sdl` build — the DRM build does not work due to EGL incompatibility with the 4.4 kernel
+- The `Update RayPokeTrack` port script selects the SDL build automatically on these devices
+- WiFi: built-in WiFi may not work; a **Realtek RTL8188EU** USB adapter (via OTG) works reliably
+- SSH: default credentials are `ark` / (your password)
 
 ### EmulationStation
 
