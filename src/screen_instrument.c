@@ -14,7 +14,6 @@ static int g_file_slot = -1;
 typedef enum { INST_FB_NONE, INST_FB_SAVE, INST_FB_LOAD } InstFBMode;
 static InstFBMode g_inst_fb_mode = INST_FB_NONE;
 
-static KBModal g_inst_kb;
 
 #define PANEL_W (WIN_W / 2)
 #define INST_CONTENT_Y (STATUS_H + 2)
@@ -43,24 +42,6 @@ void screen_instrument_update(UIState *ui) {
   midi_web_request_access();  // idempotent — fires once, gives promise time to resolve before picker opens
 #endif
 
-  // Instrument name keyboard modal
-  if (g_inst_kb.active) {
-    kb_modal_update(&g_inst_kb);
-    return;
-  }
-  if (!file_browser_active() && input_pressed(BTN_Y)) {
-    // Strip .rpti extension if present, use default "INST##" if name empty
-    TrackerInstrument *inst0 = &ui->song->instruments[ui->ctx_instrument];
-    if (!inst0->name[0])
-      snprintf(inst0->name, sizeof(inst0->name), "INST%02X", ui->ctx_instrument);
-    else {
-      size_t nl = strlen(inst0->name);
-      if (nl > 5 && strcasecmp(inst0->name + nl - 5, ".rpti") == 0)
-        inst0->name[nl - 5] = '\0';
-    }
-    kb_modal_open(&g_inst_kb, inst0->name, sizeof(inst0->name));
-    return;
-  }
 
   bool edit = input_held(BTN_A);
   bool in_params = (ui->inst_row >= INST_PARAM_BASE);
@@ -786,5 +767,4 @@ draw_overlays:
     }
   }
 
-  kb_modal_draw(&g_inst_kb, "NAME:");
 }

@@ -16,6 +16,7 @@ Notes for dArkOS / Rockchip BSP kernel (4.4.x):
 - Use the `raypoketrack-linux-arm64-sdl` build — the DRM build does not work due to EGL incompatibility with the 4.4 kernel
 - The `Update RayPokeTrack` port script selects the SDL build automatically on these devices
 - WiFi: built-in WiFi may not work; a **Realtek RTL8188EU** USB adapter (via OTG) works reliably
+- Button mapping: if face buttons are swapped, edit `SDL_GAMECONTROLLERCONFIG` in `RayPokeTrack.sh` — swap `a`/`b` and `x`/`y` values to match your device's physical layout
 - SSH: default credentials are `ark` / (your password)
 
 ### EmulationStation
