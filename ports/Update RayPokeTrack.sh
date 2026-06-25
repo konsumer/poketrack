@@ -1,7 +1,5 @@
 #!/bin/bash
 
-# Download & extract latest RayPokeTrack release for current platform
-
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEST="$SCRIPT_DIR/raypoketrack"
 REPO="konsumer/raypoketrack"
@@ -9,15 +7,15 @@ API="https://api.github.com/repos/$REPO/releases/latest"
 RAW="https://raw.githubusercontent.com/$REPO/refs/tags"
 LOG="$SCRIPT_DIR/update.log"
 
-log()    { echo "$1" | tee -a "$LOG"; }
-notify() { log "[INFO] $1"; dialog --infobox "$1" 5 50; }
-error()  { log "[ERROR] $1"; dialog --msgbox "Error: $1" 7 50; exit 1; }
-
-# Redirect to framebuffer console if no terminal
+# Use framebuffer console if no terminal (ES launches without TTY)
 if [ ! -t 1 ] && [ -w /dev/tty1 ]; then
   export TERM=linux
   exec > /dev/tty1 2>&1
 fi
+
+log()    { echo "$1"; echo "$1" >> "$LOG"; }
+notify() { log "[INFO] $1"; dialog --infobox "$1" 5 50; }
+error()  { log "[ERROR] $1"; dialog --msgbox "Error: $1" 7 50; exit 1; }
 
 log "=== Update started $(date) ==="
 
@@ -40,6 +38,7 @@ case "$OS" in
   Darwin) ASSET="raypoketrack-macos.zip" ;;
   *) error "Unsupported platform: $OS" ;;
 esac
+log "Platform: $OS/$ARCH -> $ASSET"
 
 notify "Fetching latest release..."
 RELEASE="$(curl -sf "$API" 2>>"$LOG")"
@@ -47,7 +46,7 @@ RELEASE="$(curl -sf "$API" 2>>"$LOG")"
 
 TAG="$(echo "$RELEASE" | grep -o '"tag_name": *"[^"]*"' | grep -o '"[^"]*"$' | tr -d '"')"
 [ -z "$TAG" ] && error "Could not determine latest tag"
-log "Latest tag: $TAG"
+log "Latest: $TAG"
 
 URL="$(echo "$RELEASE" | grep -o "\"browser_download_url\": *\"[^\"]*$ASSET\"" | grep -o 'https://[^"]*')"
 [ -z "$URL" ] && error "Could not find asset: $ASSET"
@@ -56,7 +55,7 @@ notify "Updating port scripts..."
 for SCRIPT in "RayPokeTrack.sh" "Update RayPokeTrack.sh" "Enable SSH.sh"; do
   ENCODED="$(echo "$SCRIPT" | sed 's/ /%20/g')"
   curl -sf "$RAW/$TAG/ports/$ENCODED" -o "$SCRIPT_DIR/$SCRIPT" 2>>"$LOG" \
-    && log "updated: $SCRIPT" || log "warning: could not update $SCRIPT"
+    && log "  updated: $SCRIPT" || log "  warning: could not update $SCRIPT"
   chmod +x "$SCRIPT_DIR/$SCRIPT" 2>/dev/null
 done
 
@@ -69,6 +68,6 @@ rm -rf "$DEST"
 mkdir -p "$DEST"
 unzip -q "$TMP/$ASSET" -d "$DEST" 2>>"$LOG" || error "Extract failed"
 chmod +x "$DEST"/raypoketrack* 2>/dev/null
-
 rm -rf "$TMP"
+
 dialog --msgbox "RayPokeTrack updated to $TAG." 5 50
