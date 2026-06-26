@@ -2,8 +2,8 @@
 // data field = path to .sfz file
 // P0 VOL:  00=silent  FF=full
 // P1 PAN:  00=L  7F=center  FF=R
-// P2 TRAN: 00=-24st  7F=0  FF=+24st (transpose semitones)
-// P3 TUNE: 00=-100c  7F=0  FF=+100c (cents fine tune)
+// P2 TRAN: 00=-24st  80=0  FF=+24st (translate incoming note → selects region/key)
+// P3 TUNE: 00=-100c  80=0  FF=+100c (cents fine tune, resamples pitch)
 #include <ctype.h>
 #include <math.h>
 #include <raylib.h>
@@ -35,7 +35,8 @@ typedef struct {
 
 typedef struct {
   int region_idx;  // -1 = inactive
-  uint8_t note;
+  uint8_t note;       // original note (for note_off matching)
+  uint8_t play_note;  // TRAN-translated note (for region select + pitch)
   float phase;
   float rate;
   float env;      // current envelope gain [0..1]
@@ -375,9 +376,20 @@ static void sfz_set_data(UnitState *s, const char *data, const char *base_dir) {
 }
 
 static void sfz_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t *p) {
-  (void)p;
   if (s->num_regions == 0)
     return;
+
+  // P2 TRAN: integer semitone translation of the incoming note. This shifts which
+  // region/key is selected (e.g. retarget a drum pattern onto a kit mapped an
+  // octave lower), rather than resampling the pitch like TUNE does. The original
+  // note is kept for note_off matching (note_off isn't passed params).
+  int trans = (int)lroundf(p2f(p[2], -24.0f, 24.0f));
+  int tnote = (int)note + trans;
+  if (tnote < 0)
+    tnote = 0;
+  if (tnote > 127)
+    tnote = 127;
+  uint8_t pnote = (uint8_t)tnote;
 
   // Tracker uses 0-255 velocity; SFZ lovel/hivel are 0-127
   int vel127 = (int)vel * 127 / 255;
@@ -387,7 +399,7 @@ static void sfz_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t *
     SfzRegion *r = &s->regions[ri];
     if (!r->samples)
       continue;
-    if (note < r->lokey || note > r->hikey)
+    if (pnote < r->lokey || pnote > r->hikey)
       continue;
     if (vel127 < r->lovel || vel127 > r->hivel)
       continue;
@@ -404,12 +416,13 @@ static void sfz_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t *
       vi = 0;  // steal voice 0
 
     float tune_semi = r->tune;
-    float pitch_ratio = powf(2.0f, (note - r->pitch_keycenter + tune_semi) / 12.0f);
+    float pitch_ratio = powf(2.0f, (pnote - r->pitch_keycenter + tune_semi) / 12.0f);
     float vol_scale = powf(10.0f, r->volume_db / 20.0f) * (vel127 / 127.0f);
 
     SfzVoice *v = &s->voices[vi];
     v->region_idx = ri;
     v->note = note;
+    v->play_note = pnote;
     v->phase = 0.0f;
     v->rate = pitch_ratio * ((float)r->wav_sr / s->engine_sr);
     v->env = 0.0f;
@@ -451,7 +464,7 @@ static void sfz_render(UnitState *s, const uint8_t *p,
 
   float vol = p2f(p[0], 0.0f, 1.0f);
   float pan = p2f(p[1], -1.0f, 1.0f);
-  float trans = p2f(p[2], -24.0f, 24.0f);
+  // P2 TRAN is applied at note-on (translates note → region select), not here.
   float tune = p2f(p[3], -100.0f, 100.0f) / 100.0f;  // semitones
 
   float pan_l = (pan <= 0.0f) ? 1.0f : 1.0f - pan;
@@ -471,8 +484,8 @@ static void sfz_render(UnitState *s, const uint8_t *p,
     float rpan_r = (r->pan >= 0.0f) ? 1.0f : 1.0f + r->pan;
     float rvol = powf(10.0f, r->volume_db / 20.0f);
 
-    // Recompute rate with global transpose/tune
-    float pitch_ratio = powf(2.0f, (v->note - r->pitch_keycenter + r->tune + trans + tune) / 12.0f);
+    // Recompute rate with global fine tune (TRAN already baked into v->play_note)
+    float pitch_ratio = powf(2.0f, (v->play_note - r->pitch_keycenter + r->tune + tune) / 12.0f);
     float rate = pitch_ratio * ((float)r->wav_sr / s->engine_sr);
 
     float attack_rate = 1.0f / (r->ampeg_attack * s->engine_sr);
