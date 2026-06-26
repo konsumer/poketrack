@@ -17,7 +17,7 @@ Notes for dArkOS / Rockchip BSP kernel (4.4.x):
 - The `Update RayPokeTrack` port script selects the SDL build automatically on these devices
 - WiFi: built-in WiFi may not work; a **Realtek RTL8188EU** USB adapter (via OTG) works reliably
 - Button mapping: if face buttons are swapped, edit `SDL_GAMECONTROLLERCONFIG` in `RayPokeTrack.sh` — swap `a`/`b` and `x`/`y` values to match your device's physical layout
-- SSH: default credentials are `ark` / (your password)
+- SSH: default credentials are `ark` / `ark`. You can use [this script](https://gist.github.com/konsumer/880f6dfedb058763207053211fca858e) to enable SSH (put it on rom SD, in ports/ or tools/)
 
 ### EmulationStation
 
