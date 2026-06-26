@@ -13,9 +13,22 @@ if [ ! -t 1 ] && [ -w /dev/tty1 ]; then
   exec > /dev/tty1 2>&1
 fi
 
+CURR_TTY=$(tty 2>/dev/null)
+if [ -z "$CURR_TTY" ] || [ "$CURR_TTY" = "not a tty" ]; then
+  CURR_TTY=/dev/tty1
+fi
+
+if [ -x /opt/inttools/gptokeyb ]; then
+  /opt/inttools/gptokeyb -1 "Update RayPokeTrack.sh" -c "/opt/inttools/keys.gptk" >/dev/null 2>&1 &
+  GPTOKEYB_PID=$!
+fi
+
+cleanup() { [ -n "$GPTOKEYB_PID" ] && kill "$GPTOKEYB_PID" 2>/dev/null; }
+trap cleanup EXIT
+
 log()    { echo "$1"; echo "$1" >> "$LOG"; }
-notify() { log "[INFO] $1"; dialog --infobox "$1" 5 50; }
-error()  { log "[ERROR] $1"; dialog --msgbox "Error: $1" 7 50; exit 1; }
+notify() { log "[INFO] $1"; dialog --infobox "$1" 5 50 2>&1 > "$CURR_TTY"; }
+error()  { log "[ERROR] $1"; dialog --msgbox "Error: $1" 7 50 2>&1 > "$CURR_TTY"; exit 1; }
 
 log "=== Update started $(date) ==="
 
@@ -70,4 +83,4 @@ unzip -q "$TMP/$ASSET" -d "$DEST" 2>>"$LOG" || error "Extract failed"
 chmod +x "$DEST"/raypoketrack* 2>/dev/null
 rm -rf "$TMP"
 
-dialog --msgbox "RayPokeTrack updated to $TAG." 5 50
+dialog --msgbox "RayPokeTrack updated to $TAG." 5 50 2>&1 > "$CURR_TTY"
