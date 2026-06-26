@@ -38,8 +38,8 @@ typedef struct {
   uint8_t note;       // original note (for note_off matching)
   uint8_t play_note;  // TRAN-translated note (for region select + pitch)
   float phase;
-  float rate;
-  float env;      // current envelope gain [0..1]
+  float vel_gain;  // velocity → amplitude [0..1]
+  float env;       // current envelope gain [0..1]
   bool releasing;
   float release_rate;
 } SfzVoice;
@@ -49,7 +49,6 @@ struct UnitState {
   int num_regions;
   SfzVoice voices[SFZ_MAX_VOICES];
   float engine_sr;
-  char base_dir[SFZ_PATH_LEN];
 };
 
 // --- audio loading (same pattern as sampler.c) ---
@@ -415,28 +414,17 @@ static void sfz_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t *
     if (vi < 0)
       vi = 0;  // steal voice 0
 
-    float tune_semi = r->tune;
-    float pitch_ratio = powf(2.0f, (pnote - r->pitch_keycenter + tune_semi) / 12.0f);
-    float vol_scale = powf(10.0f, r->volume_db / 20.0f) * (vel127 / 127.0f);
-
     SfzVoice *v = &s->voices[vi];
     v->region_idx = ri;
     v->note = note;
     v->play_note = pnote;
     v->phase = 0.0f;
-    v->rate = pitch_ratio * ((float)r->wav_sr / s->engine_sr);
+    v->vel_gain = vel127 / 127.0f;  // velocity → amplitude
     v->env = 0.0f;
     v->releasing = false;
-    // ponytail: store release_rate in voice, computed from region at note_on
-    // attack handled per-sample in render; just store region's attack rate
+    // Pitch/rate is recomputed in render to track the live TUNE param; only the
+    // release rate (fixed at note-on by the region's envelope) is cached here.
     v->release_rate = 1.0f / (r->ampeg_release * s->engine_sr);
-    // reuse release_rate slot as attack_rate too — pack in env with sign trick:
-    // env < 0 means attacking (use abs as progress). Simpler: just use a stage flag.
-    // Actually let's just store attack_rate in env sign trick:
-    // env starts at 0 and climbs; releasing flips flag.
-    (void)vol_scale;
-    // Store vel*vol for amplitude in region (we compute from region each render)
-    // ponytail: we don't cache vol_scale — recompute from region in render is fine
   }
 }
 
@@ -524,7 +512,7 @@ static void sfz_render(UnitState *s, const uint8_t *p,
       float frac = phase - (float)i0;
       float smp = r->samples[i0] * (1.0f - frac) + r->samples[i1] * frac;
 
-      float out = smp * env * rvol * vol;
+      float out = smp * env * rvol * vol * v->vel_gain;
       out_l[f] += out * pan_l * rpan_l;
       out_r[f] += out * pan_r * rpan_r;
 

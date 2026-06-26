@@ -17,8 +17,6 @@
 struct UnitState {
   tsf *sf;
   float sample_rate;
-  int active_preset;
-  int active_bank;
   char path[512];          // resolved absolute path to .sf2 file
   uint8_t note_xlat[128];  // orig note → TRAN-translated note, so note_off matches
 };
@@ -26,8 +24,6 @@ struct UnitState {
 static UnitState *sf2_create(float sr) {
   UnitState *s = calloc(1, sizeof(*s));
   s->sample_rate = sr;
-  s->active_preset = -1;
-  s->active_bank = 0;
   return s;
 }
 
@@ -49,7 +45,7 @@ static void sf2_set_data(UnitState *s, const char *data, const char *base_dir) {
     tsf_set_output(s->sf, TSF_STEREO_INTERLEAVED, (int)s->sample_rate, 0.0f);
 }
 
-static void sf2_ensure_loaded(UnitState *s, int preset, int bank) {
+static void sf2_ensure_loaded(UnitState *s) {
   if (!s->sf) {
     // Try default path if set_data was never called
     if (!s->path[0])
@@ -58,18 +54,18 @@ static void sf2_ensure_loaded(UnitState *s, int preset, int bank) {
     if (s->sf)
       tsf_set_output(s->sf, TSF_STEREO_INTERLEAVED, (int)s->sample_rate, 0.0f);
   }
-  if (s->sf && (preset != s->active_preset || bank != s->active_bank)) {
-    s->active_preset = preset;
-    s->active_bank = bank;
-  }
 }
 
 static void sf2_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t *p) {
   int preset = p[0] & 0x7F;
   int bank = p[1];
-  sf2_ensure_loaded(s, preset, bank);
+  sf2_ensure_loaded(s);
   if (!s->sf)
     return;
+  // P1 BANK: select the (bank, preset) pair directly. If the font has no such
+  // pair, fall back to GM-style lookup (drum rules when bank >= 128).
+  if (!tsf_channel_set_bank_preset(s->sf, 0, bank, preset))
+    tsf_channel_set_presetnumber(s->sf, 0, preset, bank >= 128);
   // P4 TRANS: integer semitone translation of the incoming note (selects a
   // different key/sample, like a drum kit mapped an octave lower). Remember the
   // translated key so note_off (not passed params) can match it in TSF.
@@ -80,7 +76,6 @@ static void sf2_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t *
   if (tnote > 127)
     tnote = 127;
   s->note_xlat[note] = (uint8_t)tnote;
-  tsf_channel_set_presetnumber(s->sf, 0, preset, bank == 128);
   tsf_channel_note_on(s->sf, 0, (uint8_t)tnote, vel / 255.0f);
 }
 
