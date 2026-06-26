@@ -13,16 +13,25 @@ if [ ! -t 1 ] && [ -w /dev/tty1 ]; then
   exec > /dev/tty1 2>&1
 fi
 
-echo "=== Launch started $(date) =>" >> "$LOG"
-
-if [ "$(id -u)" != "0" ]; then
-  exec sudo "$0" "$@"
+CURR_TTY=$(tty 2>/dev/null)
+if [ -z "$CURR_TTY" ] || [ "$CURR_TTY" = "not a tty" ]; then
+  CURR_TTY=/dev/tty1
 fi
+
+if [ -x /opt/inttools/gptokeyb ]; then
+  /opt/inttools/gptokeyb -1 "RayPokeTrack.sh" -c "/opt/inttools/keys.gptk" >/dev/null 2>&1 &
+  GPTOKEYB_PID=$!
+fi
+
+cleanup() { [ -n "$GPTOKEYB_PID" ] && kill "$GPTOKEYB_PID" 2>/dev/null; }
+trap cleanup EXIT
+
+echo "=== Launch started $(date) =>" >> "$LOG"
 
 if [ ! -x "${BIN}" ]; then
   MSG="RayPokeTrack not found. Run 'Update RayPokeTrack' first."
   echo "ERROR: $MSG" >> "$LOG"
-  dialog --msgbox "$MSG" 7 50
+  dialog --msgbox "$MSG" 7 50 2>&1 > "$CURR_TTY"
   exit 1
 fi
 
