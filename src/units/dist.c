@@ -1,8 +1,9 @@
 // Distortion effect unit
 // P0 DRIVE: 00=clean  FF=hard clip
 // P1 TONE:  00=dark   FF=bright (post-dist low-pass cutoff)
-// P2 MIX:   00=dry    FF=wet
-// P3-P7: unused
+// P2 PRE:   input gain into the waveshaper (00=silent  40=1x  FF=4x)
+// P3 POST:  output/makeup gain (00=silent  80=1x  FF=2x)
+// P4-P7: unused
 #include <math.h>
 #include <stdlib.h>
 
@@ -53,18 +54,19 @@ static void dist_render(UnitState *s, const uint8_t *p,
                         float *out_l, float *out_r, uint32_t frames) {
   float drive = p2f(p[0], 0.0f, 1.0f);
   float tone = p2f(p[1], 0.02f, 1.0f);  // LP cutoff normalized
-  float mix = p2f(p[2], 0.0f, 1.0f);
+  float pre = p2f(p[2], 0.0f, 4.0f);    // input gain into shaper
+  float post = p2f(p[3], 0.0f, 2.0f);   // output/makeup gain
 
   // Low-pass coefficient
   float lp_c = 1.0f - expf(-6.28318f * tone * 8000.0f / s->sample_rate);
 
   for (uint32_t f = 0; f < frames; f++) {
-    float dl = waveshape(in_l[f], drive);
-    float dr = waveshape(in_r[f], drive);
+    float dl = waveshape(in_l[f] * pre, drive);
+    float dr = waveshape(in_r[f] * pre, drive);
     s->lp_l += lp_c * (dl - s->lp_l);
     s->lp_r += lp_c * (dr - s->lp_r);
-    out_l[f] = in_l[f] * (1.0f - mix) + s->lp_l * mix;
-    out_r[f] = in_r[f] * (1.0f - mix) + s->lp_r * mix;
+    out_l[f] = s->lp_l * post;
+    out_r[f] = s->lp_r * post;
   }
 }
 
@@ -72,9 +74,9 @@ const UnitDef unit_dist = {
     .id = "dist",
     .name = "DIST",
     .is_source = false,
-    .num_params = 3,
-    .param_names = {"DRIV", "TONE", "MIX"},
-    .param_defaults = {80, 180, 128},
+    .num_params = 4,
+    .param_names = {"DRIV", "TONE", "PRE", "POST"},
+    .param_defaults = {80, 180, 64, 128},
     .create = dist_create,
     .destroy = dist_destroy,
     .note_on = dist_note_on,
