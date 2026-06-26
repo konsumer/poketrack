@@ -19,7 +19,7 @@ if [ -z "$CURR_TTY" ] || [ "$CURR_TTY" = "not a tty" ]; then
 fi
 
 if [ -x /opt/inttools/gptokeyb ]; then
-  /opt/inttools/gptokeyb -1 "Update RayPokeTrack.sh" -c "/opt/inttools/keys.gptk" >/dev/null 2>&1 &
+  /opt/inttools/gptokeyb -1 "update_raypoketrack" -c "/opt/inttools/keys.gptk" >/dev/null 2>&1 &
   GPTOKEYB_PID=$!
 fi
 
