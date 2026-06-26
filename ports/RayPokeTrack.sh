@@ -1,6 +1,8 @@
 #!/bin/bash
 
-WORK_DIR="${HOME}/raypoketrack"
+# this dir is where file-browser starts
+WORK_DIR="${ROM_DIR:-$HOME}/raypoketrack"
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN="${SCRIPT_DIR}/raypoketrack/raypoketrack"
 LOG="$SCRIPT_DIR/launch.log"

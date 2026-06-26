@@ -52,7 +52,7 @@ URL="$(echo "$RELEASE" | grep -o "\"browser_download_url\": *\"[^\"]*$ASSET\"" |
 [ -z "$URL" ] && error "Could not find asset: $ASSET"
 
 notify "Updating port scripts..."
-for SCRIPT in "RayPokeTrack.sh" "Update RayPokeTrack.sh" "Enable SSH.sh"; do
+for SCRIPT in "RayPokeTrack.sh" "Update RayPokeTrack.sh"; do
   ENCODED="$(echo "$SCRIPT" | sed 's/ /%20/g')"
   curl -sf "$RAW/$TAG/ports/$ENCODED" -o "$SCRIPT_DIR/$SCRIPT" 2>>"$LOG" \
     && log "  updated: $SCRIPT" || log "  warning: could not update $SCRIPT"
