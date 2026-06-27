@@ -1,8 +1,9 @@
 #!/bin/bash
 
-# this dir is where file-browser starts. it can get large, so users often keep
-# it on the SD card with their ROMs. prefer an existing raypoketrack dir on the
-# ROM tree (roms2 first, then roms), falling through to HOME if none exist.
+# this dir is where file-browser starts. it can get large, so reuse an existing
+# raypoketrack dir on the ROM tree if there is one (roms2 first, then roms).
+# on first run none exist, so default to HOME rather than risk creating it in an
+# unused ROM mount-point. users can move it onto the SD card and it'll be found.
 for WORK_DIR in /roms2/raypoketrack /roms/raypoketrack "$HOME/raypoketrack"; do
   [ -d "$WORK_DIR" ] && break
 done
