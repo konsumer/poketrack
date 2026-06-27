@@ -1,7 +1,11 @@
 #!/bin/bash
 
-# this dir is where file-browser starts
-WORK_DIR="${ROM_DIR:-$HOME}/raypoketrack"
+# this dir is where file-browser starts. it can get large, so users often keep
+# it on the SD card with their ROMs. prefer an existing raypoketrack dir on the
+# ROM tree (roms2 first, then roms), falling through to HOME if none exist.
+for WORK_DIR in /roms2/raypoketrack /roms/raypoketrack "$HOME/raypoketrack"; do
+  [ -d "$WORK_DIR" ] && break
+done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN="${SCRIPT_DIR}/raypoketrack/raypoketrack"

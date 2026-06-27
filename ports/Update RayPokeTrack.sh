@@ -11,16 +11,6 @@ main() {
 
   CURR_TTY="/dev/tty1"
   export TERM=linux
-  export SDL_GAMECONTROLLERCONFIG_FILE="/opt/inttools/gamecontrollerdb.txt"
-
-  pkill -f "gptokeyb -1 update_raypoketrack" || true
-  sleep 0.1
-  /opt/inttools/gptokeyb -1 "update_raypoketrack" -c "/opt/inttools/keys.gptk" >/dev/null 2>&1 &
-  GPTOKEYB_PID=$!
-  sleep 0.2
-
-  cleanup() { [ -n "$GPTOKEYB_PID" ] && kill "$GPTOKEYB_PID" 2>/dev/null; }
-  trap cleanup EXIT
 
   log()    { echo "$1"; echo "$1" >> "$LOG"; }
   notify() { log "[INFO] $1"; dialog --infobox "$1" 5 50 2>&1 > "$CURR_TTY"; }
