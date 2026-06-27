@@ -1,7 +1,8 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 main() {
-  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
   DEST="$SCRIPT_DIR/raypoketrack"
   REPO="konsumer/raypoketrack"
   API="https://api.github.com/repos/$REPO/releases/latest"
@@ -23,7 +24,7 @@ main() {
 
   log()    { echo "$1"; echo "$1" >> "$LOG"; }
   notify() { log "[INFO] $1"; dialog --infobox "$1" 5 50 2>&1 > "$CURR_TTY"; }
-  error()  { log "[ERROR] $1"; dialog --msgbox "Error: $1" 7 50 2>&1 > "$CURR_TTY"; exit 1; }
+  error()  { log "[ERROR] $1"; notify "Error: $1"; sleep 3; exit 1; }
 
   log "=== Update started $(date) ==="
 
@@ -78,7 +79,8 @@ main() {
   chmod +x "$DEST"/raypoketrack* 2>/dev/null
   rm -rf "$TMP"
 
-  dialog --msgbox "RayPokeTrack updated to $TAG." 5 50 2>&1 > "$CURR_TTY"
+  notify "RayPokeTrack updated to $TAG."
+  sleep 3
 }
 
 main "$@"
