@@ -14,6 +14,57 @@
 #include "tsf.h"
 #include "unit.h"
 
+// Shared font cache: multiple units pointing at the same file share one master tsf
+// loaded via tsf_load_filename; each unit gets a tsf_copy() with independent voice state.
+#define SF2_CACHE_MAX 16
+
+typedef struct {
+  char path[512];
+  tsf *master;
+  int refs;
+} Sf2Cache;
+
+static Sf2Cache sf2_cache[SF2_CACHE_MAX];
+
+// Returns a tsf_copy() of the shared master (caller owns the copy).
+// Returns NULL on load failure.
+static tsf *sf2_cache_acquire(const char *path) {
+  for (int i = 0; i < SF2_CACHE_MAX; i++) {
+    if (sf2_cache[i].master && strcmp(sf2_cache[i].path, path) == 0) {
+      sf2_cache[i].refs++;
+      return tsf_copy(sf2_cache[i].master);
+    }
+  }
+  tsf *master = tsf_load_filename(path);
+  if (!master)
+    return NULL;
+  for (int i = 0; i < SF2_CACHE_MAX; i++) {
+    if (!sf2_cache[i].master) {
+      strncpy(sf2_cache[i].path, path, sizeof(sf2_cache[i].path) - 1);
+      sf2_cache[i].master = master;
+      sf2_cache[i].refs = 1;
+      return tsf_copy(master);
+    }
+  }
+  // Cache full: load without sharing
+  tsf *copy = tsf_copy(master);
+  tsf_close(master);
+  return copy;
+}
+
+static void sf2_cache_release(const char *path) {
+  for (int i = 0; i < SF2_CACHE_MAX; i++) {
+    if (sf2_cache[i].master && strcmp(sf2_cache[i].path, path) == 0) {
+      if (--sf2_cache[i].refs == 0) {
+        tsf_close(sf2_cache[i].master);
+        sf2_cache[i].master = NULL;
+        sf2_cache[i].path[0] = '\0';
+      }
+      return;
+    }
+  }
+}
+
 struct UnitState {
   tsf *sf;
   float sample_rate;
@@ -27,30 +78,40 @@ static UnitState *sf2_create(float sr) {
   return s;
 }
 
-static void sf2_destroy(UnitState *s) {
-  if (s->sf)
+static void sf2_release(UnitState *s) {
+  if (s->sf) {
     tsf_close(s->sf);
+    s->sf = NULL;
+  }
+  if (s->path[0]) {
+    sf2_cache_release(s->path);
+    s->path[0] = '\0';
+  }
+}
+
+static void sf2_destroy(UnitState *s) {
+  sf2_release(s);
   free(s);
 }
 
 static void sf2_set_data(UnitState *s, const char *data, const char *base_dir) {
   const char *rel = (data && data[0]) ? data : "soundfont.sf2";
-  unit_resolve_path(base_dir, rel, s->path, sizeof(s->path));
-  if (s->sf) {
-    tsf_close(s->sf);
-    s->sf = NULL;
-  }
-  s->sf = tsf_load_filename(s->path);
+  char path[512];
+  unit_resolve_path(base_dir, rel, path, sizeof(path));
+  if (s->sf && strcmp(s->path, path) == 0)
+    return;
+  sf2_release(s);
+  strncpy(s->path, path, sizeof(s->path) - 1);
+  s->sf = sf2_cache_acquire(path);
   if (s->sf)
     tsf_set_output(s->sf, TSF_STEREO_INTERLEAVED, (int)s->sample_rate, 0.0f);
 }
 
 static void sf2_ensure_loaded(UnitState *s) {
   if (!s->sf) {
-    // Try default path if set_data was never called
     if (!s->path[0])
-      strncpy(s->path, "soundfont.sf2", sizeof(s->path));
-    s->sf = tsf_load_filename(s->path);
+      strncpy(s->path, "soundfont.sf2", sizeof(s->path) - 1);
+    s->sf = sf2_cache_acquire(s->path);
     if (s->sf)
       tsf_set_output(s->sf, TSF_STEREO_INTERLEAVED, (int)s->sample_rate, 0.0f);
   }
