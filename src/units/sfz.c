@@ -44,9 +44,20 @@ typedef struct {
   float release_rate;
 } SfzVoice;
 
-struct UnitState {
+// Shared parsed SFZ data (regions + sample buffers). Multiple UnitState instances
+// pointing at the same file share one SfzShared entry via refcounting.
+typedef struct SfzShared {
+  char path[SFZ_PATH_LEN];
   SfzRegion regions[SFZ_MAX_REGIONS];
   int num_regions;
+  int refs;
+} SfzShared;
+
+#define SFZ_CACHE_MAX 32
+static SfzShared *sfz_cache[SFZ_CACHE_MAX];
+
+struct UnitState {
+  SfzShared *shared;
   SfzVoice voices[SFZ_MAX_VOICES];
   float engine_sr;
 };
@@ -179,7 +190,7 @@ static void apply_opcode(SfzRegion *r, const char *key, const char *val,
   }
 }
 
-static void sfz_parse(UnitState *s, const char *path) {
+static void sfz_parse(SfzShared *sh, const char *path) {
   FILE *f = fopen(path, "r");
   if (!f)
     return;
@@ -198,7 +209,7 @@ static void sfz_parse(UnitState *s, const char *path) {
   else
     sfz_dir[0] = '\0';
 
-  s->num_regions = 0;
+  sh->num_regions = 0;
 
   // group/global opcodes inherit into each new region
   SfzRegion group_defaults;
@@ -237,8 +248,8 @@ static void sfz_parse(UnitState *s, const char *path) {
         trim(hdr);
 
         if (strcmp(hdr, "region") == 0) {
-          if (in_region && cur.samples && s->num_regions < SFZ_MAX_REGIONS) {
-            s->regions[s->num_regions++] = cur;
+          if (in_region && cur.samples && sh->num_regions < SFZ_MAX_REGIONS) {
+            sh->regions[sh->num_regions++] = cur;
           } else if (in_region && cur.samples) {
             // at max; free this one
             free(cur.samples);
@@ -250,8 +261,8 @@ static void sfz_parse(UnitState *s, const char *path) {
           cur.wav_sr = 44100;
           in_region = 1;
         } else if (strcmp(hdr, "group") == 0 || strcmp(hdr, "global") == 0) {
-          if (in_region && cur.samples && s->num_regions < SFZ_MAX_REGIONS) {
-            s->regions[s->num_regions++] = cur;
+          if (in_region && cur.samples && sh->num_regions < SFZ_MAX_REGIONS) {
+            sh->regions[sh->num_regions++] = cur;
           } else if (in_region && cur.samples) {
             free(cur.samples);
           }
@@ -311,6 +322,7 @@ static void sfz_parse(UnitState *s, const char *path) {
           }
         }
       }
+      (void)ve;
       if (next_key) {
         int len = (int)(next_key - vs);
         if (len >= (int)sizeof(val))
@@ -335,13 +347,54 @@ static void sfz_parse(UnitState *s, const char *path) {
   }
 
   // Flush last region
-  if (in_region && cur.samples && s->num_regions < SFZ_MAX_REGIONS) {
-    s->regions[s->num_regions++] = cur;
+  if (in_region && cur.samples && sh->num_regions < SFZ_MAX_REGIONS) {
+    sh->regions[sh->num_regions++] = cur;
   } else if (in_region && cur.samples) {
     free(cur.samples);
   }
 
   fclose(f);
+}
+
+// --- shared cache ---
+
+static SfzShared *sfz_shared_acquire(const char *path) {
+  for (int i = 0; i < SFZ_CACHE_MAX; i++) {
+    if (sfz_cache[i] && strcmp(sfz_cache[i]->path, path) == 0) {
+      sfz_cache[i]->refs++;
+      return sfz_cache[i];
+    }
+  }
+  SfzShared *sh = calloc(1, sizeof(SfzShared));
+  if (!sh)
+    return NULL;
+  strncpy(sh->path, path, sizeof(sh->path) - 1);
+  sh->refs = 1;
+  sfz_parse(sh, path);
+  for (int i = 0; i < SFZ_CACHE_MAX; i++) {
+    if (!sfz_cache[i]) {
+      sfz_cache[i] = sh;
+      return sh;
+    }
+  }
+  // Cache full: return detached (won't be shared but still works)
+  return sh;
+}
+
+static void sfz_shared_release(SfzShared *sh) {
+  if (!sh)
+    return;
+  if (--sh->refs > 0)
+    return;
+  for (int i = 0; i < SFZ_MAX_REGIONS; i++)
+    free(sh->regions[i].samples);
+  for (int i = 0; i < SFZ_CACHE_MAX; i++) {
+    if (sfz_cache[i] == sh) {
+      sfz_cache[i] = NULL;
+      break;
+    }
+  }
+  free(sh);
 }
 
 // --- unit lifecycle ---
@@ -355,27 +408,24 @@ static UnitState *sfz_create(float sr) {
 }
 
 static void sfz_destroy(UnitState *s) {
-  for (int i = 0; i < s->num_regions; i++)
-    free(s->regions[i].samples);
+  sfz_shared_release(s->shared);
   free(s);
 }
 
 static void sfz_set_data(UnitState *s, const char *data, const char *base_dir) {
-  // Free old regions
-  for (int i = 0; i < s->num_regions; i++)
-    free(s->regions[i].samples);
-  s->num_regions = 0;
-  for (int i = 0; i < SFZ_MAX_VOICES; i++)
-    s->voices[i].region_idx = -1;
-
   const char *rel = (data && data[0]) ? data : "instrument.sfz";
   char path[SFZ_PATH_LEN];
   unit_resolve_path(base_dir, rel, path, sizeof(path));
-  sfz_parse(s, path);
+  if (s->shared && strcmp(s->shared->path, path) == 0)
+    return;
+  sfz_shared_release(s->shared);
+  s->shared = sfz_shared_acquire(path);
+  for (int i = 0; i < SFZ_MAX_VOICES; i++)
+    s->voices[i].region_idx = -1;
 }
 
 static void sfz_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t *p) {
-  if (s->num_regions == 0)
+  if (!s->shared || s->shared->num_regions == 0)
     return;
 
   // P2 TRAN: integer semitone translation of the incoming note. This shifts which
@@ -394,8 +444,8 @@ static void sfz_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t *
   int vel127 = (int)vel * 127 / 255;
 
   // Find matching region(s) — play all that match (SFZ can have multiple)
-  for (int ri = 0; ri < s->num_regions; ri++) {
-    SfzRegion *r = &s->regions[ri];
+  for (int ri = 0; ri < s->shared->num_regions; ri++) {
+    SfzRegion *r = &s->shared->regions[ri];
     if (!r->samples)
       continue;
     if (pnote < r->lokey || pnote > r->hikey)
@@ -447,7 +497,7 @@ static void sfz_render(UnitState *s, const uint8_t *p,
                        float *out_l, float *out_r, uint32_t frames) {
   (void)in_l;
   (void)in_r;
-  if (s->num_regions == 0)
+  if (!s->shared || s->shared->num_regions == 0)
     return;
 
   float vol = p2f(p[0], 0.0f, 1.0f);
@@ -462,7 +512,7 @@ static void sfz_render(UnitState *s, const uint8_t *p,
     SfzVoice *v = &s->voices[vi];
     if (v->region_idx < 0)
       continue;
-    SfzRegion *r = &s->regions[v->region_idx];
+    SfzRegion *r = &s->shared->regions[v->region_idx];
     if (!r->samples || r->num_samples == 0) {
       v->region_idx = -1;
       continue;
