@@ -19,7 +19,9 @@ static int g_pat_fb_mode = 0;  // 0=none 1=save 2=load
 #define TRACK_W (SW_NOTE + SW_VEL + SW_INST + SW_FXT + SW_FXV + SW_FXT + SW_FXV)  // 140
 #define PT_NCOLS 7                                                                // sub-columns per track
 
-#define PT_CONTENT_Y (STATUS_H + CH_H + 2)
+// Two sticky header rows: track numbers, then the column legend.
+#define PT_HEADER_ROWS 2
+#define PT_CONTENT_Y (STATUS_H + PT_HEADER_ROWS * CH_H + 2)
 
 // x offset of sub-column c within a track
 static int sub_x(int c) {
@@ -481,9 +483,11 @@ void screen_pattern_draw(UIState* ui) {
   bool in_footer = (ui->pattern_row == (int)pat->len);
   int vt = visible_tracks();
 
-  // Header: per-track number (0-F), colored; current track highlighted.
+  // Sticky header: row 1 = track number (0-F, colored), row 2 = column legend.
+  static const char* SUBLBL[PT_NCOLS] = {"NOT", "V", "I", "P1", "V1", "P2", "V2"};
   int hy = STATUS_H + 1;
-  DrawRectangle(0, hy, WIN_W, CH_H, C_BG_ALT);
+  int hy2 = hy + CH_H;
+  DrawRectangle(0, hy, WIN_W, CH_H * 2, C_BG_ALT);
   DrawText("PT", 2, hy + (CH_H - FONT_S) / 2, FONT_S, C_HEADER);
   for (int i = 0; i < vt; i++) {
     int tr = ui->pattern_track_scroll + i;
@@ -491,14 +495,17 @@ void screen_pattern_draw(UIState* ui) {
       break;
     int tx = track_x(ui, tr);
     bool cur = (tr == ui->pattern_track);
-    DrawText(TextFormat("TRK%X", tr), tx + 2, hy + (CH_H - FONT_S) / 2, FONT_S,
+    DrawText(TextFormat("%X", tr), tx + 2, hy + (CH_H - FONT_S) / 2, FONT_S,
              cur ? C_TITLE : CH_COLORS[tr]);
+    for (int c = 0; c < PT_NCOLS; c++)
+      DrawText(SUBLBL[c], tx + sub_x(c) + 2, hy2 + (CH_H - FONT_S) / 2, FONT_S,
+               cur ? C_HEADER : C_DIM);
   }
   if (ui->pattern_track_scroll > 0)
     DrawText("<", PX_ROW_W - 8, hy + (CH_H - FONT_S) / 2, FONT_S, C_DIM);
   if (ui->pattern_track_scroll + vt < PATTERN_TRACKS)
     DrawText(">", WIN_W - 8, hy + (CH_H - FONT_S) / 2, FONT_S, C_DIM);
-  DrawLine(0, hy + CH_H, WIN_W, hy + CH_H, C_SEP);
+  DrawLine(0, hy2 + CH_H, WIN_W, hy2 + CH_H, C_SEP);
 
   // Which step is currently playing (shared across all tracks of the pattern)
   int playing_step = -1;
@@ -536,18 +543,20 @@ void screen_pattern_draw(UIState* ui) {
     int y = PT_CONTENT_Y + vi * CH_H;
 
     if (i == (int)pat->len) {
-      // Footer: "[len_hex]  [+]  [-]  [SAVE]  [LOAD]" — drawn at fixed left positions
+      // Footer: "[len_hex]  [+][-][SAVE][LOAD]" — packed into the first track's
+      // width so no track separator line cuts through the controls.
       DrawRectangle(0, y, WIN_W, CH_H, C_BG_ALT);
       DrawText(TextFormat("%02X", pat->len), 2, y + (CH_H - FONT_S) / 2, FONT_S,
                in_footer ? C_TEXT : C_HEADER);
-      int fx0 = PX_ROW_W, fw = 40;
       const char* labels[4] = {"+", "-", "SAVE", "LOAD"};
+      const int fw[4] = {16, 16, 52, 52};  // 18+136 = 154 < first line at PX_ROW_W+TRACK_W
+      int x = PX_ROW_W;
       for (int c = 0; c < 4; c++) {
-        int x = fx0 + c * fw;
         bool sel = in_footer && ui->pattern_col == c;
         if (sel)
-          DrawRectangle(x, y, fw - 2, CH_H, C_CURSOR);
+          DrawRectangle(x, y, fw[c] - 2, CH_H, C_CURSOR);
         DrawText(labels[c], x + 2, y + (CH_H - FONT_S) / 2, FONT_S, sel ? C_TITLE : C_DIM);
+        x += fw[c];
       }
       continue;
     }
@@ -569,6 +578,17 @@ void screen_pattern_draw(UIState* ui) {
       int cur_col = (is_cur && !in_footer && tr == ui->pattern_track) ? ui->pattern_col : -1;
       draw_track_cells(tx, y, s, cur_col);
     }
+  }
+
+  // Vertical separators between tracks (and the gutter), spanning header + grid.
+  int grid_bottom = PT_CONTENT_Y + pt_visible * CH_H;
+  if (grid_bottom > WIN_H - STATUS_H)
+    grid_bottom = WIN_H - STATUS_H;
+  for (int k = 0; k <= vt; k++) {
+    int x = PX_ROW_W + k * TRACK_W;
+    if (x >= WIN_W - 3)
+      break;
+    DrawLine(x, hy, x, grid_bottom, C_SEP);
   }
 
   if (total_rows > pt_visible) {
