@@ -3,3 +3,4 @@ build/
 build-web/
 .claude
 ports/raypoketrack
+__pycache__
