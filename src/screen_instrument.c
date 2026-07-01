@@ -11,9 +11,10 @@
 // Slot awaiting a file-browser result (-1 = none pending)
 static int g_file_slot = -1;
 
-typedef enum { INST_FB_NONE, INST_FB_SAVE, INST_FB_LOAD } InstFBMode;
+typedef enum { INST_FB_NONE,
+               INST_FB_SAVE,
+               INST_FB_LOAD } InstFBMode;
 static InstFBMode g_inst_fb_mode = INST_FB_NONE;
-
 
 #define PANEL_W (WIN_W / 2)
 #define INST_CONTENT_Y (STATUS_H + 2)
@@ -29,23 +30,22 @@ static InstFBMode g_inst_fb_mode = INST_FB_NONE;
 #define INST_LOAD_ROW (CHAIN_MAX + 3)
 #define INST_PARAM_BASE (CHAIN_MAX + 4)
 
-static const UnitDef *slot_def(TrackerInstrument *inst, int s) {
+static const UnitDef* slot_def(TrackerInstrument* inst, int s) {
   if (!inst->chain[s].unit_id[0])
     return NULL;
   return unit_find(inst->chain[s].unit_id);
 }
 
-void screen_instrument_update(UIState *ui) {
-  TrackerInstrument *inst = &ui->song->instruments[ui->ctx_instrument];
+void screen_instrument_update(UIState* ui) {
+  TrackerInstrument* inst = &ui->song->instruments[ui->ctx_instrument];
 
 #ifdef __EMSCRIPTEN__
   midi_web_request_access();  // idempotent — fires once, gives promise time to resolve before picker opens
 #endif
 
-
   bool edit = input_held(BTN_A);
   bool in_params = (ui->inst_row >= INST_PARAM_BASE);
-  bool in_io   = (!in_params && ui->inst_row >= INST_SAVE_ROW);
+  bool in_io = (!in_params && ui->inst_row >= INST_SAVE_ROW);
   bool in_midi = (!in_params && !in_io && ui->inst_row >= INST_MIDI_DEV_ROW);
 
   // L/R shoulder: cycle instrument (not while editing or in param/midi rows)
@@ -73,7 +73,7 @@ void screen_instrument_update(UIState *ui) {
       if (ui->midi_in_picker_row == 0) {
         inst->midi_in_device[0] = '\0';
       } else {
-        const char *name = midi_in_port_name(ui->midi_in_picker_row - 1);
+        const char* name = midi_in_port_name(ui->midi_in_picker_row - 1);
         strncpy(inst->midi_in_device, name ? name : "", sizeof(inst->midi_in_device) - 1);
         inst->midi_in_device[sizeof(inst->midi_in_device) - 1] = '\0';
       }
@@ -103,10 +103,10 @@ void screen_instrument_update(UIState *ui) {
         memset(&inst->chain[slot], 0, sizeof(ChainSlot));
       }
     } else {
-      const UnitDef *defs[32];
+      const UnitDef* defs[32];
       int nf = 0;
       unit_list(defs, &nf);
-      ChainSlot *sl = &inst->chain[slot];
+      ChainSlot* sl = &inst->chain[slot];
 
       if (ui_repeat(BTN_UP) || ui_repeat(BTN_DOWN)) {
         int cur_idx = -1;
@@ -167,11 +167,11 @@ void screen_instrument_update(UIState *ui) {
     // ---- Save/Load rows ----
   } else if (in_io) {
     // Poll file browser
-    const char *fb = file_browser_poll();
+    const char* fb = file_browser_poll();
     if (fb) {
       if (g_inst_fb_mode == INST_FB_SAVE) {
         char fname[64];
-        const char *nm = inst->name[0] ? inst->name : "inst";
+        const char* nm = inst->name[0] ? inst->name : "inst";
         snprintf(fname, sizeof(fname), "%s.rpti", nm);
         tracker_save_instrument(inst, fb, ui->engine->save_dir);
         file_browser_download(fb, fname);
@@ -185,7 +185,8 @@ void screen_instrument_update(UIState *ui) {
       g_inst_fb_mode = INST_FB_NONE;
       return;
     }
-    if (file_browser_active()) return;
+    if (file_browser_active())
+      return;
 
     if (!edit) {
       if (ui_repeat(BTN_UP))
@@ -210,16 +211,16 @@ void screen_instrument_update(UIState *ui) {
     // ---- Param rows (INST_PARAM_BASE+) ----
   } else {
     int slot = ui->ctx_instrument_slot;
-    const UnitDef *def = slot_def(inst, slot);
+    const UnitDef* def = slot_def(inst, slot);
     if (!def) {
       ui->inst_row = slot;
       return;
     }
 
     audio_ensure_preview(ui->engine, (uint8_t)ui->ctx_instrument);
-    UnitState *state = ui->engine->preview_states[slot];
-    if (ui->engine->chan_states[0][slot])
-      state = ui->engine->chan_states[0][slot];
+    UnitState* state = ui->engine->preview_states[slot];
+    if (ui->engine->chan_states[0][0][slot])
+      state = ui->engine->chan_states[0][0][slot];
     int nparams = (def->dyn_num_params && state) ? def->dyn_num_params(state) : def->num_params;
     bool has_picker = def->picker_count && def->picker_add && state;
     bool has_add_row = has_picker && nparams < UNIT_MAX_PARAMS;
@@ -229,7 +230,7 @@ void screen_instrument_update(UIState *ui) {
     int param = ui->inst_row - INST_PARAM_BASE;
     bool on_add = has_add_row && (ui->inst_row == add_row);
     bool on_data = has_data && (ui->inst_row == data_row);
-    ChainSlot *sl = &inst->chain[slot];
+    ChainSlot* sl = &inst->chain[slot];
 
     // Device picker mode: select MIDI/audio device
     if (ui->dev_picker_active) {
@@ -273,11 +274,11 @@ void screen_instrument_update(UIState *ui) {
     }
 
     // Poll for file-browser result
-    const char *chosen = file_browser_poll();
+    const char* chosen = file_browser_poll();
     if (chosen && g_file_slot == slot) {
       g_file_slot = -1;
-      const char *rel = chosen;
-      const char *sd = ui->engine->save_dir;
+      const char* rel = chosen;
+      const char* sd = ui->engine->save_dir;
       size_t sdlen = strlen(sd);
       if (sdlen > 0 && strncmp(chosen, sd, sdlen) == 0)
         rel = chosen + sdlen;
@@ -388,7 +389,7 @@ void screen_instrument_update(UIState *ui) {
         bool use_dyn = def->get_param_val && def->set_param_val && state;
         uint8_t cur_v = use_dyn ? def->get_param_val(state, param)
                                 : (param < UNIT_MAX_PARAMS ? sl->params[param] : 0);
-        const char *fmt_cur = (def->format_param_val && state) ? def->format_param_val(state, param, cur_v) : NULL;
+        const char* fmt_cur = (def->format_param_val && state) ? def->format_param_val(state, param, cur_v) : NULL;
         bool is_bool_param = fmt_cur && (strcmp(fmt_cur, "ON") == 0 || strcmp(fmt_cur, "OFF") == 0);
         bool is_enum = !use_dyn && param < UNIT_MAX_PARAMS && def->param_enum_count[param] > 0 && def->param_enums[param];
         bool changed = false;
@@ -448,10 +449,10 @@ void screen_instrument_update(UIState *ui) {
     ui->ctx_instrument_slot = ui->inst_row;
 }
 
-void screen_instrument_draw(UIState *ui) {
-  TrackerInstrument *inst = &ui->song->instruments[ui->ctx_instrument];
+void screen_instrument_draw(UIState* ui) {
+  TrackerInstrument* inst = &ui->song->instruments[ui->ctx_instrument];
   bool in_params = (ui->inst_row >= INST_PARAM_BASE);
-  bool in_io   = (!in_params && ui->inst_row >= INST_SAVE_ROW);
+  bool in_io = (!in_params && ui->inst_row >= INST_SAVE_ROW);
   bool in_midi = (!in_params && !in_io && ui->inst_row >= INST_MIDI_DEV_ROW);
   int cur_slot = (in_params || in_midi || in_io) ? ui->ctx_instrument_slot : ui->inst_row;
 
@@ -464,8 +465,8 @@ void screen_instrument_draw(UIState *ui) {
     DrawRectangle(0, y, PANEL_W - 1, CH_H, bg);
     DrawText(TextFormat("%d", s), 2, y + (CH_H - FONT_S) / 2, FONT_S, C_HEADER);
 
-    ChainSlot *sl = &inst->chain[s];
-    const UnitDef *def = slot_def(inst, s);
+    ChainSlot* sl = &inst->chain[s];
+    const UnitDef* def = slot_def(inst, s);
     if (def) {
       Color nc = sl->enabled ? (def->is_source ? C_NOTE : C_FX) : C_DIM;
       DrawText(def->name, 16, y + (CH_H - FONT_S) / 2, FONT_S, nc);
@@ -481,13 +482,13 @@ void screen_instrument_draw(UIState *ui) {
     bool cur = (ui->inst_row == INST_MIDI_DEV_ROW);
     DrawRectangle(0, y, PANEL_W - 1, CH_H, cur ? C_CURSOR : C_BG_ALT);
     DrawText("DEVICE", 2, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_TITLE : C_HEADER);
-    const char *dname = inst->midi_in_device[0] ? inst->midi_in_device : "none";
+    const char* dname = inst->midi_in_device[0] ? inst->midi_in_device : "none";
     int px = 46;
     int pw = PANEL_W - px - 4;
     int cw = MeasureText("W", FONT_S);
     int max_chars = pw / (cw > 0 ? cw : 6);
     int dlen = (int)strlen(dname);
-    const char *display = (dlen > max_chars) ? dname + (dlen - max_chars) : dname;
+    const char* display = (dlen > max_chars) ? dname + (dlen - max_chars) : dname;
     DrawText(display, px, y + (CH_H - FONT_S) / 2, FONT_S, inst->midi_in_device[0] ? (cur ? C_NOTE : C_VEL) : C_DIM);
   }
 
@@ -497,7 +498,7 @@ void screen_instrument_draw(UIState *ui) {
     bool cur = (ui->inst_row == INST_MIDI_CH_ROW);
     DrawRectangle(0, y, PANEL_W - 1, CH_H, cur ? C_CURSOR : C_BG);
     DrawText("CHN", 2, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_TITLE : C_HEADER);
-    const char *ch_str = inst->midi_in_channel == 0
+    const char* ch_str = inst->midi_in_channel == 0
                              ? "ALL"
                              : TextFormat("%d", inst->midi_in_channel);
     DrawText(ch_str, 28, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_VEL);
@@ -511,7 +512,8 @@ void screen_instrument_draw(UIState *ui) {
     bool cur = (ui->inst_row == INST_SAVE_ROW);
     DrawRectangle(0, y, PANEL_W - 1, CH_H, cur ? C_CURSOR : C_BG_ALT);
     DrawText("SAVE", 2, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_TITLE : C_HEADER);
-    if (cur) DrawText("[A]", PANEL_W - 24, y + (CH_H - FONT_S) / 2, FONT_S - 1, C_DIM);
+    if (cur)
+      DrawText("[A]", PANEL_W - 24, y + (CH_H - FONT_S) / 2, FONT_S - 1, C_DIM);
   }
 
   // LOAD row
@@ -520,13 +522,14 @@ void screen_instrument_draw(UIState *ui) {
     bool cur = (ui->inst_row == INST_LOAD_ROW);
     DrawRectangle(0, y, PANEL_W - 1, CH_H, cur ? C_CURSOR : C_BG);
     DrawText("LOAD", 2, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_TITLE : C_HEADER);
-    if (cur) DrawText("[A]", PANEL_W - 24, y + (CH_H - FONT_S) / 2, FONT_S - 1, C_DIM);
+    if (cur)
+      DrawText("[A]", PANEL_W - 24, y + (CH_H - FONT_S) / 2, FONT_S - 1, C_DIM);
   }
 
   DrawLine(PANEL_W, INST_CONTENT_Y, PANEL_W, WIN_H - STATUS_H, C_SEP);
 
   // Right panel
-  const UnitDef *def = slot_def(inst, cur_slot);
+  const UnitDef* def = slot_def(inst, cur_slot);
   if (!def) {
     DrawText("empty slot", PANEL_W + 4, INST_CONTENT_Y + (CH_H - FONT_S) / 2, FONT_S, C_DIM);
     DrawText("holdA+UP/DN=set unit", PANEL_W + 4, INST_CONTENT_Y + CH_H + (CH_H - FONT_S) / 2, FONT_S - 1, C_DIM);
@@ -534,7 +537,7 @@ void screen_instrument_draw(UIState *ui) {
   }
 
   {
-    const char *rlabel = (def->role_label == NULL) ? (def->is_source ? "SOURCE" : "EFFECT") : def->role_label;
+    const char* rlabel = (def->role_label == NULL) ? (def->is_source ? "SOURCE" : "EFFECT") : def->role_label;
     if (rlabel && rlabel[0])
       DrawText(TextFormat("%s  %s", def->name, rlabel),
                PANEL_W + 4, INST_CONTENT_Y + (CH_H - FONT_S) / 2, FONT_S, def->is_source ? C_NOTE : C_FX);
@@ -544,12 +547,12 @@ void screen_instrument_draw(UIState *ui) {
   }
 
   {
-    ChainSlot *sl = &inst->chain[cur_slot];
+    ChainSlot* sl = &inst->chain[cur_slot];
     int bar_x = PANEL_W + 94;
     int bar_w = WIN_W - bar_x - 26;  // shrunk to fit CC field at right
-    UnitState *cur_state = ui->engine->preview_states[cur_slot];
-    if (ui->engine->chan_states[0][cur_slot])
-      cur_state = ui->engine->chan_states[0][cur_slot];
+    UnitState* cur_state = ui->engine->preview_states[cur_slot];
+    if (ui->engine->chan_states[0][0][cur_slot])
+      cur_state = ui->engine->chan_states[0][0][cur_slot];
     int nparams = (def->dyn_num_params && cur_state) ? def->dyn_num_params(cur_state) : def->num_params;
     bool has_picker_draw = def->picker_count && def->picker_add && cur_state;
     bool has_dev_picker_draw = def->dev_picker_count && def->dev_picker_set && cur_state;
@@ -557,10 +560,10 @@ void screen_instrument_draw(UIState *ui) {
 
     int param_offset = 0;
     for (int s = 0; s < cur_slot; s++) {
-      const UnitDef *sd = slot_def(inst, s);
+      const UnitDef* sd = slot_def(inst, s);
       if (!sd)
         continue;
-      UnitState *ss = ui->engine->preview_states[s];
+      UnitState* ss = ui->engine->preview_states[s];
       param_offset += (sd->dyn_num_params && ss) ? sd->dyn_num_params(ss) : sd->num_params;
     }
 
@@ -579,7 +582,7 @@ void screen_instrument_draw(UIState *ui) {
       bool cur = in_params && (param_row == ui->inst_row);
       DrawRectangle(PANEL_W, y, WIN_W - PANEL_W, CH_H, cur ? C_CURSOR : (pi % 2 == 0 ? C_BG_ALT : C_BG));
 
-      const char *pname = (def->dyn_param_name && cur_state) ? def->dyn_param_name(cur_state, pi) : (pi < UNIT_MAX_PARAMS ? def->param_names[pi] : NULL);
+      const char* pname = (def->dyn_param_name && cur_state) ? def->dyn_param_name(cur_state, pi) : (pi < UNIT_MAX_PARAMS ? def->param_names[pi] : NULL);
       char name_buf[16];
       snprintf(name_buf, sizeof(name_buf), "%02X %.8s", param_offset + pi, pname ? pname : "");
       DrawText(name_buf, PANEL_W + 4, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_TITLE : C_TEXT);
@@ -589,7 +592,7 @@ void screen_instrument_draw(UIState *ui) {
                                : (pi < UNIT_MAX_PARAMS ? sl->params[pi] : 0);
       bool is_enum = !use_dyn_val && pi < UNIT_MAX_PARAMS && def->param_enum_count[pi] > 0 && def->param_enums[pi];
 
-      const char *fmt = (def->format_param_val && cur_state) ? def->format_param_val(cur_state, pi, pv) : NULL;
+      const char* fmt = (def->format_param_val && cur_state) ? def->format_param_val(cur_state, pi, pv) : NULL;
       bool is_bool_disp = fmt && (strcmp(fmt, "ON") == 0 || strcmp(fmt, "OFF") == 0);
 
       if (is_enum) {
@@ -612,7 +615,7 @@ void screen_instrument_draw(UIState *ui) {
       // CC map field (right edge)
       {
         uint8_t cc = (pi < UNIT_MAX_PARAMS) ? sl->cc_map[pi] : 0xFF;
-        const char *cc_str = (cc <= 127) ? TextFormat("%02X", cc) : "--";
+        const char* cc_str = (cc <= 127) ? TextFormat("%02X", cc) : "--";
         bool cc_focused = cur && ui->inst_param_cc_col;
         Color cc_col = cc_focused ? C_NOTE : (cc <= 127 ? C_VEL : C_DIM);
         DrawText(cc_str, WIN_W - 20, y + (CH_H - FONT_S) / 2, FONT_S, cc_col);
@@ -643,18 +646,18 @@ void screen_instrument_draw(UIState *ui) {
         bool editing = cur && ui->inst_data_editing;
         Color bg = editing ? C_CURSOR2 : (cur ? C_CURSOR : (nparams % 2 == 0 ? C_BG_ALT : C_BG));
         DrawRectangle(PANEL_W, y, WIN_W - PANEL_W, CH_H, bg);
-        const char *dlabel = def->data_label ? def->data_label : "FILE";
+        const char* dlabel = def->data_label ? def->data_label : "FILE";
         DrawText(dlabel, PANEL_W + 4, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_TITLE : C_TEXT);
 
         bool using_hint = !sl->data[0];
         static char path_buf[512];
-        const char *path;
+        const char* path;
         if (using_hint) {
           path = def->data_hint;
         } else {
           strncpy(path_buf, sl->data, sizeof(path_buf) - 1);
           path_buf[sizeof(path_buf) - 1] = '\0';
-          char *tab = strchr(path_buf, '\t');
+          char* tab = strchr(path_buf, '\t');
           if (tab)
             *tab = '\0';
           path = path_buf;
@@ -664,7 +667,7 @@ void screen_instrument_draw(UIState *ui) {
         int cw = MeasureText("W", FONT_S);
         int max_chars = pw / (cw > 0 ? cw : 6);
         int plen = (int)strlen(path);
-        const char *display = (plen > max_chars) ? path + (plen - max_chars) : path;
+        const char* display = (plen > max_chars) ? path + (plen - max_chars) : path;
         Color tc = editing ? C_STATUS : (using_hint ? C_HEADER : (cur ? C_NOTE : C_VEL));
         DrawText(display, px, y + (CH_H - FONT_S) / 2, FONT_S, tc);
 
@@ -681,7 +684,7 @@ void screen_instrument_draw(UIState *ui) {
       int overlay_x = PANEL_W, overlay_y = INST_CONTENT_Y;
       int overlay_w = WIN_W - PANEL_W, overlay_h = WIN_H - STATUS_H - overlay_y;
       DrawRectangle(overlay_x, overlay_y, overlay_w, overlay_h, C_BG);
-      const char *ptitle = (def->picker_title && def->picker_title[0]) ? def->picker_title : "ADD PARAM";
+      const char* ptitle = (def->picker_title && def->picker_title[0]) ? def->picker_title : "ADD PARAM";
       DrawText(TextFormat("%s  [A]=select  [B]=cancel", ptitle),
                overlay_x + 4, overlay_y + (CH_H - FONT_S) / 2, FONT_S - 1, C_HEADER);
       DrawLine(overlay_x, overlay_y + CH_H, WIN_W, overlay_y + CH_H, C_SEP);
@@ -697,7 +700,7 @@ void screen_instrument_draw(UIState *ui) {
         bool cur = (pi == ui->clap_picker_row);
         DrawRectangle(overlay_x, py, overlay_w, CH_H,
                       cur ? C_CURSOR : (i % 2 == 0 ? C_BG_ALT : C_BG));
-        const char *pname = def->picker_name(cur_state, pi);
+        const char* pname = def->picker_name(cur_state, pi);
         char label[32];
         snprintf(label, sizeof(label), "%d %.20s", pi, pname ? pname : "");
         DrawText(label, overlay_x + 4, py + (CH_H - FONT_S) / 2, FONT_S,
@@ -710,7 +713,7 @@ void screen_instrument_draw(UIState *ui) {
       int overlay_x = PANEL_W, overlay_y = INST_CONTENT_Y;
       int overlay_w = WIN_W - PANEL_W, overlay_h = WIN_H - STATUS_H - overlay_y;
       DrawRectangle(overlay_x, overlay_y, overlay_w, overlay_h, C_BG);
-      const char *dtitle = (def->dev_picker_title && def->dev_picker_title[0])
+      const char* dtitle = (def->dev_picker_title && def->dev_picker_title[0])
                                ? def->dev_picker_title
                                : "SELECT DEVICE";
       DrawText(TextFormat("%s  [A]=select  [B]=cancel", dtitle),
@@ -728,7 +731,7 @@ void screen_instrument_draw(UIState *ui) {
         bool cur = (pi == ui->dev_picker_row);
         DrawRectangle(overlay_x, py, overlay_w, CH_H,
                       cur ? C_CURSOR : (i % 2 == 0 ? C_BG_ALT : C_BG));
-        const char *dname = def->dev_picker_name(cur_state, pi);
+        const char* dname = def->dev_picker_name(cur_state, pi);
         DrawText(dname ? dname : "(unnamed)",
                  overlay_x + 4, py + (CH_H - FONT_S) / 2, FONT_S,
                  cur ? C_TITLE : C_TEXT);
@@ -761,10 +764,9 @@ draw_overlays:
       bool cur = (pi == ui->midi_in_picker_row);
       DrawRectangle(overlay_x, py, overlay_w, CH_H,
                     cur ? C_CURSOR : (i % 2 == 0 ? C_BG_ALT : C_BG));
-      const char *label = (pi == 0) ? "NONE" : midi_in_port_name(pi - 1);
+      const char* label = (pi == 0) ? "NONE" : midi_in_port_name(pi - 1);
       DrawText(label, overlay_x + 4, py + (CH_H - FONT_S) / 2, FONT_S,
                cur ? C_TITLE : (pi == 0 ? C_DIM : C_TEXT));
     }
   }
-
 }

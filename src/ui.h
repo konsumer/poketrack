@@ -7,7 +7,8 @@
 #define WIN_W 480
 #define WIN_H 320
 
-#define SONG_VIEW_COLS 8  // visible channels at once in song screen
+// visible arrangement lanes at once in the song screen (all of them, capped at 8)
+#define SONG_VIEW_COLS (SONG_CHANNELS < 8 ? SONG_CHANNELS : 8)
 
 #define FONT_S 10
 #define CH_H 14
@@ -32,7 +33,7 @@
 #define C_TITLE (Color){0xFF, 0xFF, 0xFF, 0xFF}
 #define C_EDIT_TAG (Color){0xFF, 0xC0, 0x00, 0xFF}
 
-extern const Color CH_COLORS[SONG_CHANNELS];
+extern const Color CH_COLORS[PATTERN_TRACKS];
 
 typedef enum {
   SCREEN_SONG = 0,
@@ -42,18 +43,20 @@ typedef enum {
 } AppScreen;
 
 typedef struct {
-  TrackerSong *song;
-  AudioEngine *engine;
+  TrackerSong* song;
+  AudioEngine* engine;
   AppScreen screen;
 
   // Cursor state per screen
-  int song_row, song_col;        // SONG: row 0-254, col 0-7 (channel)
-  int pattern_row, pattern_col;  // PATTERN: step 0-15, col 0-6
+  int song_row, song_col;        // SONG: row 0-254, col 0..SONG_CHANNELS-1 (lane)
+  int pattern_row, pattern_col;  // PATTERN: step 0-N, col 0-6 (sub-column within track)
+  int pattern_track;             // PATTERN: current track 0..PATTERN_TRACKS-1
   int inst_row;                  // INSTRUMENT: param 0-N
   int menu_row;                  // MENU: item 0-N
 
-  int song_scroll;      // first visible row
-  int song_col_scroll;  // first visible channel (0 to SONG_CHANNELS-SONG_VIEW_COLS)
+  int song_scroll;           // first visible row
+  int song_col_scroll;       // first visible channel (0 to SONG_CHANNELS-SONG_VIEW_COLS)
+  int pattern_track_scroll;  // first visible track in pattern screen
 
   // Editing context (shared across screens)
   int ctx_channel;          // which channel
@@ -81,34 +84,34 @@ typedef struct {
   uint8_t last_pattern;  // last pattern index entered in song screen
 } UIState;
 
-void ui_init(UIState *ui, TrackerSong *song, AudioEngine *engine);
-void ui_update(UIState *ui);
-void ui_draw(UIState *ui);
+void ui_init(UIState* ui, TrackerSong* song, AudioEngine* engine);
+void ui_update(UIState* ui);
+void ui_draw(UIState* ui);
 
 bool ui_repeat(TrackerButton btn);
 
 // Shared on-screen keyboard modal (SHIFT SPACE DEL OK, no suggest)
-#define KBM_KEY_W     44
-#define KBM_KEY_H     18
-#define KBM_GAP       2
+#define KBM_KEY_W 44
+#define KBM_KEY_H 18
+#define KBM_GAP 2
 #define KBM_CHAR_ROWS 4
 #define KBM_SPECIAL_ROW 4
-#define KBM_TOTAL_ROWS  5
+#define KBM_TOTAL_ROWS 5
 // Special cols: 0=SHIFT 1=SPACE 2=DEL 3=OK
 #define KBM_SPECIAL_COLS 4
 
 typedef struct {
-  bool  active;
-  char *buf;      // pointer to target string (edited in place)
-  int   buf_sz;   // sizeof(buf)
-  int   row, col;
-  bool  shift;
+  bool active;
+  char* buf;   // pointer to target string (edited in place)
+  int buf_sz;  // sizeof(buf)
+  int row, col;
+  bool shift;
 } KBModal;
 
-void kb_modal_open(KBModal *kb, char *buf, int buf_sz);
+void kb_modal_open(KBModal* kb, char* buf, int buf_sz);
 // Returns true when modal closes (OK or BTN_B). Caller checks buf for result.
-bool kb_modal_update(KBModal *kb);
-void kb_modal_draw(KBModal *kb, const char *label);
-const char *note_str(uint8_t note);
-const char *fx_cmd_str(uint8_t fx);
-void draw_cell(int x, int y, int w, int h, Color bg, const char *text, int fs, Color fg);
+bool kb_modal_update(KBModal* kb);
+void kb_modal_draw(KBModal* kb, const char* label);
+const char* note_str(uint8_t note);
+const char* fx_cmd_str(uint8_t fx);
+void draw_cell(int x, int y, int w, int h, Color bg, const char* text, int fs, Color fg);
