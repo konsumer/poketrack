@@ -101,7 +101,7 @@ if(EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".mjs")
     target_link_options(${PROJECT_NAME} PRIVATE
         -sUSE_GLFW=3
-        -sINITIAL_MEMORY=67108864
+        -sINITIAL_MEMORY=134217728  # 128MB: multi-track patterns enlarge TrackerSong (~29MB)
         -sALLOW_MEMORY_GROWTH=1
         -sFORCE_FILESYSTEM=1
         -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','FS']

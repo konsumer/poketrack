@@ -7,11 +7,11 @@ Rules:
   * Each MIDI program/instrument becomes a tracker instrument. MIDI channel 10
     (the GM drum channel) becomes a single drum instrument that selects the
     soundfont's percussion bank (bank 128).
-  * The tracker is monophonic per pattern (one note per step), so any polyphony
-    is split across patterns: each drum lane (distinct pitch) gets its own
-    pattern, and melodic chords are split into one pattern per simultaneous
-    voice. Every pattern is laid out side-by-side in the song so they play
-    together.
+  * Each track is monophonic (one note per step), so any polyphony is split
+    across tracks: each drum lane (distinct pitch) gets its own track, and
+    melodic chords are split into one track per simultaneous voice. Up to
+    PATTERN_TRACKS (16) voices are packed into one multi-track pattern; further
+    voices spill into additional patterns placed on additional song lanes.
   * A soundfont is optional. When given, every instrument is wired to an `sf2`
     unit whose data path is stored relative to the output file.
 
@@ -28,7 +28,8 @@ import sys
 NOTE_EMPTY = 0x00
 NOTE_OFF = 0xFE
 FX_EMPTY = 0xFF
-SONG_CHANNELS = 16
+SONG_CHANNELS = 4       # arrangement lanes
+PATTERN_TRACKS = 16     # tracks per pattern
 CHAIN_MAX = 8
 UNIT_ID_LEN = 8
 UNIT_MAX_PARAMS = 8
@@ -182,8 +183,9 @@ def _strn(s, n):
 
 
 def write_rpt(path, name, bpm, patterns, instruments, pattern_len, sf_relpath):
-    """patterns: list of (instrument_index, steps) where steps is a list of
-    (note, velocity) or None. Patterns are placed side by side in song row 0."""
+    """patterns: list of patterns; each pattern is a list of up to PATTERN_TRACKS
+    tracks, where a track is (instrument_index, steps) and steps is a list of
+    (note, velocity) or None. Pattern pi is placed on song lane pi in row 0."""
     chunks = []
 
     # META
@@ -191,7 +193,7 @@ def write_rpt(path, name, bpm, patterns, instruments, pattern_len, sf_relpath):
     meta += struct.pack("<BBBBBBBB", bpm & 0xFF, 0, 0, 0, 1, (bpm >> 8) & 0xFF, 0, 0)
     chunks.append((b"META", meta))
 
-    # SONG (single row, one pattern per channel)
+    # SONG (single row, one pattern per lane)
     song = struct.pack("<H", 1)
     row = bytearray([0xFF] * SONG_CHANNELS)
     for ch in range(min(len(patterns), SONG_CHANNELS)):
@@ -199,20 +201,22 @@ def write_rpt(path, name, bpm, patterns, instruments, pattern_len, sf_relpath):
     song += bytes(row)
     chunks.append((b"SONG", song))
 
-    # PATN
+    # PATN — each pattern has PATTERN_TRACKS tracks (empty ones written as rests)
     patn = bytearray()
     patn += struct.pack("<H", len(patterns))
-    for pi, (iidx, steps) in enumerate(patterns):
-        patn += struct.pack("<BH", pi, pattern_len)
-        for si in range(pattern_len):
-            cell = steps[si] if si < len(steps) else None
-            if cell is None:
-                patn += struct.pack("<BBBBBBB", NOTE_EMPTY, 0, 0,
-                                    FX_EMPTY, FX_EMPTY, 0, 0)
-            else:
-                note, vel = cell
-                patn += struct.pack("<BBBBBBB", note, vel, iidx,
-                                    FX_EMPTY, FX_EMPTY, 0, 0)
+    for pi, tracks in enumerate(patterns):
+        patn += struct.pack("<BHB", pi, pattern_len, PATTERN_TRACKS)
+        for t in range(PATTERN_TRACKS):
+            iidx, steps = tracks[t] if t < len(tracks) else (0, [])
+            for si in range(pattern_len):
+                cell = steps[si] if si < len(steps) else None
+                if cell is None:
+                    patn += struct.pack("<BBBBBBB", NOTE_EMPTY, 0, 0,
+                                        FX_EMPTY, FX_EMPTY, 0, 0)
+                else:
+                    note, vel = cell
+                    patn += struct.pack("<BBBBBBB", note, vel, iidx,
+                                        FX_EMPTY, FX_EMPTY, 0, 0)
     chunks.append((b"PATN", bytes(patn)))
 
     # INST
@@ -242,7 +246,7 @@ def write_rpt(path, name, bpm, patterns, instruments, pattern_len, sf_relpath):
     chunks.append((b"INST", bytes(inst)))
 
     out = bytearray(b"RPT2")
-    out += struct.pack("<HH", 1, len(chunks))
+    out += struct.pack("<HH", 2, len(chunks))  # version 2: multi-track patterns
     for tag, payload in chunks:
         out += tag + struct.pack("<I", len(payload)) + payload
 
@@ -301,21 +305,27 @@ def convert(midi_path, out_path, soundfont=None, steps_per_beat=4, name=None):
     length = ((max_step // bar_steps) + 1) * bar_steps
     length = max(bar_steps, min(length, MAX_PATTERN_STEPS))
 
-    # render each voice into a pattern
-    patterns = []
+    # render each voice into a monophonic track
+    tracks = []
     for iidx, vnotes in voice_specs:
         steps = [None] * length
         for n in sorted(vnotes, key=lambda x: x.start):
             si = round(n.start / ticks_per_step)
             if 0 <= si < length:
                 steps[si] = (n.pitch, max(1, min(127, n.velocity)))
-        patterns.append((iidx, steps))
+        tracks.append((iidx, steps))
 
-    if len(patterns) > SONG_CHANNELS:
+    # pack tracks into multi-track patterns (PATTERN_TRACKS each), across song lanes
+    max_voices = SONG_CHANNELS * PATTERN_TRACKS
+    if len(tracks) > max_voices:
         sys.stderr.write(
-            "warning: %d voices exceed %d song channels; extra voices dropped\n"
-            % (len(patterns), SONG_CHANNELS))
-        patterns = patterns[:SONG_CHANNELS]
+            "warning: %d voices exceed %d (=%d lanes x %d tracks); extra voices dropped\n"
+            % (len(tracks), max_voices, SONG_CHANNELS, PATTERN_TRACKS))
+        tracks = tracks[:max_voices]
+    patterns = [tracks[i:i + PATTERN_TRACKS]
+                for i in range(0, len(tracks), PATTERN_TRACKS)]
+    if not patterns:
+        patterns = [[]]
 
     bpm = max(1, min(65535, round(60_000_000 / tempo)))
 

@@ -4,15 +4,16 @@
 
 #include "units/unit.h"
 
-#define SONG_CHANNELS       16
-#define MAX_SONG_LEN        1024
-#define DEFAULT_SONG_LEN    1
-#define NUM_PATTERNS        255
-#define MAX_PATTERN_STEPS   1024
+#define SONG_CHANNELS 4    // arrangement lanes (each cell = a multi-track pattern)
+#define PATTERN_TRACKS 16  // tracks per pattern (0-F), fixed; all share the pattern length
+#define MAX_SONG_LEN 1024
+#define DEFAULT_SONG_LEN 1
+#define NUM_PATTERNS 255
+#define MAX_PATTERN_STEPS 1024
 #define DEFAULT_PATTERN_STEPS 16
-#define NUM_INSTRUMENTS     256
-#define FX_PER_STEP         2
-#define TRACKER_EMPTY       0xFF
+#define NUM_INSTRUMENTS 256
+#define FX_PER_STEP 2
+#define TRACKER_EMPTY 0xFF
 
 #define NOTE_EMPTY 0x00
 #define NOTE_OFF 0xFE
@@ -41,8 +42,8 @@ typedef struct {
 } PatternStep;
 
 typedef struct {
-  uint16_t len;                       // active step count (1..MAX_PATTERN_STEPS)
-  PatternStep steps[MAX_PATTERN_STEPS];
+  uint16_t len;  // active step count (1..MAX_PATTERN_STEPS), shared by all tracks
+  PatternStep steps[PATTERN_TRACKS][MAX_PATTERN_STEPS];
 } Pattern;
 
 // One slot in an instrument's unit chain
@@ -66,7 +67,7 @@ typedef struct {
 } TrackerInstrument;
 
 typedef struct {
-  uint16_t song_len;                            // active song row count (1..MAX_SONG_LEN)
+  uint16_t song_len;  // active song row count (1..MAX_SONG_LEN)
   uint8_t patterns[SONG_CHANNELS][MAX_SONG_LEN];
   Pattern pattern_data[NUM_PATTERNS];
   TrackerInstrument instruments[NUM_INSTRUMENTS];
@@ -81,7 +82,7 @@ typedef struct {
 #define NUM_SCALES 45
 
 typedef struct {
-  const char *name;
+  const char* name;
   int len;
   uint8_t intervals[12];
 } ScaleDef;
@@ -89,25 +90,25 @@ typedef struct {
 extern const ScaleDef SCALES[NUM_SCALES];
 
 // Root note names: SCALE_ROOT_NAMES[0..11]
-extern const char *const SCALE_ROOT_NAMES[12];
+extern const char* const SCALE_ROOT_NAMES[12];
 
 // Navigate to next/prev note in scale (dir = +1 or -1). Returns clamped note.
 uint8_t scale_next_note(uint8_t note, int dir, uint8_t scale_idx, uint8_t root);
 
-void tracker_init(TrackerSong *song);
-void tracker_clear(TrackerSong *song);
+void tracker_init(TrackerSong* song);
+void tracker_clear(TrackerSong* song);
 
-void tracker_inst_set_slot(TrackerInstrument *inst, int slot, const char *unit_id, int inst_idx);
+void tracker_inst_set_slot(TrackerInstrument* inst, int slot, const char* unit_id, int inst_idx);
 
 // Returns true on success
-bool tracker_save(const TrackerSong *song, const char *path);
-bool tracker_load(TrackerSong *song, const char *path);
+bool tracker_save(const TrackerSong* song, const char* path);
+bool tracker_load(TrackerSong* song, const char* path);
 
 // Save/load a single instrument to/from a .rpti file.
 // save_dir: directory used to relativise data paths (e.g. engine->save_dir).
-bool tracker_save_instrument(const TrackerInstrument *inst, const char *path, const char *save_dir);
-bool tracker_load_instrument(TrackerInstrument *inst, const char *path);
+bool tracker_save_instrument(const TrackerInstrument* inst, const char* path, const char* save_dir);
+bool tracker_load_instrument(TrackerInstrument* inst, const char* path);
 
 // Save/load a single pattern to/from a .rptp file.
-bool tracker_save_pattern(const Pattern *pat, const char *path);
-bool tracker_load_pattern(Pattern *pat, const char *path);
+bool tracker_save_pattern(const Pattern* pat, const char* path);
+bool tracker_load_pattern(Pattern* pat, const char* path);

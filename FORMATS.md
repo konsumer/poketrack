@@ -49,24 +49,28 @@ Pitch names: `C- C# D- D# E- F- F# G- G# A- A# B-`.
 
 ## Pattern — `.rptp` (`RPTP`)
 
-A single pattern: a list of steps, each holding one note + velocity +
-instrument index + two effect columns. Written by `tracker_save_pattern`.
+A single pattern: `PATTERN_TRACKS = 16` parallel tracks, each a list of steps
+holding one note + velocity + instrument index + two effect columns. All tracks
+share one length. Written by `tracker_save_pattern`.
 
 ```
 "RPTP"            4 bytes   magic
-version           u16       currently 1
-len               u16       step count (1..1024)
-steps[len]:
-    note          u8        MIDI note (see Note values)
-    velocity      u8        0..127
-    instrument    u8        index into the song instrument table (0..255)
-    fx[0]         u8        effect id  (0xFF = none)
-    fxv[0]        u8        effect param
-    fx[1]         u8        effect id  (0xFF = none)
-    fxv[1]        u8        effect param
+version           u16       currently 2 (v1 was single-track)
+len               u16       step count (1..1024), shared by all tracks
+ntracks           u8        track count (currently PATTERN_TRACKS = 16)
+tracks[ntracks]:
+    steps[len]:
+        note      u8        MIDI note (see Note values)
+        velocity  u8        0..127
+        instrument u8       index into the song instrument table (0..255)
+        fx[0]     u8        effect id  (0xFF = none)
+        fxv[0]    u8        effect param
+        fx[1]     u8        effect id  (0xFF = none)
+        fxv[1]    u8        effect param
 ```
 
-Each step is 7 bytes. There are always `FX_PER_STEP = 2` effect columns.
+Each step is 7 bytes. There are always `FX_PER_STEP = 2` effect columns. A reader
+that finds `ntracks > PATTERN_TRACKS` consumes but discards the extra tracks.
 
 > Note ordering differs from the in-song `PATN` chunk: the standalone `.rptp`
 > writes `fx[0], fxv[0], fx[1], fxv[1]`, whereas `PATN` writes

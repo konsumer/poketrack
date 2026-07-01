@@ -5,7 +5,8 @@
 
 #include "file_browser.h"
 
-const Color CH_COLORS[SONG_CHANNELS] = {
+// Indexed by track (0-F) in the pattern screen and by lane (0..SONG_CHANNELS-1) in the song screen.
+const Color CH_COLORS[PATTERN_TRACKS] = {
     {0xFF, 0x40, 0x40, 0xFF},
     {0xFF, 0x90, 0x20, 0xFF},
     {0xFF, 0xFF, 0x20, 0xFF},
@@ -24,7 +25,7 @@ const Color CH_COLORS[SONG_CHANNELS] = {
     {0x40, 0xC0, 0xC0, 0xFF},
 };
 
-void ui_init(UIState *ui, TrackerSong *song, AudioEngine *engine) {
+void ui_init(UIState* ui, TrackerSong* song, AudioEngine* engine) {
   memset(ui, 0, sizeof(UIState));
   ui->song = song;
   ui->engine = engine;
@@ -37,13 +38,13 @@ bool ui_repeat(TrackerButton btn) {
   return (f > 20) && ((f % 4) == 0);
 }
 
-const char *note_str(uint8_t note) {
+const char* note_str(uint8_t note) {
   static char buf[8];
   if (note == NOTE_EMPTY)
     return "---";
   if (note == NOTE_OFF)
     return "OFF";
-  static const char *names[] = {"C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"};
+  static const char* names[] = {"C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"};
   int oct = (note / 12) - 1;
   if (oct < 0)
     oct = 0;
@@ -51,7 +52,7 @@ const char *note_str(uint8_t note) {
   return buf;
 }
 
-const char *fx_cmd_str(uint8_t fx) {
+const char* fx_cmd_str(uint8_t fx) {
   switch (fx) {
     case FX_NONE:
       return "--";
@@ -80,7 +81,7 @@ const char *fx_cmd_str(uint8_t fx) {
   }
 }
 
-void draw_cell(int x, int y, int w, int h, Color bg, const char *text, int fs, Color fg) {
+void draw_cell(int x, int y, int w, int h, Color bg, const char* text, int fs, Color fg) {
   if (bg.a > 0)
     DrawRectangle(x, y, w, h, bg);
   if (text && text[0])
@@ -88,16 +89,16 @@ void draw_cell(int x, int y, int w, int h, Color bg, const char *text, int fs, C
 }
 
 // Forward declarations
-void screen_song_update(UIState *ui);
-void screen_song_draw(UIState *ui);
-void screen_pattern_update(UIState *ui);
-void screen_pattern_draw(UIState *ui);
-void screen_instrument_update(UIState *ui);
-void screen_instrument_draw(UIState *ui);
-void screen_menu_update(UIState *ui);
-void screen_menu_draw(UIState *ui);
+void screen_song_update(UIState* ui);
+void screen_song_draw(UIState* ui);
+void screen_pattern_update(UIState* ui);
+void screen_pattern_draw(UIState* ui);
+void screen_instrument_update(UIState* ui);
+void screen_instrument_draw(UIState* ui);
+void screen_menu_update(UIState* ui);
+void screen_menu_draw(UIState* ui);
 
-void ui_update(UIState *ui) {
+void ui_update(UIState* ui) {
   ui->blink++;
   file_browser_tick();
 
@@ -154,7 +155,7 @@ void ui_update(UIState *ui) {
   }
 }
 
-static const char *screen_label(AppScreen s) {
+static const char* screen_label(AppScreen s) {
   switch (s) {
     case SCREEN_SONG:
       return "SONG";
@@ -168,7 +169,7 @@ static const char *screen_label(AppScreen s) {
   return "";
 }
 
-static void draw_status(UIState *ui) {
+static void draw_status(UIState* ui) {
   bool edit = input_held(BTN_A);
   Color bar = edit ? (Color){0x14, 0x0C, 0x28, 0xFF} : C_BG_ALT;
 
@@ -182,13 +183,13 @@ static void draw_status(UIState *ui) {
   else if (ui->screen == SCREEN_INSTRUMENT)
     snprintf(left, sizeof(left), "INSTRUMENT %02X", ui->ctx_instrument);
   else {
-    static const char *names[] = {"SONG", NULL, NULL, "MENU"};
+    static const char* names[] = {"SONG", NULL, NULL, "MENU"};
     snprintf(left, sizeof(left), "%s", names[ui->screen]);
   }
   DrawText(left, 4, (STATUS_H - FONT_S) / 2, FONT_S, C_STATUS);
 
   // Right: play state + edit indicator only — BPM visible as menu item on MENU screen
-  const char *play = audio_is_playing(ui->engine) ? ">>" : "[]";
+  const char* play = audio_is_playing(ui->engine) ? ">>" : "[]";
   char right[16];
   snprintf(right, sizeof(right), "%s", edit ? "E" : play);
   int rw = MeasureText(right, FONT_S);
@@ -200,7 +201,7 @@ static void draw_status(UIState *ui) {
   // Bottom hint bar
   DrawRectangle(0, WIN_H - STATUS_H, WIN_W, STATUS_H, C_BG_ALT);
   DrawLine(0, WIN_H - STATUS_H, WIN_W, WIN_H - STATUS_H, C_SEP);
-  const char *hint;
+  const char* hint;
   if (edit) {
     switch (ui->screen) {
       case SCREEN_SONG:
@@ -237,7 +238,7 @@ static void draw_status(UIState *ui) {
 
 // ---- Shared keyboard modal -------------------------------------------------
 
-static const char *KBM_CHARS[KBM_CHAR_ROWS] = {
+static const char* KBM_CHARS[KBM_CHAR_ROWS] = {
     "1234567890",
     "QWERTYUIOP",
     "ASDFGHJKL-",
@@ -249,59 +250,75 @@ static int kbm_max_col(int row) {
   return (row < KBM_CHAR_ROWS) ? KBM_CHAR_COLS[row] : KBM_SPECIAL_COLS;
 }
 
-void kb_modal_open(KBModal *kb, char *buf, int buf_sz) {
-  kb->buf    = buf;
+void kb_modal_open(KBModal* kb, char* buf, int buf_sz) {
+  kb->buf = buf;
   kb->buf_sz = buf_sz;
-  kb->row    = KBM_SPECIAL_ROW;
-  kb->col    = 3;  // OK preselected
-  kb->shift  = false;
+  kb->row = KBM_SPECIAL_ROW;
+  kb->col = 3;  // OK preselected
+  kb->shift = false;
   kb->active = true;
-  while (GetCharPressed() > 0) {}
+  while (GetCharPressed() > 0) {
+  }
 }
 
-bool kb_modal_update(KBModal *kb) {
-  if (!kb->active) return true;
+bool kb_modal_update(KBModal* kb) {
+  if (!kb->active)
+    return true;
 
   if (ui_repeat(BTN_LEFT)) {
     kb->col--;
-    if (kb->col < 0) kb->col = kbm_max_col(kb->row) - 1;
+    if (kb->col < 0)
+      kb->col = kbm_max_col(kb->row) - 1;
   }
   if (ui_repeat(BTN_RIGHT)) {
     kb->col++;
-    if (kb->col >= kbm_max_col(kb->row)) kb->col = 0;
+    if (kb->col >= kbm_max_col(kb->row))
+      kb->col = 0;
   }
   if (ui_repeat(BTN_UP)) {
     kb->row--;
-    if (kb->row < 0) kb->row = KBM_TOTAL_ROWS - 1;
-    if (kb->col >= kbm_max_col(kb->row)) kb->col = kbm_max_col(kb->row) - 1;
+    if (kb->row < 0)
+      kb->row = KBM_TOTAL_ROWS - 1;
+    if (kb->col >= kbm_max_col(kb->row))
+      kb->col = kbm_max_col(kb->row) - 1;
   }
   if (ui_repeat(BTN_DOWN)) {
     kb->row++;
-    if (kb->row >= KBM_TOTAL_ROWS) kb->row = 0;
-    if (kb->col >= kbm_max_col(kb->row)) kb->col = kbm_max_col(kb->row) - 1;
+    if (kb->row >= KBM_TOTAL_ROWS)
+      kb->row = 0;
+    if (kb->col >= kbm_max_col(kb->row))
+      kb->col = kbm_max_col(kb->row) - 1;
   }
 
   if (input_pressed(BTN_A)) {
-    while (GetCharPressed() > 0) {}
+    while (GetCharPressed() > 0) {
+    }
     if (kb->row < KBM_CHAR_ROWS) {
       char c = KBM_CHARS[kb->row][kb->col];
-      if (!kb->shift) c = (char)(c | 0x20);
+      if (!kb->shift)
+        c = (char)(c | 0x20);
       size_t l = strlen(kb->buf);
       if (l < (size_t)(kb->buf_sz - 2)) {
-        kb->buf[l]     = c;
+        kb->buf[l] = c;
         kb->buf[l + 1] = '\0';
       }
     } else {
       switch (kb->col) {
-        case 0: kb->shift = !kb->shift; break;
+        case 0:
+          kb->shift = !kb->shift;
+          break;
         case 1: {
           size_t l = strlen(kb->buf);
-          if (l < (size_t)(kb->buf_sz - 2)) { kb->buf[l] = ' '; kb->buf[l+1] = '\0'; }
+          if (l < (size_t)(kb->buf_sz - 2)) {
+            kb->buf[l] = ' ';
+            kb->buf[l + 1] = '\0';
+          }
           break;
         }
         case 2: {
           size_t l = strlen(kb->buf);
-          if (l) kb->buf[l - 1] = '\0';
+          if (l)
+            kb->buf[l - 1] = '\0';
           break;
         }
         case 3:  // OK
@@ -315,14 +332,15 @@ bool kb_modal_update(KBModal *kb) {
       if (ch >= 32) {
         size_t l = strlen(kb->buf);
         if (l < (size_t)(kb->buf_sz - 2)) {
-          kb->buf[l]     = (char)ch;
+          kb->buf[l] = (char)ch;
           kb->buf[l + 1] = '\0';
         }
       }
     }
     if (IsKeyPressed(KEY_BACKSPACE)) {
       size_t l = strlen(kb->buf);
-      if (l) kb->buf[l - 1] = '\0';
+      if (l)
+        kb->buf[l - 1] = '\0';
     }
     if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
       kb->active = false;
@@ -337,8 +355,9 @@ bool kb_modal_update(KBModal *kb) {
   return false;
 }
 
-void kb_modal_draw(KBModal *kb, const char *label) {
-  if (!kb->active) return;
+void kb_modal_draw(KBModal* kb, const char* label) {
+  if (!kb->active)
+    return;
 
   int modal_y = STATUS_H;
   int modal_h = WIN_H - STATUS_H * 2;
@@ -348,7 +367,7 @@ void kb_modal_draw(KBModal *kb, const char *label) {
   int name_y = modal_y + 4;
   DrawRectangle(0, name_y, WIN_W, CH_H + 2, (Color){0x08, 0x08, 0x28, 0xFF});
   DrawText(label, 4, name_y + (CH_H - FONT_S) / 2, FONT_S, C_HEADER);
-  const char *nm = kb->buf && kb->buf[0] ? kb->buf : "";
+  const char* nm = kb->buf && kb->buf[0] ? kb->buf : "";
   int nx = MeasureText(label, FONT_S) + 10;
   DrawText(nm, nx, name_y + (CH_H - FONT_S) / 2, FONT_S, C_TITLE);
   double t = GetTime();
@@ -357,60 +376,60 @@ void kb_modal_draw(KBModal *kb, const char *label) {
     DrawRectangle(cx, name_y + 2, 1, FONT_S + 1, C_TITLE);
   }
 
-  int kb_top  = name_y + CH_H + 6;
+  int kb_top = name_y + CH_H + 6;
   int avail_h = WIN_H - STATUS_H - kb_top;
-  int kb_h    = KBM_TOTAL_ROWS * (KBM_KEY_H + KBM_GAP);
-  int y0      = kb_top + (avail_h - kb_h) / 2;
+  int kb_h = KBM_TOTAL_ROWS * (KBM_KEY_H + KBM_GAP);
+  int y0 = kb_top + (avail_h - kb_h) / 2;
 
-  Color key_bg  = {0x28, 0x28, 0x50, 0xFF};
+  Color key_bg = {0x28, 0x28, 0x50, 0xFF};
   Color key_cur = {0x20, 0x60, 0xC0, 0xFF};
 
   for (int r = 0; r < KBM_CHAR_ROWS; r++) {
-    int ncols   = KBM_CHAR_COLS[r];
+    int ncols = KBM_CHAR_COLS[r];
     int total_w = ncols * KBM_KEY_W + (ncols - 1) * KBM_GAP;
-    int sx      = (WIN_W - total_w) / 2;
-    int y       = y0 + r * (KBM_KEY_H + KBM_GAP);
+    int sx = (WIN_W - total_w) / 2;
+    int y = y0 + r * (KBM_KEY_H + KBM_GAP);
     for (int c = 0; c < ncols; c++) {
-      int  x   = sx + c * (KBM_KEY_W + KBM_GAP);
+      int x = sx + c * (KBM_KEY_W + KBM_GAP);
       bool cur = (kb->row == r && kb->col == c);
       DrawRectangle(x, y, KBM_KEY_W, KBM_KEY_H, cur ? key_cur : key_bg);
       char raw = KBM_CHARS[r][c];
       char lbl[2] = {kb->shift ? raw : (char)(raw | 0x20), 0};
-      int  tw     = MeasureText(lbl, FONT_S);
+      int tw = MeasureText(lbl, FONT_S);
       DrawText(lbl, x + (KBM_KEY_W - tw) / 2, y + (KBM_KEY_H - FONT_S) / 2, FONT_S,
                cur ? C_TITLE : C_TEXT);
     }
   }
 
-  int sy    = y0 + KBM_CHAR_ROWS * (KBM_KEY_H + KBM_GAP);
-  int sh_x  = 8,                  sh_w  = 56;
-  int sp_x  = sh_x + sh_w  + 2,   sp_w  = 88;
-  int del_x = sp_x + sp_w  + 2,   del_w = 56;
-  int ok_x  = del_x + del_w + 2,  ok_w  = WIN_W - ok_x - 8;
+  int sy = y0 + KBM_CHAR_ROWS * (KBM_KEY_H + KBM_GAP);
+  int sh_x = 8, sh_w = 56;
+  int sp_x = sh_x + sh_w + 2, sp_w = 88;
+  int del_x = sp_x + sp_w + 2, del_w = 56;
+  int ok_x = del_x + del_w + 2, ok_w = WIN_W - ok_x - 8;
 
-  bool sh_cur  = (kb->row == KBM_SPECIAL_ROW && kb->col == 0);
-  bool sp_cur  = (kb->row == KBM_SPECIAL_ROW && kb->col == 1);
+  bool sh_cur = (kb->row == KBM_SPECIAL_ROW && kb->col == 0);
+  bool sp_cur = (kb->row == KBM_SPECIAL_ROW && kb->col == 1);
   bool del_cur = (kb->row == KBM_SPECIAL_ROW && kb->col == 2);
-  bool ok_cur  = (kb->row == KBM_SPECIAL_ROW && kb->col == 3);
+  bool ok_cur = (kb->row == KBM_SPECIAL_ROW && kb->col == 3);
 
   Color sh_bg = kb->shift ? (Color){0x60, 0x40, 0x00, 0xFF} : key_bg;
-  DrawRectangle(sh_x,  sy, sh_w,  KBM_KEY_H, sh_cur  ? key_cur : sh_bg);
-  DrawRectangle(sp_x,  sy, sp_w,  KBM_KEY_H, sp_cur  ? key_cur : key_bg);
+  DrawRectangle(sh_x, sy, sh_w, KBM_KEY_H, sh_cur ? key_cur : sh_bg);
+  DrawRectangle(sp_x, sy, sp_w, KBM_KEY_H, sp_cur ? key_cur : key_bg);
   DrawRectangle(del_x, sy, del_w, KBM_KEY_H, del_cur ? key_cur : key_bg);
-  DrawRectangle(ok_x,  sy, ok_w,  KBM_KEY_H, ok_cur  ? key_cur : key_bg);
+  DrawRectangle(ok_x, sy, ok_w, KBM_KEY_H, ok_cur ? key_cur : key_bg);
 
   Color sh_txt = sh_cur ? C_TITLE : (kb->shift ? (Color){0xFF, 0xC0, 0x00, 0xFF} : C_TEXT);
-  DrawText("SHIFT", sh_x  + (sh_w  - MeasureText("SHIFT", FONT_S)) / 2,
+  DrawText("SHIFT", sh_x + (sh_w - MeasureText("SHIFT", FONT_S)) / 2,
            sy + (KBM_KEY_H - FONT_S) / 2, FONT_S, sh_txt);
-  DrawText("SPACE", sp_x  + (sp_w  - MeasureText("SPACE", FONT_S)) / 2,
-           sy + (KBM_KEY_H - FONT_S) / 2, FONT_S, sp_cur  ? C_TITLE : C_TEXT);
-  DrawText("DEL",   del_x + (del_w - MeasureText("DEL",   FONT_S)) / 2,
+  DrawText("SPACE", sp_x + (sp_w - MeasureText("SPACE", FONT_S)) / 2,
+           sy + (KBM_KEY_H - FONT_S) / 2, FONT_S, sp_cur ? C_TITLE : C_TEXT);
+  DrawText("DEL", del_x + (del_w - MeasureText("DEL", FONT_S)) / 2,
            sy + (KBM_KEY_H - FONT_S) / 2, FONT_S, del_cur ? C_NOTE_OFF : C_TEXT);
-  DrawText("OK",    ok_x  + (ok_w  - MeasureText("OK",    FONT_S)) / 2,
-           sy + (KBM_KEY_H - FONT_S) / 2, FONT_S, ok_cur  ? C_PLAY : C_TEXT);
+  DrawText("OK", ok_x + (ok_w - MeasureText("OK", FONT_S)) / 2,
+           sy + (KBM_KEY_H - FONT_S) / 2, FONT_S, ok_cur ? C_PLAY : C_TEXT);
 }
 
-void ui_draw(UIState *ui) {
+void ui_draw(UIState* ui) {
   ClearBackground(C_BG);
   draw_status(ui);
   switch (ui->screen) {
