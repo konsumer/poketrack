@@ -117,7 +117,7 @@ the length. Written by `tracker_save`.
 
 ```
 "RPT2"            4 bytes   magic
-version           u16       currently 1
+version           u16       currently 2 (v1 had single-track patterns / 16 song lanes)
 num_sections      u16       number of chunks that follow
 
 repeated num_sections times:
@@ -143,13 +143,14 @@ pad               u8 x 2
 
 ### SONG
 
-The arrangement grid: `song_len` rows of `SONG_CHANNELS = 16` channels, stored
-row-major. Each cell is a pattern index, `0xFF` (`TRACKER_EMPTY`) = empty.
+The arrangement grid: `song_len` rows of `SONG_CHANNELS = 4` lanes, stored
+row-major. Each cell is a pattern index (a multi-track pattern), `0xFF`
+(`TRACKER_EMPTY`) = empty.
 
 ```
 song_len          u16       1..1024
-cells:                      song_len * 16 bytes, row-major
-    pattern_idx   u8        for each (row, channel); 0xFF = empty
+cells:                      song_len * 4 bytes, row-major
+    pattern_idx   u8        for each (row, lane); 0xFF = empty
 ```
 
 ### PATN
@@ -161,15 +162,17 @@ and still has the default length of 16).
 count             u16
 patterns[count]:
     index         u8        pattern slot (0..254)
-    len           u16       step count
-    steps[len]:
-        note      u8
-        velocity  u8
-        instrument u8
-        fx[0]     u8        (note: fx,fx,fxv,fxv order here)
-        fx[1]     u8
-        fxv[0]    u8
-        fxv[1]    u8
+    len           u16       step count, shared by all tracks
+    ntracks       u8        track count (currently PATTERN_TRACKS = 16)
+    tracks[ntracks]:
+        steps[len]:
+            note      u8
+            velocity  u8
+            instrument u8
+            fx[0]     u8        (note: fx,fx,fxv,fxv order here)
+            fx[1]     u8
+            fxv[0]    u8
+            fxv[1]    u8
 ```
 
 ### INST
