@@ -10,11 +10,11 @@ Grab [the latest release](https://github.com/konsumer/raypoketrack/releases) for
 
 In desktop mode:
 
-<a href="https://github.com/konsumer/raypoketrack/releases/latest/download/steamdeck-install.py">
+<a href="https://raw.githubusercontent.com/konsumer/raypoketrack/main/ports/steamdeck-install.py">
   <img alt="Install RayPokeTrack" src="https://img.shields.io/badge/⬇_Install_RayPokeTrack-1a9fff?style=for-the-badge">
 </a>
 
-This downloads a GUI installer. In your Downloads folder, right-click it, check "is executable" under Permissions, then double-click to run. It'll let you pick an install location, optionally grab the example songs/instruments, and optionally add RayPokeTrack as a non-Steam game (with `--fullscreen` launch option already set). Restart Steam afterwards to see it in your library.
+This is a GUI installer script. Save it (browser may just display it — use File > Save Page As), then in your Downloads folder right-click it, check "is executable" under Permissions, and double-click to run. It'll let you pick an install location, optionally grab the example songs/instruments, and optionally add RayPokeTrack as a non-Steam game (with `--fullscreen` launch option already set). Restart Steam afterwards to see it in your library.
 
 ## usage
 

@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import urllib.error
 import urllib.request
 import zipfile
 import zlib
@@ -21,14 +22,21 @@ REPO = "konsumer/raypoketrack"
 ASSET = "raypoketrack-linux.zip"  # steamdeck is x86_64
 
 
+class InstallError(Exception):
+    """Something went wrong; show it in a dialog instead of a stack trace."""
+
+
 def zenity(*args, input=None):
     return subprocess.run(["zenity", *args], input=input, text=True,
                            capture_output=True)
 
 
 def die(msg):
-    zenity("--error", "--text", msg, "--width=400")
-    sys.exit(1)
+    raise InstallError(msg)
+
+
+def warn(msg):
+    zenity("--warning", "--text", msg, "--width=400")
 
 
 def info(msg):
@@ -39,11 +47,13 @@ def question(msg):
     return zenity("--question", "--text", msg, "--width=400").returncode == 0
 
 
-def choose_dir():
-    r = zenity("--file-selection", "--title=Choose a directory for RayPokeTrack",
-               "--directory", f"--filename={Path.home()}/")
+def choose_dir(title, default, exit_on_cancel=True):
+    r = zenity("--file-selection", f"--title={title}",
+               "--directory", f"--filename={default}/")
     if r.returncode != 0:
-        sys.exit(0)
+        if exit_on_cancel:
+            sys.exit(0)
+        return default
     return Path(r.stdout.strip())
 
 
@@ -73,6 +83,8 @@ def download_with_progress(url, dest, title):
 
     try:
         urllib.request.urlretrieve(url, dest, reporthook=hook)
+    except (urllib.error.URLError, OSError) as e:
+        die(f"Download failed ({url}): {e}")
     finally:
         if proc.stdin:
             try:
@@ -83,8 +95,12 @@ def download_with_progress(url, dest, title):
 
 
 def latest_release():
-    with urllib.request.urlopen(f"https://api.github.com/repos/{REPO}/releases/latest") as r:
-        return json.load(r)
+    url = f"https://api.github.com/repos/{REPO}/releases/latest"
+    try:
+        with urllib.request.urlopen(url) as r:
+            return json.load(r)
+    except (urllib.error.URLError, json.JSONDecodeError) as e:
+        die(f"Could not reach GitHub ({e}). Check your internet connection.")
 
 
 # --- minimal binary VDF (shortcuts.vdf) read/write ---
@@ -130,17 +146,23 @@ def _serialize_dict(d):
 def load_shortcuts(path):
     if not path.exists():
         return {"shortcuts": {}}
-    d, _ = _parse_dict(path.read_bytes(), 0)
-    return d
+    try:
+        d, _ = _parse_dict(path.read_bytes(), 0)
+        d.setdefault("shortcuts", {})
+        return d
+    except (ValueError, IndexError):
+        backup = path.with_suffix(".vdf.bak")
+        shutil.copy(path, backup)
+        warn(f"{path} looked corrupt, backed it up to {backup} and starting fresh.")
+        return {"shortcuts": {}}
 
 
 def add_shortcut(shortcuts_vdf, exe, appname, start_dir, launch_options):
     entries = shortcuts_vdf.setdefault("shortcuts", {})
-    idx = str(len(entries))
     appid = zlib.crc32((exe + appname).encode()) | 0x80000000
     if appid >= 0x80000000:
         appid -= 0x100000000  # store as signed int32
-    entries[idx] = {
+    entry = {
         "appid": appid,
         "AppName": appname,
         "Exe": exe,
@@ -158,6 +180,12 @@ def add_shortcut(shortcuts_vdf, exe, appname, start_dir, launch_options):
         "LastPlayTime": 0,
         "tags": {},
     }
+    # update in place if this shortcut already exists, instead of duplicating it
+    for idx, existing in entries.items():
+        if existing.get("AppName") == appname:
+            entries[idx] = entry
+            return
+    entries[str(len(entries))] = entry
 
 
 def find_shortcuts_vdf():
@@ -178,24 +206,30 @@ def find_shortcuts_vdf():
 def add_steam_shortcut(exe_path):
     vdf_path = find_shortcuts_vdf()
     if vdf_path is None:
-        die("Could not find a Steam userdata directory. Add the shortcut manually.")
-        return
+        warn("Could not find a Steam userdata directory. Add the shortcut manually.")
+        return False
+    start_dir = choose_dir("Choose a start-in directory for RayPokeTrack",
+                            exe_path.parent, exit_on_cancel=False)
     shortcuts = load_shortcuts(vdf_path)
-    add_shortcut(shortcuts, f'"{exe_path}"', "RayPokeTrack", f'"{exe_path.parent}"', "--fullscreen")
+    add_shortcut(shortcuts, f'"{exe_path}"', "RayPokeTrack", f'"{start_dir}"', "--fullscreen")
+    vdf_path.parent.mkdir(parents=True, exist_ok=True)
     vdf_path.write_bytes(_serialize_dict(shortcuts))
+    return True
 
 
-def download_examples(dest):
-    release = latest_release()
+def download_examples(dest, release):
     tag = release["tag_name"]
     with tempfile.TemporaryDirectory() as tmp:
         tar_path = Path(tmp) / "src.tar.gz"
         url = f"https://github.com/{REPO}/archive/refs/tags/{tag}.tar.gz"
         download_with_progress(url, tar_path, "Downloading examples...")
-        with tarfile.open(tar_path) as t:
-            members = [m for m in t.getmembers() if "/examples/" in m.name]
-            t.extractall(tmp, members=members)
-        src = next(Path(tmp).glob("*/examples"))
+        try:
+            with tarfile.open(tar_path) as t:
+                members = [m for m in t.getmembers() if "/examples/" in m.name]
+                t.extractall(tmp, members=members)
+            src = next(Path(tmp).glob("*/examples"))
+        except (tarfile.TarError, StopIteration) as e:
+            die(f"Could not find examples/ in the {tag} source archive: {e}")
         shutil.copytree(src, dest / "examples", dirs_exist_ok=True)
 
 
@@ -204,7 +238,7 @@ def main():
         print("zenity is required", file=sys.stderr)
         sys.exit(1)
 
-    install_root = choose_dir()
+    install_root = choose_dir("Choose a directory for RayPokeTrack", Path.home())
     dest = install_root / "raypoketrack"
 
     release = latest_release()
@@ -218,19 +252,29 @@ def main():
         zip_path = Path(tmp) / ASSET
         download_with_progress(asset_url, zip_path, f"Downloading RayPokeTrack {tag}...")
         dest.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(zip_path) as z:
-            z.extractall(dest)
+        try:
+            with zipfile.ZipFile(zip_path) as z:
+                z.extractall(dest)
+        except zipfile.BadZipFile as e:
+            die(f"Downloaded file isn't a valid zip: {e}")
 
     bin_path = dest / "raypoketrack"
+    if not bin_path.exists():
+        die(f"{ASSET} didn't contain a raypoketrack binary as expected")
     bin_path.chmod(bin_path.stat().st_mode | 0o111)
 
     if question("Download example songs and instruments too?"):
-        download_examples(dest)
+        try:
+            download_examples(dest, release)
+        except InstallError as e:
+            warn(f"Skipping examples: {e}")
 
     shortcut_added = False
     if question("Add RayPokeTrack as a non-Steam game?"):
-        add_steam_shortcut(bin_path)
-        shortcut_added = True
+        try:
+            shortcut_added = add_steam_shortcut(bin_path)
+        except InstallError as e:
+            warn(f"Skipping Steam shortcut: {e}")
 
     msg = f"RayPokeTrack {tag} installed to:\n{dest}"
     if shortcut_added:
@@ -239,4 +283,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except InstallError as e:
+        zenity("--error", "--text", str(e), "--width=400")
+        sys.exit(1)
+    except Exception as e:
+        zenity("--error", "--text", f"Unexpected error: {e}", "--width=400")
+        raise

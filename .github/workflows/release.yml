@@ -93,14 +93,3 @@ jobs:
         with:
           name: ${{ matrix.name }}
           path: ${{ matrix.name }}.zip
-
-  steamdeck-installer:
-    if: github.event_name == 'release'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Upload to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ports/steamdeck-install.py
