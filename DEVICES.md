@@ -30,13 +30,10 @@ Notes for dArkOS / Rockchip BSP kernel (4.4.x):
 
 Essentially, this is a popular joystick-driven chooser for retro-games. raypoketrack is a "port".
 
-<a href="https://raw.githubusercontent.com/konsumer/raypoketrack/main/ports/Update%20RayPokeTrack.sh">
-  <img alt="Install RayPokeTrack" src="https://img.shields.io/badge/⬇_EmulationStation_(Save_As)-1a9fff?style=for-the-badge">
-</a>
-
 ## [EmulationStation Installer (Save As)](https://raw.githubusercontent.com/konsumer/raypoketrack/main/ports/Update%20RayPokeTrack.sh)
 
 - Add files in [ports/](./ports/) to your roms dir.
+- Add soundfonts/samples/[beats](https://github.com/konsumer/raypoketrack/tree/main/examples) to `raypoketrack/` in your roms dir.
 - Restart EmulationStation
 - Run `Update RayPokeTrack` to get latest version
 - Restart EmulationStation
