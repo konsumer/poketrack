@@ -8,9 +8,7 @@ The basic idea is you need a Linux-based device. It will work on windows/mac, bu
 
 This is a x86-64 device, running SteamOS (Arch-based linux.) Setup is fairly straightforward. I made a script to make it a bit easier. In desktop mode:
 
-<a href="https://raw.githubusercontent.com/konsumer/raypoketrack/main/steamdeck-install.py">
-  <img alt="Install RayPokeTrack" src="https://img.shields.io/badge/⬇_Steamdeck_(Save_As)-1a9fff?style=for-the-badge">
-</a>
+## [Steamdeck Installer (Save As)](https://raw.githubusercontent.com/konsumer/raypoketrack/main/steamdeck-install.py)
 
 This is a GUI installer script. Save it, and in your Downloads folder right-click the file, check "is executable" under Permissions, and double-click to run. It'll let you pick an install-location, optionally grab the example songs/instruments, and optionally add RayPokeTrack as a non-Steam game (with `--fullscreen` launch option already set). Restart Steam afterwards to see it in your library.
 
@@ -35,6 +33,8 @@ Essentially, this is a popular joystick-driven chooser for retro-games. raypoket
 <a href="https://raw.githubusercontent.com/konsumer/raypoketrack/main/ports/Update%20RayPokeTrack.sh">
   <img alt="Install RayPokeTrack" src="https://img.shields.io/badge/⬇_EmulationStation_(Save_As)-1a9fff?style=for-the-badge">
 </a>
+
+## [EmulationStation Installer (Save As)](https://raw.githubusercontent.com/konsumer/raypoketrack/main/ports/Update%20RayPokeTrack.sh)
 
 - Add files in [ports/](./ports/) to your roms dir.
 - Restart EmulationStation
