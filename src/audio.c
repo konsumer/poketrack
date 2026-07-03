@@ -4,6 +4,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Single lock around all engine state touched by both the audio callback
+// thread and the main thread. Emscripten builds are single-threaded (the
+// stream callback runs on the same thread as everything else), so it's a
+// no-op there.
+#ifdef __EMSCRIPTEN__
+#define AUDIO_LOCK(eng) ((void)0)
+#define AUDIO_UNLOCK(eng) ((void)0)
+#else
+#define AUDIO_LOCK(eng) pthread_mutex_lock(&(eng)->lock)
+#define AUDIO_UNLOCK(eng) pthread_mutex_unlock(&(eng)->lock)
+#endif
+
 // Per-instrument RMS for sidechain ducking (NUM_INSTRUMENTS=16)
 float g_sidechain_rms[NUM_INSTRUMENTS] = {0};
 TrackerSong* g_lfo_song = NULL;
@@ -332,6 +344,16 @@ static void fire_step(AudioEngine* eng, int ch, int tr, PatternStep* step) {
 
 void audio_init(AudioEngine* eng, TrackerSong* song) {
   memset(eng, 0, sizeof(AudioEngine));
+#ifndef __EMSCRIPTEN__
+  // Recursive: several main-thread entry points call each other
+  // (e.g. audio_play_pattern -> audio_stop -> audio_midi_kill_all) and all
+  // need to hold the lock across the whole call chain.
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init(&attr);
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+  pthread_mutex_init(&eng->lock, &attr);
+  pthread_mutexattr_destroy(&attr);
+#endif
   eng->song = song;
   g_lfo_song = song;
   eng->samples_per_tick = calc_samples_per_tick(song->bpm);
@@ -341,24 +363,34 @@ void audio_init(AudioEngine* eng, TrackerSong* song) {
 
 // Destroy all live states for an instrument — call before mutating its chain slots
 void audio_rebuild_instrument(AudioEngine* eng, uint8_t inst_idx) {
+  AUDIO_LOCK(eng);
   for (int ch = 0; ch < SONG_CHANNELS; ch++)
     for (int tr = 0; tr < PATTERN_TRACKS; tr++)
       if (eng->active_inst[ch][tr] == inst_idx)
         destroy_chan_states(eng, ch, tr);
   if (eng->preview_inst == inst_idx)
     destroy_preview_states(eng);
+  AUDIO_UNLOCK(eng);
 }
 
 void audio_shutdown(AudioEngine* eng) {
+  AUDIO_LOCK(eng);
   for (int ch = 0; ch < SONG_CHANNELS; ch++) destroy_lane_states(eng, ch);
   destroy_preview_states(eng);
   for (int v = 0; v < 8; v++) midi_voice_destroy(eng, v);
+  AUDIO_UNLOCK(eng);
+#ifndef __EMSCRIPTEN__
+  pthread_mutex_destroy(&eng->lock);
+#endif
   memset(eng, 0, sizeof(AudioEngine));
 }
 
 void audio_play_from(AudioEngine* eng, uint16_t start_row) {
-  if (eng->playing)
+  AUDIO_LOCK(eng);
+  if (eng->playing) {
+    AUDIO_UNLOCK(eng);
     return;
+  }
   audio_preview_kill(eng);
   for (int ch = 0; ch < SONG_CHANNELS; ch++) {
     eng->cursors[ch].song_row = start_row;
@@ -379,11 +411,15 @@ void audio_play_from(AudioEngine* eng, uint16_t start_row) {
   preload_all_chan_states(eng);
 
   eng->playing = true;
+  AUDIO_UNLOCK(eng);
 }
 
 void audio_play(AudioEngine* eng) {
-  if (eng->playing)
+  AUDIO_LOCK(eng);
+  if (eng->playing) {
+    AUDIO_UNLOCK(eng);
     return;
+  }
   audio_preview_kill(eng);
   for (int ch = 0; ch < SONG_CHANNELS; ch++) {
     eng->cursors[ch].song_row = 0;
@@ -405,9 +441,11 @@ void audio_play(AudioEngine* eng) {
   preload_all_chan_states(eng);
 
   eng->playing = true;
+  AUDIO_UNLOCK(eng);
 }
 
 void audio_play_pattern(AudioEngine* eng, uint8_t pattern_idx) {
+  AUDIO_LOCK(eng);
   if (eng->playing)
     audio_stop(eng);
   audio_preview_kill(eng);
@@ -440,22 +478,28 @@ void audio_play_pattern(AudioEngine* eng, uint8_t pattern_idx) {
   eng->tick_counter = 0;
   eng->sample_acc = eng->samples_per_tick;
   eng->playing = true;
+  AUDIO_UNLOCK(eng);
 }
 
 void audio_stop(AudioEngine* eng) {
-  if (!eng->playing)
+  AUDIO_LOCK(eng);
+  if (!eng->playing) {
+    AUDIO_UNLOCK(eng);
     return;
+  }
   eng->playing = false;
   for (int ch = 0; ch < SONG_CHANNELS; ch++)
     for (int tr = 0; tr < PATTERN_TRACKS; tr++)
       chan_kill(eng, ch, tr);  // immediate stop — prevents TSF release tails replaying on next start
   memset(eng->active_note, 0, sizeof(eng->active_note));
   audio_midi_kill_all(eng);
+  AUDIO_UNLOCK(eng);
 }
 
 bool audio_is_playing(const AudioEngine* eng) { return eng->playing; }
 
 void audio_set_save_dir(AudioEngine* eng, const char* save_file_path) {
+  AUDIO_LOCK(eng);
   strncpy(eng->save_dir, save_file_path, sizeof(eng->save_dir) - 1);
   // Strip filename, keep directory (including trailing slash)
   char* sep = strrchr(eng->save_dir, '/');
@@ -472,13 +516,17 @@ void audio_set_save_dir(AudioEngine* eng, const char* save_file_path) {
   for (int ch = 0; ch < SONG_CHANNELS; ch++)
     destroy_lane_states(eng, ch);
   destroy_preview_states(eng);
+  AUDIO_UNLOCK(eng);
 }
 
 void audio_ensure_preview(AudioEngine* eng, uint8_t inst_idx) {
+  AUDIO_LOCK(eng);
   ensure_preview_states(eng, inst_idx);
+  AUDIO_UNLOCK(eng);
 }
 
 void audio_preview_note(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
+  AUDIO_LOCK(eng);
   ensure_preview_states(eng, inst_idx);
   audio_preview_kill(eng);
   TrackerInstrument* inst = &eng->song->instruments[inst_idx];
@@ -490,11 +538,15 @@ void audio_preview_note(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
     if (def && def->is_source)
       def->note_on(eng->preview_states[s], note, 100, slot->params);
   }
+  AUDIO_UNLOCK(eng);
 }
 
 void audio_preview_kill(AudioEngine* eng) {
-  if (eng->preview_inst == TRACKER_EMPTY)
+  AUDIO_LOCK(eng);
+  if (eng->preview_inst == TRACKER_EMPTY) {
+    AUDIO_UNLOCK(eng);
     return;
+  }
   TrackerInstrument* inst = &eng->song->instruments[eng->preview_inst];
   for (int s = 0; s < CHAIN_MAX; s++) {
     if (!eng->preview_states[s])
@@ -503,6 +555,7 @@ void audio_preview_kill(AudioEngine* eng) {
     if (def)
       def->kill(eng->preview_states[s]);
   }
+  AUDIO_UNLOCK(eng);
 }
 
 // ── MIDI poly voice pool ────────────────────────────────────────────────────
@@ -564,6 +617,7 @@ static int midi_voice_alloc(AudioEngine* eng, uint8_t inst_idx) {
 }
 
 void audio_midi_note_on(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
+  AUDIO_LOCK(eng);
   // Release any voice already playing this note on this instrument
   audio_midi_note_off(eng, inst_idx, note);
   int v = midi_voice_alloc(eng, inst_idx);
@@ -580,9 +634,11 @@ void audio_midi_note_on(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
   mv->note = note;
   mv->vstate = 1;  // MV_PLAYING
   mv->birth = eng->midi_voice_clock++;
+  AUDIO_UNLOCK(eng);
 }
 
 void audio_midi_note_off(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
+  AUDIO_LOCK(eng);
   for (int v = 0; v < 8; v++) {
     struct MidiVoice* mv = &eng->midi_voices[v];
     if (mv->vstate != 1 || mv->inst_idx != inst_idx || mv->note != note)
@@ -595,9 +651,11 @@ void audio_midi_note_off(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
     mv->vstate = 2;  // MV_RELEASED
     mv->rel_age = eng->midi_voice_clock++;
   }
+  AUDIO_UNLOCK(eng);
 }
 
 void audio_midi_kill_all(AudioEngine* eng) {
+  AUDIO_LOCK(eng);
   for (int v = 0; v < 8; v++) {
     struct MidiVoice* mv = &eng->midi_voices[v];
     if (mv->vstate == 0)
@@ -608,12 +666,14 @@ void audio_midi_kill_all(AudioEngine* eng) {
     }
     mv->vstate = 0;  // MV_FREE
   }
+  AUDIO_UNLOCK(eng);
 }
 
 void audio_set_dyn_param(AudioEngine* eng, uint8_t inst_idx, int slot_idx, int param, uint8_t val) {
   const UnitDef* def = unit_find(eng->song->instruments[inst_idx].chain[slot_idx].unit_id);
   if (!def || !def->set_param_val)
     return;
+  AUDIO_LOCK(eng);
   if (eng->preview_inst == inst_idx && eng->preview_states[slot_idx])
     def->set_param_val(eng->preview_states[slot_idx], param, val);
   for (int ch = 0; ch < SONG_CHANNELS; ch++)
@@ -625,9 +685,11 @@ void audio_set_dyn_param(AudioEngine* eng, uint8_t inst_idx, int slot_idx, int p
     if (mv->inst_idx == inst_idx && mv->states[slot_idx])
       def->set_param_val(mv->states[slot_idx], param, val);
   }
+  AUDIO_UNLOCK(eng);
 }
 
 void audio_do_main_thread_work(AudioEngine* eng) {
+  AUDIO_LOCK(eng);
   for (int s = 0; s < CHAIN_MAX; s++) {
     if (eng->preview_states[s] && eng->preview_defs[s] && eng->preview_defs[s]->main_thread_work)
       eng->preview_defs[s]->main_thread_work(eng->preview_states[s]);
@@ -642,9 +704,11 @@ void audio_do_main_thread_work(AudioEngine* eng) {
         mv->defs[s]->main_thread_work(mv->states[s]);
     }
   }
+  AUDIO_UNLOCK(eng);
 }
 
 void audio_fill_buffer(AudioEngine* eng, float* out, uint32_t frames) {
+  AUDIO_LOCK(eng);
   memset(out, 0, frames * 2 * sizeof(float));
   eng->samples_per_tick = calc_samples_per_tick(eng->song->bpm);
 
@@ -786,4 +850,5 @@ void audio_fill_buffer(AudioEngine* eng, float* out, uint32_t frames) {
   if (frames > 0)
     for (int i = 0; i < NUM_INSTRUMENTS; i++)
       g_sidechain_rms[i] = (float)sqrt(sc_energy[i] / (double)frames);
+  AUDIO_UNLOCK(eng);
 }
