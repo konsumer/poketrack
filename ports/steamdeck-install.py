@@ -203,13 +203,11 @@ def find_shortcuts_vdf():
     return None
 
 
-def add_steam_shortcut(exe_path):
+def add_steam_shortcut(exe_path, start_dir):
     vdf_path = find_shortcuts_vdf()
     if vdf_path is None:
         warn("Could not find a Steam userdata directory. Add the shortcut manually.")
         return False
-    start_dir = choose_dir("Choose a start-in directory for RayPokeTrack",
-                            exe_path.parent, exit_on_cancel=False)
     shortcuts = load_shortcuts(vdf_path)
     add_shortcut(shortcuts, f'"{exe_path}"', "RayPokeTrack", f'"{start_dir}"', "--fullscreen")
     vdf_path.parent.mkdir(parents=True, exist_ok=True)
@@ -230,7 +228,7 @@ def download_examples(dest, release):
             src = next(Path(tmp).glob("*/examples"))
         except (tarfile.TarError, StopIteration) as e:
             die(f"Could not find examples/ in the {tag} source archive: {e}")
-        shutil.copytree(src, dest / "examples", dirs_exist_ok=True)
+        shutil.copytree(src, dest, dirs_exist_ok=True)
 
 
 def main():
@@ -263,20 +261,25 @@ def main():
         die(f"{ASSET} didn't contain a raypoketrack binary as expected")
     bin_path.chmod(bin_path.stat().st_mode | 0o111)
 
+    run_dir = choose_dir("Choose a directory to run RayPokeTrack from (examples go here)",
+                          dest, exit_on_cancel=False)
+
     if question("Download example songs and instruments too?"):
         try:
-            download_examples(dest, release)
+            download_examples(run_dir, release)
         except InstallError as e:
             warn(f"Skipping examples: {e}")
 
     shortcut_added = False
     if question("Add RayPokeTrack as a non-Steam game?"):
         try:
-            shortcut_added = add_steam_shortcut(bin_path)
+            shortcut_added = add_steam_shortcut(bin_path, run_dir)
         except InstallError as e:
             warn(f"Skipping Steam shortcut: {e}")
 
     msg = f"RayPokeTrack {tag} installed to:\n{dest}"
+    if run_dir != dest:
+        msg += f"\nRun-in directory: {run_dir}"
     if shortcut_added:
         msg += "\n\nRestart Steam to see it in your library. Launch option --fullscreen was set."
     info(msg)
