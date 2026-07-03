@@ -1,6 +1,6 @@
 This is a cross-platform joystick-driven music-tracker.
 
-It uses [CLAP](https://github.com/free-audio/clap) for sound-generation and effects, which you can sequence. This allows a wide variety of instrument-types, from the same interface.
+![logo](./webroot/favicon-96x96.png)
 
 ## installation
 
@@ -83,7 +83,7 @@ There are some built-in units (effects/sound-generators) that are documented [he
 
 ### plugins
 
-You can also use CLAP plugins.
+You can also use [CLAP](https://github.com/free-audio/clap) for sound-generation and effects.
 
 **Instruments**
 - [Surge XT](https://surge-synthesizer.github.io/) — subtractive/wavetable synth; good first test
