@@ -8,8 +8,8 @@ The basic idea is you need a Linux-based device. It will work on windows/mac, bu
 
 This is a x86-64 device, running SteamOS (Arch-based linux.) Setup is fairly straightforward. I made a script to make it a bit easier. In desktop mode:
 
-<a href="https://raw.githubusercontent.com/konsumer/raypoketrack/main/steamdeck-install.py?download=1">
-  <img alt="Install RayPokeTrack" src="https://img.shields.io/badge/⬇_Save_This-1a9fff?style=for-the-badge">
+<a href="https://raw.githubusercontent.com/konsumer/raypoketrack/main/steamdeck-install.py">
+  <img alt="Install RayPokeTrack" src="https://img.shields.io/badge/⬇_Steamdeck_(Save_As)-1a9fff?style=for-the-badge">
 </a>
 
 This is a GUI installer script. Save it, and in your Downloads folder right-click the file, check "is executable" under Permissions, and double-click to run. It'll let you pick an install-location, optionally grab the example songs/instruments, and optionally add RayPokeTrack as a non-Steam game (with `--fullscreen` launch option already set). Restart Steam afterwards to see it in your library.
@@ -24,8 +24,7 @@ These are gameboy-style ARM handhelds. I use the [R36Max](https://www.amazon.com
 
 Notes for dArkOS / Rockchip BSP kernel (4.4.x):
 - Use the `raypoketrack-linux-arm64-sdl` build — the DRM build does not work due to EGL incompatibility with the 4.4 kernel
-- The `Update RayPokeTrack` port script selects the SDL build automatically on these devices
-- WiFi: built-in WiFi may not work; a **Realtek RTL8188EU** USB adapter (via OTG) works reliably
+- WiFi: built-in WiFi may not work; a **Realtek RTL8188EU** USB adapter (via OTG) works reliably. You can often find these for like $1-$2, and are great to have in your toolbox.
 - Button mapping: if face buttons are swapped, edit `SDL_GAMECONTROLLERCONFIG` in `RayPokeTrack.sh` — swap `a`/`b` and `x`/`y` values to match your device's physical layout
 - SSH: default credentials are `ark` / `ark`. You can use [this script](https://gist.github.com/konsumer/880f6dfedb058763207053211fca858e) to enable SSH (put it on rom SD, in ports/ or tools/)
 
@@ -33,7 +32,12 @@ Notes for dArkOS / Rockchip BSP kernel (4.4.x):
 
 Essentially, this is a popular joystick-driven chooser for retro-games. raypoketrack is a "port".
 
+<a href="https://raw.githubusercontent.com/konsumer/raypoketrack/main/ports/Update%20RayPokeTrack.sh">
+  <img alt="Install RayPokeTrack" src="https://img.shields.io/badge/⬇_EmulationStation_(Save_As)-1a9fff?style=for-the-badge">
+</a>
+
 - Add files in [ports/](./ports/) to your roms dir.
 - Restart EmulationStation
 - Run `Update RayPokeTrack` to get latest version
-- Run `RayPokeTrack`
+- Restart EmulationStation
+- Run `RayPokeTrack` in ports
