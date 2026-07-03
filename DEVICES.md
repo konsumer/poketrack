@@ -8,7 +8,7 @@ The basic idea is you need a Linux-based device. It will work on windows/mac, bu
 
 This is a x86-64 device, running SteamOS (Arch-based linux.) Setup is fairly straightforward. I made a script to make it a bit easier. In desktop mode:
 
-<a download href="https://raw.githubusercontent.com/konsumer/raypoketrack/main/steamdeck-install.py">
+<a download="https://raw.githubusercontent.com/konsumer/raypoketrack/main/steamdeck-install.py" href="https://raw.githubusercontent.com/konsumer/raypoketrack/main/steamdeck-install.py">
   <img alt="Install RayPokeTrack" src="https://img.shields.io/badge/⬇_Save_This-1a9fff?style=for-the-badge">
 </a>
 
