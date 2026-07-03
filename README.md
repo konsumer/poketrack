@@ -14,7 +14,7 @@ In desktop mode:
   <img alt="Install RayPokeTrack" src="https://img.shields.io/badge/⬇_Install_RayPokeTrack-1a9fff?style=for-the-badge">
 </a>
 
-This is a GUI installer script. Save it (browser may just display it — use File > Save Page As), then in your Downloads folder right-click it, check "is executable" under Permissions, and double-click to run. It'll let you pick an install location, optionally grab the example songs/instruments, and optionally add RayPokeTrack as a non-Steam game (with `--fullscreen` launch option already set). Restart Steam afterwards to see it in your library.
+This is a GUI installer script. Right-click the button and "Save Link As" to download it (the browser will otherwise just display it as text), then in your Downloads folder right-click the saved file, check "is executable" under Permissions, and double-click to run. It'll let you pick an install location, optionally grab the example songs/instruments, and optionally add RayPokeTrack as a non-Steam game (with `--fullscreen` launch option already set). Restart Steam afterwards to see it in your library.
 
 ## usage
 
