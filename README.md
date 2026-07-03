@@ -1,6 +1,6 @@
 This is a cross-platform joystick-driven music-tracker.
 
-![logo](./webroot/favicon-96x96.png)
+<img align="right" src="./webroot/favicon-96x96.png" />
 
 ## installation
 
