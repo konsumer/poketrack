@@ -14,8 +14,9 @@ This is a x86-64 device, running SteamOS (Arch-based linux.) Setup is fairly str
 
 This is a GUI installer script. Right-click the button and "Save Link As" to download it (the browser will otherwise just display it as text), then in your Downloads folder right-click the saved file, check "is executable" under Permissions, and double-click to run. It'll let you pick an install location, optionally grab the example songs/instruments, and optionally add RayPokeTrack as a non-Steam game (with `--fullscreen` launch option already set). Restart Steam afterwards to see it in your library.
 
-
 Check out [my video](https://youtu.be/d_ZJUXr0rRQ) for manual setup instructions.
+
+Joystick (analog/dpad/etc) worked for me without any config, but since SELECT is next to dpad, I also added controller-maps so triggers act as START/SELECT (on opposite sides) which allows for easier SELECT + dpad.
 
 ### cheap handhelds (R36Max, R36S, etc.)
 
