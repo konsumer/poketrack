@@ -4,7 +4,7 @@ This is a cross-platform joystick-driven music-tracker.
 
 ## installation
 
-Grab [the latest release](https://github.com/konsumer/raypoketrack/releases/latest) for your platform. Joystick (analog/dpad/etc) worked for me without any config, but since SELECT is next to dpad, I also added controller-maps so triggers act as START/SELECT (on opposite sides) which allows for easier SELECT + dpad.
+Grab [the latest release](https://github.com/konsumer/raypoketrack/releases/latest) for your platform.
 
 You can find device-specific instructions in [DEVICES](./DEVICES.md).
 
