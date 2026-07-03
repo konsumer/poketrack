@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 # Steam Deck installer for RayPokeTrack. Downloads the latest release,
 # optionally the example songs, and optionally adds a non-Steam game
 # shortcut. Only needs python3 + zenity, both preinstalled on SteamOS.

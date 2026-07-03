@@ -6,7 +6,16 @@ The basic idea is you need a Linux-based device. It will work on windows/mac, bu
 
 ### steamdeck
 
-This is a x86-64 device, running SteamOS (Arch-based linux.) Setup is fairly straightforward. Check out [my video](https://youtu.be/d_ZJUXr0rRQ) for setup instructions.
+This is a x86-64 device, running SteamOS (Arch-based linux.) Setup is fairly straightforward. I made a script to make it a bit easier. In desktop mode:
+
+<a href="https://raw.githubusercontent.com/konsumer/raypoketrack/main/steamdeck-install.py">
+  <img alt="Install RayPokeTrack" src="https://img.shields.io/badge/⬇_Install_RayPokeTrack-1a9fff?style=for-the-badge">
+</a>
+
+This is a GUI installer script. Right-click the button and "Save Link As" to download it (the browser will otherwise just display it as text), then in your Downloads folder right-click the saved file, check "is executable" under Permissions, and double-click to run. It'll let you pick an install location, optionally grab the example songs/instruments, and optionally add RayPokeTrack as a non-Steam game (with `--fullscreen` launch option already set). Restart Steam afterwards to see it in your library.
+
+
+Check out [my video](https://youtu.be/d_ZJUXr0rRQ) for manual setup instructions.
 
 ### cheap handhelds (R36Max, R36S, etc.)
 
