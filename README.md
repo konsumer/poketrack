@@ -4,7 +4,17 @@ It uses [CLAP](https://github.com/free-audio/clap) for sound-generation and effe
 
 ## installation
 
-Grab [the latest release](https://github.com/konsumer/raypoketrack/releases) for your platform. On steamdeck, I made a non-steam game launcher. Joystick (analog/dpad/etc) worked for me without any config, but since SELECT is next to dpad, I also added controller-maps so triggers act as START/SELECT (on opposite sides) which allows for easier SELECT + dpad. In launch options, add `--fullscreen`.
+Grab [the latest release](https://github.com/konsumer/raypoketrack/releases) for your platform. Joystick (analog/dpad/etc) worked for me without any config, but since SELECT is next to dpad, I also added controller-maps so triggers act as START/SELECT (on opposite sides) which allows for easier SELECT + dpad.
+
+### steamdeck
+
+In desktop mode:
+
+<a href="https://github.com/konsumer/raypoketrack/releases/latest/download/steamdeck-install.py">
+  <img alt="Install RayPokeTrack" src="https://img.shields.io/badge/⬇_Install_RayPokeTrack-1a9fff?style=for-the-badge">
+</a>
+
+This downloads a GUI installer. In your Downloads folder, right-click it, check "is executable" under Permissions, then double-click to run. It'll let you pick an install location, optionally grab the example songs/instruments, and optionally add RayPokeTrack as a non-Steam game (with `--fullscreen` launch option already set). Restart Steam afterwards to see it in your library.
 
 I don't have mobile builds setup yet, but it should work OK on the web:
 
