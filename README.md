@@ -6,15 +6,7 @@ It uses [CLAP](https://github.com/free-audio/clap) for sound-generation and effe
 
 Grab [the latest release](https://github.com/konsumer/raypoketrack/releases) for your platform. Joystick (analog/dpad/etc) worked for me without any config, but since SELECT is next to dpad, I also added controller-maps so triggers act as START/SELECT (on opposite sides) which allows for easier SELECT + dpad.
 
-### steamdeck
-
-In desktop mode:
-
-<a href="https://raw.githubusercontent.com/konsumer/raypoketrack/main/ports/steamdeck-install.py">
-  <img alt="Install RayPokeTrack" src="https://img.shields.io/badge/⬇_Install_RayPokeTrack-1a9fff?style=for-the-badge">
-</a>
-
-This is a GUI installer script. Right-click the button and "Save Link As" to download it (the browser will otherwise just display it as text), then in your Downloads folder right-click the saved file, check "is executable" under Permissions, and double-click to run. It'll let you pick an install location, optionally grab the example songs/instruments, and optionally add RayPokeTrack as a non-Steam game (with `--fullscreen` launch option already set). Restart Steam afterwards to see it in your library.
+You can find device-specific instructions in [DEVICES](./DEVICES.md).
 
 ## usage
 
