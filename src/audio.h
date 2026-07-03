@@ -1,6 +1,9 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
+#ifndef __EMSCRIPTEN__
+#include <pthread.h>
+#endif
 
 #ifndef __EMSCRIPTEN__
 #include "clap_host.h"
@@ -19,6 +22,14 @@ typedef struct {
 typedef struct {
   TrackerSong* song;
   char save_dir[512];  // directory of loaded save file, for relative path resolution
+
+  // Guards chan_states/preview_states/midi_voices/active_inst against the
+  // audio callback thread (audio_fill_buffer) racing with main-thread edits
+  // (e.g. swapping an instrument's SF2 file mid-playback destroys/frees the
+  // UnitState the audio thread may be rendering right then).
+#ifndef __EMSCRIPTEN__
+  pthread_mutex_t lock;
+#endif
 
   bool playing;
   bool pattern_loop;           // true = loop one pattern instead of full song
