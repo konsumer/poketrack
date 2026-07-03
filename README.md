@@ -16,12 +16,6 @@ In desktop mode:
 
 This downloads a GUI installer. In your Downloads folder, right-click it, check "is executable" under Permissions, then double-click to run. It'll let you pick an install location, optionally grab the example songs/instruments, and optionally add RayPokeTrack as a non-Steam game (with `--fullscreen` launch option already set). Restart Steam afterwards to see it in your library.
 
-I don't have mobile builds setup yet, but it should work OK on the web:
-
-<a href="https://konsumer.js.org/raypoketrack/">
- <img width="150" height="150" alt="image" src="https://github.com/user-attachments/assets/aec5b46b-2ffd-4eba-8ba8-43275f548eca" />
-</a>
-
 ## usage
 
 You should be able to track quickly with a joystick, or keys:
