@@ -116,7 +116,7 @@ static void name_backspace(TrackerSong *song) {
 }
 
 void screen_menu_update(UIState *ui) {
-  bool edit = input_held(BTN_A);
+  bool edit = input_held(BTN_OK);
 
   if (status_timer > 0)
     status_timer--;
@@ -172,8 +172,8 @@ void screen_menu_update(UIState *ui) {
         g_kb_col = kb_max_col(g_kb_row) - 1;
     }
 
-    // BTN_A: type selected on-screen key; flush char queue so the keypress doesn't also type
-    if (input_pressed(BTN_A)) {
+    // BTN_OK: type selected on-screen key; flush char queue so the keypress doesn't also type
+    if (input_pressed(BTN_OK)) {
       while (GetCharPressed() > 0) {}
       if (g_kb_row < KB_CHAR_ROWS) {
         char c = KB_CHARS[g_kb_row][g_kb_col];
@@ -188,7 +188,7 @@ void screen_menu_update(UIState *ui) {
         }
       }
     } else {
-      // Physical keyboard input (only when BTN_A not pressed)
+      // Physical keyboard input (only when BTN_OK not pressed)
       int ch;
       while ((ch = GetCharPressed()) > 0) {
         if (ch >= 32)
@@ -202,15 +202,15 @@ void screen_menu_update(UIState *ui) {
       }
     }
 
-    // BTN_B: exit name editing
-    if (input_pressed(BTN_B))
+    // BTN_NO: exit name editing
+    if (input_pressed(BTN_NO))
       g_name_editing = false;
 
     return;
   }
 
-  // BTN_Y anywhere on menu screen enters name editing (works with or without A held)
-  if (input_pressed(BTN_Y)) {
+  // BTN_NONE anywhere on menu screen enters name editing (works with or without A held)
+  if (input_pressed(BTN_NONE)) {
     enter_name_editing(ui->song);
     return;
   }
@@ -223,7 +223,7 @@ void screen_menu_update(UIState *ui) {
   } else {
     switch (ui->menu_row) {
       case MENU_SONG_NAME:
-        if (input_pressed(BTN_A))
+        if (input_pressed(BTN_OK))
           enter_name_editing(ui->song);
         break;
 
@@ -255,12 +255,12 @@ void screen_menu_update(UIState *ui) {
         break;
 
       case MENU_LOOP:
-        if (input_pressed(BTN_UP) || input_pressed(BTN_DOWN) || input_pressed(BTN_A))
+        if (input_pressed(BTN_UP) || input_pressed(BTN_DOWN) || input_pressed(BTN_OK))
           ui->song->loop = !ui->song->loop;
         break;
 
       case MENU_SAVE: {
-        if (input_pressed(BTN_A)) {
+        if (input_pressed(BTN_OK)) {
           char fname[64], path[576];
           song_save_path(ui->song, fname, sizeof(fname));
           snprintf(path, sizeof(path), "%s%s", ui->engine->save_dir, fname);
@@ -276,14 +276,14 @@ void screen_menu_update(UIState *ui) {
       }
 
       case MENU_LOAD:
-        if (input_pressed(BTN_A)) {
+        if (input_pressed(BTN_OK)) {
           g_fb_mode = MENU_FB_LOAD;
           file_browser_open("Load song", "*.rpt");
         }
         break;
 
       case MENU_NEW:
-        if (input_pressed(BTN_A)) {
+        if (input_pressed(BTN_OK)) {
           audio_stop(ui->engine);
           tracker_clear(ui->song);
           ui->song_row = ui->song_col = 0;
@@ -296,11 +296,11 @@ void screen_menu_update(UIState *ui) {
         break;
 #ifndef __EMSCRIPTEN__
       case MENU_FULLSCREEN:
-        if (input_pressed(BTN_UP) || input_pressed(BTN_DOWN) || input_pressed(BTN_A))
+        if (input_pressed(BTN_UP) || input_pressed(BTN_DOWN) || input_pressed(BTN_OK))
           ToggleFullscreen();
         break;
       case MENU_EXIT:
-        if (input_pressed(BTN_A))
+        if (input_pressed(BTN_OK))
           exit(0);
         break;
 #endif

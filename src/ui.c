@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "file_browser.h"
+#include "icons.h"
 
 // Indexed by track (0-F) in the pattern screen and by lane (0..SONG_CHANNELS-1) in the song screen.
 const Color CH_COLORS[PATTERN_TRACKS] = {
@@ -104,7 +105,7 @@ void ui_update(UIState* ui) {
 
   if (!file_browser_active()) {
     // START = play/stop; pattern screen loops current pattern only
-    if (input_pressed(BTN_START) && !input_held(BTN_SELECT)) {
+    if (input_pressed(BTN_PLAY) && !input_held(BTN_SCREEN)) {
       if (audio_is_playing(ui->engine)) {
         audio_stop(ui->engine);
       } else if (ui->screen == SCREEN_PATTERN) {
@@ -113,7 +114,7 @@ void ui_update(UIState* ui) {
         audio_play(ui->engine);
       }
     }
-    if (input_pressed(BTN_START) && input_held(BTN_SELECT) && !audio_is_playing(ui->engine)) {
+    if (input_pressed(BTN_PLAY) && input_held(BTN_SCREEN) && !audio_is_playing(ui->engine)) {
       if (ui->screen == SCREEN_SONG)
         audio_play_from(ui->engine, (uint16_t)ui->song_row);
       else
@@ -121,7 +122,7 @@ void ui_update(UIState* ui) {
     }
 
     // SELECT + direction = switch screen (takes priority, no A held)
-    if (input_held(BTN_SELECT) && !input_held(BTN_A)) {
+    if (input_held(BTN_SCREEN) && !input_held(BTN_OK)) {
       AppScreen prev = ui->screen;
       if (input_pressed(BTN_LEFT))
         ui->screen = SCREEN_SONG;
@@ -170,7 +171,7 @@ static const char* screen_label(AppScreen s) {
 }
 
 static void draw_status(UIState* ui) {
-  bool edit = input_held(BTN_A);
+  bool edit = input_held(BTN_OK);
   Color bar = edit ? (Color){0x14, 0x0C, 0x28, 0xFF} : C_BG_ALT;
 
   // Top bar
@@ -205,35 +206,39 @@ static void draw_status(UIState* ui) {
   if (edit) {
     switch (ui->screen) {
       case SCREEN_SONG:
-        hint = "A+UP/DN: set pattern#  A+B: clear cell";
+        hint = "{OK}+{UP}/{DOWN}: set pattern#  {OK}+{NO}: clear cell";
         break;
       case SCREEN_PATTERN:
         switch (ui->pattern_col) {
           case 0:
-            hint = "A+UP/DN: note semitone  A+LT/RT: octave  A+B: note-off  A+SEL+B: clear";
+            hint = "{OK}+{UP}/{DOWN}: note semitone  {OK}+{PREV}/{NEXT}: octave  {OK}+{NO}: note-off  {OK}+{SCREEN}+{NO}: clear";
             break;
           case 1:
-            hint = "A+UP/DN: velocity +-1   A+LT/RT: +-16";
+            hint = "{OK}+{UP}/{DOWN}: velocity +-1   {OK}+{PREV}/{NEXT}: +-16";
             break;
           case 2:
-            hint = "A+UP/DN: instrument#   B: reset to 0";
+            hint = "{OK}+{UP}/{DOWN}: instrument#   {NO}: reset to 0";
             break;
           default:
-            hint = "A+UP/DN: fx value  A+LT/RT: coarse";
+            hint = "{OK}+{UP}/{DOWN}: fx value  {OK}+{PREV}/{NEXT}: coarse";
             break;
         }
         break;
       case SCREEN_INSTRUMENT:
-        hint = "A+UP/DN: value +-fine   A+LT/RT: coarse";
+        hint = "{OK}+{UP}/{DOWN}: value +-fine   {OK}+{PREV}/{NEXT}: coarse";
         break;
       case SCREEN_MENU:
-        hint = "A+UP/DN: change value";
+        hint = "{OK}+{UP}/{DOWN}: change value";
         break;
     }
+  } else if (ui->screen == SCREEN_PATTERN) {
+    hint = "hold{OK}+dpad: edit   {NO}: clear/back   {PREV} prev  {NEXT} next   {PLAY}: play/stop";
+  } else if (ui->screen == SCREEN_INSTRUMENT) {
+    hint = "hold{OK}+dpad: edit   {NO}: clear/back   {PREV} prev  {NEXT} next   {PLAY}: play/stop";
   } else {
-    hint = "DPAD: move   holdA+DPAD: edit   B: clear/back   START: play/stop";
+    hint = "hold{OK}+dpad: edit   {NO}: clear/back   {PLAY}: play/stop";
   }
-  DrawText(hint, 4, WIN_H - STATUS_H + (STATUS_H - (FONT_S - 1)) / 2, FONT_S - 1, C_DIM);
+  hint_draw(hint, 4, WIN_H - STATUS_H + (STATUS_H - (FONT_S - 1)) / 2, FONT_S - 1, C_DIM);
 }
 
 // ---- Shared keyboard modal -------------------------------------------------
@@ -290,7 +295,7 @@ bool kb_modal_update(KBModal* kb) {
       kb->col = kbm_max_col(kb->row) - 1;
   }
 
-  if (input_pressed(BTN_A)) {
+  if (input_pressed(BTN_OK)) {
     while (GetCharPressed() > 0) {
     }
     if (kb->row < KBM_CHAR_ROWS) {
@@ -348,7 +353,7 @@ bool kb_modal_update(KBModal* kb) {
     }
   }
 
-  if (input_pressed(BTN_B)) {
+  if (input_pressed(BTN_NO)) {
     kb->active = false;
     return true;
   }

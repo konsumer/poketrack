@@ -43,19 +43,19 @@ void screen_instrument_update(UIState* ui) {
   midi_web_request_access();  // idempotent — fires once, gives promise time to resolve before picker opens
 #endif
 
-  bool edit = input_held(BTN_A);
+  bool edit = input_held(BTN_OK);
   bool in_params = (ui->inst_row >= INST_PARAM_BASE);
   bool in_io = (!in_params && ui->inst_row >= INST_SAVE_ROW);
   bool in_midi = (!in_params && !in_io && ui->inst_row >= INST_MIDI_DEV_ROW);
 
   // L/R shoulder: cycle instrument (not while editing or in param/midi rows)
   if (!edit && !in_params && !in_midi) {
-    if (ui_repeat(BTN_R) && ui->ctx_instrument < NUM_INSTRUMENTS - 1) {
+    if (ui_repeat(BTN_NEXT) && ui->ctx_instrument < NUM_INSTRUMENTS - 1) {
       ui->ctx_instrument++;
       ui->inst_row = 0;
       inst = &ui->song->instruments[ui->ctx_instrument];
     }
-    if (ui_repeat(BTN_L) && ui->ctx_instrument > 0) {
+    if (ui_repeat(BTN_PREV) && ui->ctx_instrument > 0) {
       ui->ctx_instrument--;
       ui->inst_row = 0;
       inst = &ui->song->instruments[ui->ctx_instrument];
@@ -69,7 +69,7 @@ void screen_instrument_update(UIState* ui) {
       ui->midi_in_picker_row--;
     if (ui_repeat(BTN_DOWN) && ui->midi_in_picker_row < total - 1)
       ui->midi_in_picker_row++;
-    if (input_pressed(BTN_A)) {
+    if (input_pressed(BTN_OK)) {
       if (ui->midi_in_picker_row == 0) {
         inst->midi_in_device[0] = '\0';
       } else {
@@ -79,7 +79,7 @@ void screen_instrument_update(UIState* ui) {
       }
       ui->midi_in_picker_active = false;
     }
-    if (input_pressed(BTN_B))
+    if (input_pressed(BTN_NO))
       ui->midi_in_picker_active = false;
     return;
   }
@@ -98,7 +98,7 @@ void screen_instrument_update(UIState* ui) {
       }
       if (ui_repeat(BTN_RIGHT) && slot_def(inst, slot))
         ui->inst_row = INST_PARAM_BASE;
-      if (input_pressed(BTN_B)) {
+      if (input_pressed(BTN_NO)) {
         audio_rebuild_instrument(ui->engine, (uint8_t)ui->ctx_instrument);
         memset(&inst->chain[slot], 0, sizeof(ChainSlot));
       }
@@ -122,14 +122,14 @@ void screen_instrument_update(UIState* ui) {
         audio_rebuild_instrument(ui->engine, (uint8_t)ui->ctx_instrument);
         tracker_inst_set_slot(inst, slot, defs[cur_idx]->id, ui->ctx_instrument);
       }
-      if (input_pressed(BTN_B) && sl->unit_id[0])
+      if (input_pressed(BTN_NO) && sl->unit_id[0])
         sl->enabled = !sl->enabled;
     }
 
     // ---- MIDI-in rows (INST_MIDI_DEV_ROW, INST_MIDI_CH_ROW) ----
   } else if (in_midi) {
     // A on DEVICE row: open picker (must be outside !edit block — same as DATA/ADD row pattern)
-    if (ui->inst_row == INST_MIDI_DEV_ROW && input_pressed(BTN_A)) {
+    if (ui->inst_row == INST_MIDI_DEV_ROW && input_pressed(BTN_OK)) {
 #ifdef __EMSCRIPTEN__
       midi_web_request_access();
 #endif
@@ -148,11 +148,11 @@ void screen_instrument_update(UIState* ui) {
         ui->inst_row = INST_PARAM_BASE;
 
       // DEV row: B = clear device
-      if (ui->inst_row == INST_MIDI_DEV_ROW && input_pressed(BTN_B))
+      if (ui->inst_row == INST_MIDI_DEV_ROW && input_pressed(BTN_NO))
         inst->midi_in_device[0] = '\0';
 
       // CHN row: B = reset to 0 (all)
-      if (ui->inst_row == INST_MIDI_CH_ROW && input_pressed(BTN_B))
+      if (ui->inst_row == INST_MIDI_CH_ROW && input_pressed(BTN_NO))
         inst->midi_in_channel = 0;
     } else {
       // Hold A + UP/DOWN on CHN row to change channel (0-16)
@@ -196,7 +196,7 @@ void screen_instrument_update(UIState* ui) {
       if (ui_repeat(BTN_RIGHT) && slot_def(inst, ui->ctx_instrument_slot))
         ui->inst_row = INST_PARAM_BASE;
     }
-    if (input_pressed(BTN_A)) {
+    if (input_pressed(BTN_OK)) {
       if (ui->inst_row == INST_SAVE_ROW) {
         char fname[64];
         snprintf(fname, sizeof(fname), "%s.rpti", inst->name[0] ? inst->name : "inst");
@@ -239,14 +239,14 @@ void screen_instrument_update(UIState* ui) {
         ui->dev_picker_row--;
       if (ui_repeat(BTN_DOWN) && ui->dev_picker_row < total - 1)
         ui->dev_picker_row++;
-      if (input_pressed(BTN_A)) {
+      if (input_pressed(BTN_OK)) {
         def->dev_picker_set(state, ui->dev_picker_row);
         if (def->sync_to_data)
           def->sync_to_data(state, sl->data, sizeof(sl->data));
         audio_rebuild_instrument(ui->engine, (uint8_t)ui->ctx_instrument);
         ui->dev_picker_active = false;
       }
-      if (input_pressed(BTN_B))
+      if (input_pressed(BTN_NO))
         ui->dev_picker_active = false;
       return;
     }
@@ -258,7 +258,7 @@ void screen_instrument_update(UIState* ui) {
         ui->clap_picker_row--;
       if (ui_repeat(BTN_DOWN) && ui->clap_picker_row < total - 1)
         ui->clap_picker_row++;
-      if (input_pressed(BTN_A)) {
+      if (input_pressed(BTN_OK)) {
         int before = def->dyn_num_params ? def->dyn_num_params(state) : 0;
         def->picker_add(state, ui->clap_picker_row);
         if (def->sync_to_data)
@@ -268,7 +268,7 @@ void screen_instrument_update(UIState* ui) {
           ui->inst_row = INST_PARAM_BASE + after;
         ui->clap_picker_active = false;
       }
-      if (input_pressed(BTN_B))
+      if (input_pressed(BTN_NO))
         ui->clap_picker_active = false;
       return;
     }
@@ -292,7 +292,7 @@ void screen_instrument_update(UIState* ui) {
       return;
 
     // A on DATA row: open device picker or file browser
-    if (on_data && input_pressed(BTN_A)) {
+    if (on_data && input_pressed(BTN_OK)) {
       if (def->dev_picker_count && def->dev_picker_set && state) {
 #ifdef __EMSCRIPTEN__
         midi_web_request_access();
@@ -306,7 +306,7 @@ void screen_instrument_update(UIState* ui) {
     }
 
     // A on ADD row: open picker
-    if (on_add && input_pressed(BTN_A)) {
+    if (on_add && input_pressed(BTN_OK)) {
       ui->clap_picker_active = true;
       ui->clap_picker_row = 0;
     }
@@ -341,12 +341,12 @@ void screen_instrument_update(UIState* ui) {
         ui->inst_param_cc_col = true;
 
       if (on_data) {
-        if (input_pressed(BTN_B)) {
+        if (input_pressed(BTN_NO)) {
           audio_rebuild_instrument(ui->engine, (uint8_t)ui->ctx_instrument);
           inst->chain[slot].data[0] = '\0';
         }
       } else if (!on_add && param >= 0 && param < nparams) {
-        if (input_pressed(BTN_B)) {
+        if (input_pressed(BTN_NO)) {
           if (on_cc_col) {
             // B on CC col: back to value col
             ui->inst_param_cc_col = false;
@@ -426,7 +426,7 @@ void screen_instrument_update(UIState* ui) {
             changed = true;
           }
         }
-        if (input_pressed(BTN_B)) {
+        if (input_pressed(BTN_NO)) {
           cur_v = (def->get_param_default && state)
                       ? def->get_param_default(state, param)
                       : (param < UNIT_MAX_PARAMS ? def->param_defaults[param] : 0);

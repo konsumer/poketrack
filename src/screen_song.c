@@ -24,7 +24,7 @@ static uint8_t next_free_pattern(TrackerSong *song) {
 
 void screen_song_update(UIState *ui) {
   TrackerSong *song = ui->song;
-  bool edit = input_held(BTN_A);
+  bool edit = input_held(BTN_OK);
   bool in_footer = (ui->song_row == (int)song->song_len);
 
   // Handle footer before the edit check — A press would be eaten by edit mode otherwise
@@ -39,7 +39,7 @@ void screen_song_update(UIState *ui) {
     if (ui->song_col > 1) ui->song_col = 1;
 
     // col 0 = "+", col 1 = "-"
-    if (input_pressed(BTN_A)) {
+    if (input_pressed(BTN_OK)) {
       if (ui->song_col == 0 && song->song_len < MAX_SONG_LEN) {
         song->song_len++;
       } else if (ui->song_col == 1 && song->song_len > 1) {
@@ -77,16 +77,16 @@ void screen_song_update(UIState *ui) {
       if (ui->song_col < ui->song_col_scroll) ui->song_col_scroll = ui->song_col;
     }
 
-    if (ui_repeat(BTN_R))
+    if (ui_repeat(BTN_NEXT))
       ui->song_row = (ui->song_row + 8 < (int)song->song_len) ? ui->song_row + 8 : song->song_len - 1;
-    if (ui_repeat(BTN_L))
+    if (ui_repeat(BTN_PREV))
       ui->song_row = (ui->song_row >= 8) ? ui->song_row - 8 : 0;
 
     if (ui->song_row < ui->song_scroll) ui->song_scroll = ui->song_row;
     if (ui->song_row >= ui->song_scroll + SONG_VISIBLE)
       ui->song_scroll = ui->song_row - SONG_VISIBLE + 1;
 
-    if (input_pressed(BTN_B))
+    if (input_pressed(BTN_NO))
       song->patterns[ui->song_col][ui->song_row] = TRACKER_EMPTY;
 
   } else {
@@ -101,7 +101,7 @@ void screen_song_update(UIState *ui) {
       else if (*cell > 0) (*cell)--;
       ui->last_pattern = *cell;
     }
-    if (input_pressed(BTN_B)) *cell = TRACKER_EMPTY;
+    if (input_pressed(BTN_NO)) *cell = TRACKER_EMPTY;
   }
 
   if (ui->song_row > (int)song->song_len) ui->song_row = song->song_len;

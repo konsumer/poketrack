@@ -50,6 +50,7 @@ set(SOURCES
     src/main.c
     src/tracker.c
     src/input.c
+    src/icons.c
     src/audio.c
     src/ui.c
     src/file_browser.c

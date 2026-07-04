@@ -28,9 +28,9 @@ static uint8_t next_free_phrase(TrackerSong *song) {
 void screen_chain_update(UIState *ui) {
   TrackerSong *song = ui->song;
   TrackerChain *chain = &song->chain_data[ui->ctx_chain];
-  bool sel = input_held(BTN_SELECT);
+  bool sel = input_held(BTN_SCREEN);
 
-  bool edit = input_held(BTN_A);
+  bool edit = input_held(BTN_OK);
 
   if (!edit) {
     if (ui_repeat(BTN_UP) && ui->chain_row > 0)
@@ -43,7 +43,7 @@ void screen_chain_update(UIState *ui) {
       ui->chain_col++;
 
     // A: enter phrase editor (not edit mode — quick tap)
-    if (input_pressed(BTN_A) && ui->chain_col == 0) {
+    if (input_pressed(BTN_OK) && ui->chain_col == 0) {
       uint8_t pi = chain->phrase[ui->chain_row];
       if (pi == TRACKER_EMPTY) {
         pi = next_free_phrase(song);
@@ -59,7 +59,7 @@ void screen_chain_update(UIState *ui) {
     }
 
     // B: back to song
-    if (input_pressed(BTN_B))
+    if (input_pressed(BTN_NO))
       ui->screen = SCREEN_SONG;
 
     // SELECT+B: clear current row
@@ -80,7 +80,7 @@ void screen_chain_update(UIState *ui) {
         else if (pi < NUM_PHRASES - 1)
           chain->phrase[row]++;
       }
-      if (input_pressed(BTN_B))
+      if (input_pressed(BTN_NO))
         chain->phrase[row] = TRACKER_EMPTY;
     } else {
       // Transpose
@@ -89,7 +89,7 @@ void screen_chain_update(UIState *ui) {
         chain->transpose[row]++;
       if (ui_repeat(BTN_DOWN) && tp > -36)
         chain->transpose[row]--;
-      if (input_pressed(BTN_B))
+      if (input_pressed(BTN_NO))
         chain->transpose[row] = 0;
     }
   }
