@@ -101,5 +101,11 @@ bool input_released(TrackerButton btn) { return !curr[btn] && prev[btn]; }
 bool input_held(TrackerButton btn) { return curr[btn]; }
 int input_held_frames(TrackerButton btn) { return hframes[btn]; }
 
-bool input_gamepad_connected(void) { return IsGamepadAvailable(0); }
+bool input_gamepad_connected(void) {
+#ifdef FORCE_GAMEPAD_ICONS
+  return true;  // test gamepad icon rendering without a physical controller
+#else
+  return IsGamepadAvailable(0);
+#endif
+}
 int input_kb_key(TrackerButton btn) { return KB_MAP[btn]; }

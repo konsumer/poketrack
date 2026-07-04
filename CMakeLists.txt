@@ -88,6 +88,11 @@ endif()
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 
+option(FORCE_GAMEPAD_ICONS "Always render gamepad-style button icons, even with no controller connected (for testing icon layout)" OFF)
+if(FORCE_GAMEPAD_ICONS)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE FORCE_GAMEPAD_ICONS)
+endif()
+
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${raylib_SOURCE_DIR}/src
     ${TSF_INCLUDE_DIR}
