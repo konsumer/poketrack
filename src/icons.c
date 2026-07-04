@@ -34,9 +34,26 @@ static Color face_color(TrackerButton btn) {
   }
 }
 
+// Hand-tune these against a real controller (nobody on this end has one) and
+// rebuild — positive X moves the glyph right, positive Y moves it down.
+#define FACE_LABEL_DX 0
+#define FACE_LABEL_DY 0
+
+// Extra size for every gamepad glyph (circles/shoulder/play/select) — they
+// read as too small/cramped at the plain hint-text row height.
+#define GAMEPAD_SIZE_BOOST 4
+
+// DrawText's y is the top of the glyph box, and that box is taller than the
+// visible ink (the default font pads above/below) — so centering by `fs`
+// alone lands low. MeasureTextEx reports the font's real render box, which is
+// what actually needs to straddle (cx, cy).
+static void draw_centered_text_ex(const char* s, int cx, int cy, int fs, Color c, int dx, int dy) {
+  Vector2 dim = MeasureTextEx(GetFontDefault(), s, (float)fs, 1.0f);
+  DrawText(s, cx - (int)(dim.x / 2) + dx, cy - (int)(dim.y / 2) + dy, fs, c);
+}
+
 static void draw_centered_text(const char* s, int cx, int cy, int fs, Color c) {
-  int w = MeasureText(s, fs);
-  DrawText(s, cx - w / 2, cy - fs / 2, fs, c);
+  draw_centered_text_ex(s, cx, cy, fs, c, 0, 0);
 }
 
 static void draw_arrow(TrackerButton btn, int x, int y, int size) {
@@ -102,18 +119,19 @@ static void draw_keycap(TrackerButton btn, int x, int y, int size) {
   const char* lbl = key_label(key);
   int fs = strlen(lbl) > 1 ? size - 4 : size - 2;
   if (fs < 5) fs = 5;
-  draw_centered_text(lbl, x + size / 2, y + size / 2 + 1, fs, C_GLYPH_LIGHT);
+  draw_centered_text(lbl, x + size / 2, y + size / 2, fs, C_GLYPH_LIGHT);
 }
 
 static void draw_face(TrackerButton btn, int x, int y, int size) {
   int cx = x + size / 2, cy = y + size / 2;
   DrawCircle(cx, cy, (float)(size / 2), face_color(btn));
-  draw_centered_text(face_label(btn), cx, cy + 1, size - 3, C_GLYPH_DARK);
+  draw_centered_text_ex(face_label(btn), cx, cy, size - 3, C_GLYPH_DARK, FACE_LABEL_DX,
+                        FACE_LABEL_DY);
 }
 
 static void draw_shoulder(TrackerButton btn, int x, int y, int size) {
   DrawRectangle(x, y, size, size, C_CHROME);
-  draw_centered_text(btn == BTN_PREV ? "L" : "R", x + size / 2, y + size / 2 + 1, size - 2,
+  draw_centered_text(btn == BTN_PREV ? "L" : "R", x + size / 2, y + size / 2, size - 2,
                       C_GLYPH_LIGHT);
 }
 
@@ -140,34 +158,44 @@ int icon_draw(TrackerButton btn, int x, int y, int size, Color fg) {
     return size;
   }
   bool gp = input_gamepad_connected();
+  // Gamepad glyphs (circles/shoulder boxes/play/select) all read poorly at
+  // exactly the text row height, so every one of them gets the same size
+  // boost and the same upward shift to stay centered on the text baseline —
+  // otherwise buttons that skip the boost sit lower than the ones that don't.
+  int gsize = size + GAMEPAD_SIZE_BOOST;
+  int gy = y - GAMEPAD_SIZE_BOOST / 2;
   switch (btn) {
     case BTN_OK:
     case BTN_NO:
     case BTN_ALL:
     case BTN_NONE:
-      if (gp)
-        draw_face(btn, x, y, size);
-      else
-        draw_keycap(btn, x, y, size);
+      if (gp) {
+        draw_face(btn, x, gy, gsize);
+        return gsize;
+      }
+      draw_keycap(btn, x, y, size);
       break;
     case BTN_PREV:
     case BTN_NEXT:
-      if (gp)
-        draw_shoulder(btn, x, y, size);
-      else
-        draw_keycap(btn, x, y, size);
+      if (gp) {
+        draw_shoulder(btn, x, gy, gsize);
+        return gsize;
+      }
+      draw_keycap(btn, x, y, size);
       break;
     case BTN_PLAY:
-      if (gp)
-        draw_play(x, y, size);
-      else
-        draw_keycap(btn, x, y, size);
+      if (gp) {
+        draw_play(x, gy, gsize);
+        return gsize;
+      }
+      draw_keycap(btn, x, y, size);
       break;
     case BTN_SCREEN:
-      if (gp)
-        draw_screen(x, y, size);
-      else
-        draw_keycap(btn, x, y, size);
+      if (gp) {
+        draw_screen(x, gy, gsize);
+        return gsize;
+      }
+      draw_keycap(btn, x, y, size);
       break;
     default:
       break;
