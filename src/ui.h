@@ -109,7 +109,7 @@ typedef struct {
 } KBModal;
 
 void kb_modal_open(KBModal* kb, char* buf, int buf_sz);
-// Returns true when modal closes (OK or BTN_B). Caller checks buf for result.
+// Returns true when modal closes (OK or BTN_NO). Caller checks buf for result.
 bool kb_modal_update(KBModal* kb);
 void kb_modal_draw(KBModal* kb, const char* label);
 const char* note_str(uint8_t note);

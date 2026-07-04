@@ -334,7 +334,7 @@ void file_browser_tick(void) {
   int vis = vis_rows();
 
   // SELECT+B always cancels
-  if (input_held(BTN_SELECT) && input_pressed(BTN_B)) {
+  if (input_held(BTN_SCREEN) && input_pressed(BTN_NO)) {
     g_mode = FB_NONE;
     g_ready = 0;
     return;
@@ -360,7 +360,7 @@ void file_browser_tick(void) {
       if (g_kb_col >= fb_kb_max_col(g_kb_row)) g_kb_col = fb_kb_max_col(g_kb_row) - 1;
     }
 
-    if (input_pressed(BTN_A)) {
+    if (input_pressed(BTN_OK)) {
       if (g_kb_row < FB_KB_CHAR_ROWS) {
         char c = FB_KB_CHARS[g_kb_row][g_kb_col];
         fb_fname_append(g_kb_shift ? (c >= 'A' && c <= 'Z' ? c + 32 : c) : c);
@@ -374,7 +374,7 @@ void file_browser_tick(void) {
         }
       }
     }
-    if (input_pressed(BTN_B))
+    if (input_pressed(BTN_NO))
       g_fname_ed = false;
     return;
   }
@@ -390,7 +390,7 @@ void file_browser_tick(void) {
       g_scr = g_cur - vis + 1;
   }
 
-  if (input_pressed(BTN_A)) {
+  if (input_pressed(BTN_OK)) {
     if (g_cnt == 0) {
       if (g_mode == FB_SAVE) fb_fname_confirm();
       return;
@@ -413,13 +413,13 @@ void file_browser_tick(void) {
     }
   }
 
-  if (input_pressed(BTN_B))
+  if (input_pressed(BTN_NO))
     go_up();
 
   if (g_mode == FB_SAVE) {
-    if (input_pressed(BTN_Y))
+    if (input_pressed(BTN_NONE))
       fb_enter_kb();
-    if (input_pressed(BTN_START)) {
+    if (input_pressed(BTN_PLAY)) {
       if (g_fname[0]) fb_fname_confirm();
       else fb_enter_kb();
     }

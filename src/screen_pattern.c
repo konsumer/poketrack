@@ -76,9 +76,9 @@ static void ensure_track_visible(UIState* ui) {
 
 void screen_pattern_update(UIState* ui) {
   Pattern* pat = &ui->song->pattern_data[ui->ctx_pattern];
-  bool edit = input_held(BTN_A);
+  bool edit = input_held(BTN_OK);
 
-  if (input_released(BTN_A))
+  if (input_released(BTN_OK))
     audio_preview_kill(ui->engine);
 
   // Footer row: pat->len  (cols: 0=+ 1=- 2=SAVE 3=LOAD)
@@ -105,14 +105,14 @@ void screen_pattern_update(UIState* ui) {
 
   // L/R shoulder: cycle patterns (not while editing)
   if (!edit) {
-    if (ui_repeat(BTN_R) && ui->ctx_pattern < NUM_PATTERNS - 1) {
+    if (ui_repeat(BTN_NEXT) && ui->ctx_pattern < NUM_PATTERNS - 1) {
       ui->ctx_pattern++;
       pat = &ui->song->pattern_data[ui->ctx_pattern];
       if (ui->pattern_row > (int)pat->len)
         ui->pattern_row = pat->len;
       in_footer = (ui->pattern_row == (int)pat->len);
     }
-    if (ui_repeat(BTN_L) && ui->ctx_pattern > 0) {
+    if (ui_repeat(BTN_PREV) && ui->ctx_pattern > 0) {
       ui->ctx_pattern--;
       pat = &ui->song->pattern_data[ui->ctx_pattern];
       if (ui->pattern_row > (int)pat->len)
@@ -135,7 +135,7 @@ void screen_pattern_update(UIState* ui) {
       if (ui->pattern_col < 3)
         ui->pattern_col++;
     }
-    if (input_pressed(BTN_A)) {
+    if (input_pressed(BTN_OK)) {
       if (ui->pattern_col == 0 && pat->len < MAX_PATTERN_STEPS)
         pat->len++;
       else if (ui->pattern_col == 1 && pat->len > 1)
@@ -186,7 +186,7 @@ void screen_pattern_update(UIState* ui) {
       ensure_track_visible(ui);
     }
 
-    if (input_pressed(BTN_B)) {
+    if (input_pressed(BTN_NO)) {
       switch (ui->pattern_col) {
         case 0:
           step->note = NOTE_EMPTY;
@@ -254,7 +254,7 @@ void screen_pattern_update(UIState* ui) {
           ui->last_note = step->note;
           preview(ui, step->note);
         }
-        if (input_pressed(BTN_B))
+        if (input_pressed(BTN_NO))
           step->note = NOTE_OFF;
         break;
       }
@@ -267,7 +267,7 @@ void screen_pattern_update(UIState* ui) {
           step->velocity = clamp8(step->velocity + 16);
         if (ui_repeat(BTN_LEFT))
           step->velocity = clamp8((int)step->velocity - 16);
-        if (input_pressed(BTN_B))
+        if (input_pressed(BTN_NO))
           step->velocity = 0xFF;
         break;
       case 2:
@@ -275,7 +275,7 @@ void screen_pattern_update(UIState* ui) {
           step->instrument++;
         if (ui_repeat(BTN_DOWN) && step->instrument > 0)
           step->instrument--;
-        if (input_pressed(BTN_B))
+        if (input_pressed(BTN_NO))
           step->instrument = 0;
         ui->ctx_instrument = step->instrument;
         break;
@@ -289,7 +289,7 @@ void screen_pattern_update(UIState* ui) {
           *f = (*f == TRACKER_EMPTY) ? 0 : (*f + 16 > 0xFE ? 0xFE : *f + 16);
         if (ui_repeat(BTN_LEFT))
           *f = (*f == TRACKER_EMPTY || *f < 16) ? TRACKER_EMPTY : *f - 16;
-        if (input_pressed(BTN_B))
+        if (input_pressed(BTN_NO))
           *f = TRACKER_EMPTY;
         break;
       }
@@ -302,7 +302,7 @@ void screen_pattern_update(UIState* ui) {
           step->fxv[0] = clamp8(step->fxv[0] + 16);
         if (ui_repeat(BTN_LEFT))
           step->fxv[0] = clamp8((int)step->fxv[0] - 16);
-        if (input_pressed(BTN_B))
+        if (input_pressed(BTN_NO))
           step->fxv[0] = 0;
         break;
       case 5: {
@@ -315,7 +315,7 @@ void screen_pattern_update(UIState* ui) {
           *f = (*f == TRACKER_EMPTY) ? 0 : (*f + 16 > 0xFE ? 0xFE : *f + 16);
         if (ui_repeat(BTN_LEFT))
           *f = (*f == TRACKER_EMPTY || *f < 16) ? TRACKER_EMPTY : *f - 16;
-        if (input_pressed(BTN_B))
+        if (input_pressed(BTN_NO))
           *f = TRACKER_EMPTY;
         break;
       }
@@ -328,14 +328,14 @@ void screen_pattern_update(UIState* ui) {
           step->fxv[1] = clamp8(step->fxv[1] + 16);
         if (ui_repeat(BTN_LEFT))
           step->fxv[1] = clamp8((int)step->fxv[1] - 16);
-        if (input_pressed(BTN_B))
+        if (input_pressed(BTN_NO))
           step->fxv[1] = 0;
         break;
     }
   }
 
   // X = fill current column down the current track; Y = clear it.
-  if (input_pressed(BTN_X)) {
+  if (input_pressed(BTN_ALL)) {
     for (int i = 0; i < pat->len; i++) {
       PatternStep* s = &pat->steps[ui->pattern_track][i];
       switch (ui->pattern_col) {
@@ -366,7 +366,7 @@ void screen_pattern_update(UIState* ui) {
     }
   }
 
-  if (!file_browser_active() && input_pressed(BTN_Y)) {
+  if (!file_browser_active() && input_pressed(BTN_NONE)) {
     for (int i = 0; i < pat->len; i++) {
       PatternStep* s = &pat->steps[ui->pattern_track][i];
       switch (ui->pattern_col) {
