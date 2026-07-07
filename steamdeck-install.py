@@ -21,6 +21,7 @@ from pathlib import Path
 
 REPO = "konsumer/raypoketrack"
 ASSET = "raypoketrack-linux.zip"  # steamdeck is x86_64
+ART_BASE_URL = f"https://raw.githubusercontent.com/{REPO}/main/art"
 
 
 class InstallError(Exception):
@@ -158,17 +159,23 @@ def load_shortcuts(path):
         return {"shortcuts": {}}
 
 
-def add_shortcut(shortcuts_vdf, exe, appname, start_dir, launch_options):
+def compute_appid(exe, appname):
+    """Returns (unsigned, signed) appid, as Steam derives it from exe+appname.
+    Grid artwork filenames use the unsigned form; the vdf int32 field needs signed."""
+    unsigned = zlib.crc32((exe + appname).encode()) | 0x80000000
+    signed = unsigned - 0x100000000 if unsigned >= 0x80000000 else unsigned
+    return unsigned, signed
+
+
+def add_shortcut(shortcuts_vdf, exe, appname, start_dir, launch_options, icon=""):
     entries = shortcuts_vdf.setdefault("shortcuts", {})
-    appid = zlib.crc32((exe + appname).encode()) | 0x80000000
-    if appid >= 0x80000000:
-        appid -= 0x100000000  # store as signed int32
+    _, appid = compute_appid(exe, appname)
     entry = {
         "appid": appid,
         "AppName": appname,
         "Exe": exe,
         "StartDir": start_dir,
-        "icon": "",
+        "icon": icon,
         "ShortcutPath": "",
         "LaunchOptions": launch_options,
         "IsHidden": 0,
@@ -204,14 +211,33 @@ def find_shortcuts_vdf():
     return None
 
 
+def download_art(url, dest):
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        urllib.request.urlretrieve(url, dest)
+        return True
+    except (urllib.error.URLError, OSError):
+        return False
+
+
 def add_steam_shortcut(exe_path, start_dir):
     vdf_path = find_shortcuts_vdf()
     if vdf_path is None:
         warn("Could not find a Steam userdata directory. Add the shortcut manually.")
         return False
+    config_dir = vdf_path.parent
+    exe = f'"{exe_path}"'
+    unsigned_appid, _ = compute_appid(exe, "RayPokeTrack")
+
+    icon_path = config_dir / "grid" / f"{unsigned_appid}_icon.png"
+    icon_ok = download_art(f"{ART_BASE_URL}/square.png", icon_path)
+    download_art(f"{ART_BASE_URL}/vert.png", config_dir / "grid" / f"{unsigned_appid}p.png")
+    download_art(f"{ART_BASE_URL}/horiz.png", config_dir / "grid" / f"{unsigned_appid}_hero.png")
+
     shortcuts = load_shortcuts(vdf_path)
-    add_shortcut(shortcuts, f'"{exe_path}"', "RayPokeTrack", f'"{start_dir}"', "--fullscreen")
-    vdf_path.parent.mkdir(parents=True, exist_ok=True)
+    add_shortcut(shortcuts, exe, "RayPokeTrack", f'"{start_dir}"', "--fullscreen",
+                 icon=str(icon_path) if icon_ok else "")
+    config_dir.mkdir(parents=True, exist_ok=True)
     vdf_path.write_bytes(_serialize_dict(shortcuts))
     return True
 
