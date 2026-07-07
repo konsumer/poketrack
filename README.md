@@ -1,6 +1,6 @@
 This is a cross-platform joystick-driven music-tracker.
 
-<img align="right" src="./webroot/web-app-manifest-192x192.png" />
+<img align="right" src="./art/square.png" />
 
 ## installation
 
