@@ -1,6 +1,6 @@
 This is a cross-platform joystick-driven music-tracker.
 
-<img align="right" src="./art/square.png" />
+<img align="right" src="./art/horiz.png" />
 
 ## installation
 
