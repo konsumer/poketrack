@@ -124,6 +124,11 @@ which sequences cutoff.
 
 On linux, this didn't seem to work for me, but neither did the official Surge XT standalone (could not change reso/cut.) I did test linux with [a simple CLAP plugin](https://github.com/konsumer/raypoketrack/tree/main/test_clap_plugin) that worked fine, so I think it's an issue with Surge XT.
 
+## samples & key-mapping
+
+Samples & instruments are intentionally simple. The idea is that you can be more "in the moment" and not uncomfortably tweaking samples & key/velocity maps with a small screen & limited controls. You can do your setup offline, and save it as a SFZ (or zip of SFZ.) I also made [this editor](https://konsumer.js.org/sfzmaker/) to facilitate that. It can do cool stuff with breakbeats, lots of samples, different velocity-zones, etc.
+
+
 ## development
 
 I use `make` to record common tasks (and `cmake` to actually build) so you can run `make` to get documentation.
