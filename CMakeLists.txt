@@ -23,6 +23,9 @@ include(FetchContent)
 # raylib 6.0
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
+# FLAC is off by default in raylib's config.h; SFZ instruments (e.g. ARIA-format
+# piano libraries) commonly ship FLAC samples, so turn it on for everything raylib compiles.
+add_compile_definitions(SUPPORT_FILEFORMAT_FLAC=1)
 FetchContent_Declare(raylib URL https://github.com/raysan5/raylib/archive/refs/tags/6.0.zip)
 FetchContent_MakeAvailable(raylib)
 
@@ -45,6 +48,22 @@ if(NOT EXISTS "${TSF_HEADER}")
     endif()
 endif()
 set(TSF_INCLUDE_DIR "${CMAKE_BINARY_DIR}/tsf_include")
+
+# miniz (single-file zip reader, used by SFZ unit to load .zip instrument bundles)
+set(MINIZ_SRC "${CMAKE_BINARY_DIR}/miniz_include/miniz.c")
+if(NOT EXISTS "${MINIZ_SRC}")
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/miniz_include")
+    file(DOWNLOAD
+        "https://raw.githubusercontent.com/richgel999/miniz/v114/miniz.c"
+        "${MINIZ_SRC}"
+        STATUS MINIZ_STATUS
+    )
+    list(GET MINIZ_STATUS 0 MINIZ_STATUS_CODE)
+    if(NOT MINIZ_STATUS_CODE EQUAL 0)
+        message(WARNING "miniz download failed — SFZ .zip support disabled")
+    endif()
+endif()
+set(MINIZ_INCLUDE_DIR "${CMAKE_BINARY_DIR}/miniz_include")
 
 set(SOURCES
     src/main.c
@@ -96,6 +115,7 @@ endif()
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${raylib_SOURCE_DIR}/src
     ${TSF_INCLUDE_DIR}
+    ${MINIZ_INCLUDE_DIR}
     ${TFD_DIR}
     src
 )
