@@ -4,3 +4,6 @@ build-web/
 .claude
 ports/raypoketrack
 __pycache__
+*.rpt
+*.rpti
+*.rptp
