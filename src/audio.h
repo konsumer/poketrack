@@ -32,6 +32,7 @@ typedef struct {
 #endif
 
   bool playing;
+  bool exporting;              // true = offline WAV render in progress; live callback outputs silence
   bool pattern_loop;           // true = loop one pattern instead of full song
   uint8_t loop_pattern_idx;    // pattern index to loop (when pattern_loop)
   uint32_t loop_channel_mask;  // bitmask: channels that use loop_pattern_idx
@@ -80,6 +81,10 @@ void audio_play(AudioEngine* eng);
 void audio_play_from(AudioEngine* eng, uint16_t start_row);
 void audio_play_pattern(AudioEngine* eng, uint8_t pattern_idx);
 void audio_stop(AudioEngine* eng);
+
+// Render the full song offline (no loop) to a 16-bit stereo WAV file. Returns
+// true on success. Live playback is muted for the duration of the render.
+bool audio_render_wav(AudioEngine* eng, const char* path);
 bool audio_is_playing(const AudioEngine* eng);
 
 // Preview a note through an instrument (for live editing feedback)

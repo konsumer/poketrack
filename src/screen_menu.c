@@ -21,6 +21,7 @@ typedef enum {
   MENU_LOOP,
   MENU_SONG_NAME,
   MENU_SAVE,
+  MENU_EXPORT,
   MENU_LOAD,
   MENU_NEW,
 #ifndef __EMSCRIPTEN__
@@ -37,6 +38,7 @@ static const char *menu_labels[] = {
     "LOOP",
     "NAME",
     "SAVE",
+    "EXPORT WAV",
     "LOAD",
     "NEW",
 #ifndef __EMSCRIPTEN__
@@ -99,6 +101,18 @@ static void song_save_path(const TrackerSong *song, char *out, size_t sz) {
     snprintf(out, sz, "%s", n);
   else
     snprintf(out, sz, "%s.rpt", n);
+}
+
+// Build export filename from song name, defaulting to "song.wav"
+static void song_export_path(const TrackerSong *song, char *out, size_t sz) {
+  const char *n = (song->name[0] && strcmp(song->name, "UNTITLED") != 0) ? song->name : "song";
+  char base[64];
+  snprintf(base, sizeof(base), "%s", n);
+  size_t bl = strlen(base);
+  // Strip a trailing .rpt so we don't produce "song.rpt.wav"
+  if (bl >= 4 && strcasecmp(base + bl - 4, ".rpt") == 0)
+    base[bl - 4] = '\0';
+  snprintf(out, sz, "%s.wav", base);
 }
 
 static void name_append(TrackerSong *song, char c) {
@@ -275,6 +289,20 @@ void screen_menu_update(UIState *ui) {
         break;
       }
 
+      case MENU_EXPORT: {
+        if (input_pressed(BTN_OK)) {
+          char fname[64], path[576];
+          song_export_path(ui->song, fname, sizeof(fname));
+          snprintf(path, sizeof(path), "%s%s", ui->engine->save_dir, fname);
+          bool ok = audio_render_wav(ui->engine, path);
+          if (ok)
+            file_browser_download(path, fname);
+          snprintf(status_msg, sizeof(status_msg), ok ? "EXPORTED WAV" : "EXPORT FAILED");
+          status_timer = 180;
+        }
+        break;
+      }
+
       case MENU_LOAD:
         if (input_pressed(BTN_OK)) {
           g_fb_mode = MENU_FB_LOAD;
@@ -439,6 +467,7 @@ void screen_menu_draw(UIState *ui) {
                  100, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_TEXT);
         break;
       case MENU_SAVE:
+      case MENU_EXPORT:
       case MENU_LOAD:
         if (cur)
           DrawText("[holdA+A]", WIN_W - 64, y + (CH_H - FONT_S) / 2, FONT_S - 1, C_DIM);
@@ -459,7 +488,8 @@ void screen_menu_draw(UIState *ui) {
   // Status message in bottom toolbar
   if (status_timer > 0 && !g_name_editing) {
     int    y   = WIN_H - STATUS_H;
-    Color  col = (strncmp(status_msg, "SAVE", 4) == 0 || strncmp(status_msg, "LOAD", 4) == 0 || strncmp(status_msg, "NEW", 3) == 0)
+    Color  col = (strncmp(status_msg, "SAVE", 4) == 0 || strncmp(status_msg, "LOAD", 4) == 0 ||
+                  strncmp(status_msg, "NEW", 3) == 0 || strncmp(status_msg, "EXPORTED", 8) == 0)
                      ? C_PLAY
                      : C_NOTE_OFF;
     DrawRectangle(0, y, WIN_W, STATUS_H, C_BG_ALT);

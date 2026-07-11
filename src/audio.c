@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "midi_in.h"
+#include "raylib.h"
 
 // Single lock around all engine state touched by both the audio callback
 // thread and the main thread. Emscripten builds are single-threaded (the
@@ -754,8 +755,8 @@ static void audio_process_midi_in(AudioEngine* eng) {
   }
 }
 
-void audio_fill_buffer(AudioEngine* eng, float* out, uint32_t frames) {
-  AUDIO_LOCK(eng);
+// Core render. Assumes the audio lock is already held by the caller.
+static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
   audio_process_midi_in(eng);
   memset(out, 0, frames * 2 * sizeof(float));
   eng->samples_per_tick = calc_samples_per_tick(eng->song->bpm);
@@ -898,5 +899,150 @@ void audio_fill_buffer(AudioEngine* eng, float* out, uint32_t frames) {
   if (frames > 0)
     for (int i = 0; i < NUM_INSTRUMENTS; i++)
       g_sidechain_rms[i] = (float)sqrt(sc_energy[i] / (double)frames);
+}
+
+void audio_fill_buffer(AudioEngine* eng, float* out, uint32_t frames) {
+  AUDIO_LOCK(eng);
+  // During an offline WAV render the export thread drives the engine directly;
+  // the live callback must stay silent so it doesn't double-advance the song.
+  if (eng->exporting) {
+    memset(out, 0, frames * 2 * sizeof(float));
+    AUDIO_UNLOCK(eng);
+    return;
+  }
+  render_block(eng, out, frames);
   AUDIO_UNLOCK(eng);
+}
+
+// Build a canonical 16-bit PCM stereo WAV byte stream from interleaved floats.
+static unsigned char* build_wav16(const float* interleaved, uint32_t frames,
+                                  uint32_t sample_rate, uint32_t channels, int* out_size) {
+  uint32_t data_bytes = frames * channels * 2u;
+  uint32_t total = 44u + data_bytes;
+  unsigned char* buf = (unsigned char*)malloc(total);
+  if (!buf)
+    return NULL;
+
+  uint32_t byte_rate = sample_rate * channels * 2u;
+  uint16_t block_align = (uint16_t)(channels * 2u);
+
+  // Little-endian writers
+  unsigned char* p = buf;
+#define W8(v)  (*p++ = (unsigned char)(v))
+#define W16(v) do { W8((v) & 0xFF); W8(((v) >> 8) & 0xFF); } while (0)
+#define W32(v) do { W8((v) & 0xFF); W8(((v) >> 8) & 0xFF); W8(((v) >> 16) & 0xFF); W8(((v) >> 24) & 0xFF); } while (0)
+  W8('R'); W8('I'); W8('F'); W8('F');
+  W32(36u + data_bytes);
+  W8('W'); W8('A'); W8('V'); W8('E');
+  W8('f'); W8('m'); W8('t'); W8(' ');
+  W32(16u);              // fmt chunk size
+  W16(1u);               // PCM
+  W16(channels);
+  W32(sample_rate);
+  W32(byte_rate);
+  W16(block_align);
+  W16(16u);              // bits per sample
+  W8('d'); W8('a'); W8('t'); W8('a');
+  W32(data_bytes);
+#undef W8
+#undef W16
+#undef W32
+
+  int16_t* samples = (int16_t*)p;
+  uint32_t n = frames * channels;
+  for (uint32_t i = 0; i < n; i++) {
+    float v = interleaved[i];
+    if (v > 1.0f)  v = 1.0f;
+    if (v < -1.0f) v = -1.0f;
+    samples[i] = (int16_t)lrintf(v * 32767.0f);
+  }
+
+  *out_size = (int)total;
+  return buf;
+}
+
+bool audio_render_wav(AudioEngine* eng, const char* path) {
+  // Set up playback from the top, forcing no-loop so the render terminates.
+  AUDIO_LOCK(eng);
+  audio_preview_kill(eng);
+  audio_midi_kill_all(eng);
+  for (int ch = 0; ch < SONG_CHANNELS; ch++) {
+    eng->cursors[ch].song_row = 0;
+    eng->cursors[ch].pattern_step = 0;
+  }
+  memset(eng->active_note, 0, sizeof(eng->active_note));
+  eng->pattern_loop = false;
+  eng->tick_counter = 0;
+  eng->row_tick = 0;
+  eng->samples_per_tick = calc_samples_per_tick(eng->song->bpm);
+  eng->sample_acc = eng->samples_per_tick;
+
+  int last = 0;
+  for (int row = 0; row < eng->song->song_len; row++)
+    for (int ch = 0; ch < SONG_CHANNELS; ch++)
+      if (eng->song->patterns[ch][row] != TRACKER_EMPTY)
+        last = row;
+  eng->song_last_row = last;
+  preload_all_chan_states(eng);
+
+  bool prev_loop = eng->song->loop;
+  eng->song->loop = false;
+  eng->exporting = true;
+  eng->playing = true;
+  AUDIO_UNLOCK(eng);
+
+  const uint32_t BLK = AUDIO_BLOCK_SIZE;
+  const uint32_t max_frames = AUDIO_SAMPLE_RATE * 600u;  // 10 min safety cap
+  uint32_t cap = AUDIO_SAMPLE_RATE * 8u;                 // grow as needed
+  float* data = (float*)malloc((size_t)cap * 2u * sizeof(float));
+  uint32_t n_frames = 0;
+  float blk[AUDIO_BLOCK_SIZE * 2];
+
+  bool oom = (data == NULL);
+  while (!oom) {
+    AUDIO_LOCK(eng);
+    bool play = eng->playing;
+    if (play)
+      render_block(eng, blk, BLK);
+    AUDIO_UNLOCK(eng);
+    if (!play)
+      break;
+
+    if (n_frames + BLK > cap) {
+      cap *= 2;
+      float* grown = (float*)realloc(data, (size_t)cap * 2u * sizeof(float));
+      if (!grown) { oom = true; break; }
+      data = grown;
+    }
+    memcpy(data + (size_t)n_frames * 2u, blk, BLK * 2u * sizeof(float));
+    n_frames += BLK;
+    if (n_frames >= max_frames)
+      break;
+  }
+
+  // Restore engine state
+  AUDIO_LOCK(eng);
+  eng->exporting = false;
+  eng->playing = false;
+  eng->song->loop = prev_loop;
+  for (int ch = 0; ch < SONG_CHANNELS; ch++)
+    for (int tr = 0; tr < PATTERN_TRACKS; tr++)
+      chan_kill(eng, ch, tr);
+  memset(eng->active_note, 0, sizeof(eng->active_note));
+  AUDIO_UNLOCK(eng);
+
+  if (oom || n_frames == 0) {
+    free(data);
+    return false;
+  }
+
+  int wav_size = 0;
+  unsigned char* wav = build_wav16(data, n_frames, AUDIO_SAMPLE_RATE, 2, &wav_size);
+  free(data);
+  if (!wav)
+    return false;
+
+  bool ok = SaveFileData(path, wav, wav_size);
+  free(wav);
+  return ok;
 }
