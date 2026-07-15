@@ -4,7 +4,18 @@
 #ifndef __EMSCRIPTEN__
 #ifdef _WIN32
 // MSVC has no <pthread.h> (that only worked before via MinGW's winpthreads
-// shim) — use the native Win32 lock instead.
+// shim) — use the native Win32 lock instead. NOGDI/NOUSER avoid the classic
+// raylib-vs-windows.h clash (both declare Rectangle/CloseWindow/ShowCursor)
+// in any translation unit that includes both this header and raylib.h.
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOGDI
+#define NOGDI
+#endif
+#ifndef NOUSER
+#define NOUSER
+#endif
 #include <windows.h>
 #else
 #include <pthread.h>
