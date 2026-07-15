@@ -64,6 +64,25 @@ if(NOT EMSCRIPTEN)
     target_include_directories(wclap-bridge PRIVATE ${CMAKE_SOURCE_DIR}/src/vendor/webview-gui-stub)
 endif()
 
+# dirent.h (Windows only — MSVC has no POSIX dirent.h; MinGW used to paper
+# over this with its own winpthreads-adjacent shim). MIT-licensed.
+if(WIN32)
+    set(DIRENT_HEADER "${CMAKE_BINARY_DIR}/dirent_include/dirent.h")
+    if(NOT EXISTS "${DIRENT_HEADER}")
+        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/dirent_include")
+        file(DOWNLOAD
+            "https://raw.githubusercontent.com/tronkko/dirent/master/include/dirent.h"
+            "${DIRENT_HEADER}"
+            STATUS DIRENT_STATUS
+        )
+        list(GET DIRENT_STATUS 0 DIRENT_STATUS_CODE)
+        if(NOT DIRENT_STATUS_CODE EQUAL 0)
+            message(WARNING "dirent.h download failed — Windows build will fail to find directory entries")
+        endif()
+    endif()
+    set(DIRENT_INCLUDE_DIR "${CMAKE_BINARY_DIR}/dirent_include")
+endif()
+
 # TinySoundFont (single-header SF2 player)
 set(TSF_HEADER "${CMAKE_BINARY_DIR}/tsf_include/tsf.h")
 if(NOT EXISTS "${TSF_HEADER}")
@@ -158,6 +177,16 @@ if(NOT EMSCRIPTEN)
     # wclap-bridge is C++ (Wasmtime embedding); force the C++ linker for the final link.
     set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 endif()
+if(WIN32)
+    target_include_directories(${PROJECT_NAME} PRIVATE ${DIRENT_INCLUDE_DIR})
+    # MSVC's math.h doesn't define M_PI etc. without this.
+    target_compile_definitions(${PROJECT_NAME} PRIVATE _USE_MATH_DEFINES)
+    if(MSVC)
+        # <stdatomic.h> (midi_in.c's lock-free ring buffer) needs this MSVC-only
+        # flag to actually enable C11 atomics support.
+        target_compile_options(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>)
+    endif()
+endif()
 
 if(EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".mjs")
@@ -179,7 +208,11 @@ if(EMSCRIPTEN)
     )
     target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
 else()
-    target_link_libraries(${PROJECT_NAME} PRIVATE raylib m)
+    target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
+    if(NOT WIN32)
+        # MSVC has no separate libm — math functions are built into the CRT.
+        target_link_libraries(${PROJECT_NAME} PRIVATE m)
+    endif()
     if(UNIX AND NOT APPLE)
         find_package(ALSA QUIET)
         if(ALSA_FOUND)
