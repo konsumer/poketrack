@@ -89,9 +89,9 @@ The UI is themable at launch: `poketrack --theme ~/cyber.ptt`. See [THEMES](./TH
 
 ### plugins
 
-You can also use [CLAP](https://github.com/free-audio/clap) plugins for sound-generation and effects — specifically [WCLAP](https://github.com/WebCLAP) (CLAP compiled to wasm32), which runs sandboxed on every target (desktop and web) from a single `.wasm` file, and can be bundled alongside a song using a relative path. Point the DATA row at a `.wasm` file; if it bundles more than one plugin, a picker lets you choose which one.
+You can also use [CLAP](https://github.com/free-audio/clap) plugins for sound-generation and effects — specifically [WCLAP](https://github.com/WebCLAP) (CLAP compiled to wasm32), which runs sandboxed on every target (desktop and web) from a single `.wasm` file, and can be bundled alongside a song using a relative path. Point the unit at a `.wasm` file; if it bundles more than one plugin, a picker lets you choose which one.
 
-These plugins can be written in any language that can compile to wasm (C, rust, assemblyscript, etc) and work on any client (web, native linux/mac/windows.)
+These plugins can be written in any language that can compile to wasm (C, rust, assemblyscript, nelua, etc) and work on any client (web, native linux/mac/windows.)
 
 There's no GUI support (CLAP plugin UIs aren't hosted), so you map plugin params to tracker-controllable slots via the ADD row instead — same workflow as any other unit.
 
