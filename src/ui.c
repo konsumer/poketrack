@@ -179,6 +179,9 @@ static void draw_status(UIState* ui) {
 
   DrawLine(0, STATUS_H, WIN_W, STATUS_H, C_SEP);
 
+  if (THEME_HIDE_HELP)
+    return;
+
   // Bottom hint bar
   DrawRectangle(0, WIN_H - STATUS_H, WIN_W, STATUS_H, C_BG_ALT);
   DrawLine(0, WIN_H - STATUS_H, WIN_W, WIN_H - STATUS_H, C_SEP);

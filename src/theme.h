@@ -31,6 +31,9 @@ extern Color C_FB_INPUT_BG;
 // Indexed by track (0-F) in the pattern screen and by lane (0..SONG_CHANNELS-1) in the song screen.
 extern Color CH_COLORS[PATTERN_TRACKS];
 
+// Non-color theme options.
+extern bool THEME_HIDE_HELP;  // "hide_help" — hides the bottom button-help line
+
 // Loads a theme file (key=RRGGBB lines, see theme.c for the format) and
 // overwrites the matching globals above. Returns false (leaving all colors
 // untouched) if the file can't be opened.

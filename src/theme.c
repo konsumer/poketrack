@@ -27,6 +27,8 @@ Color C_FB_HEADER = (Color){0x0A, 0x0A, 0x28, 0xFF};
 Color C_FB_DIM = (Color){0x40, 0x40, 0x60, 0xFF};
 Color C_FB_INPUT_BG = (Color){0x08, 0x08, 0x20, 0xFF};
 
+bool THEME_HIDE_HELP = false;
+
 Color CH_COLORS[PATTERN_TRACKS] = {
     {0xFF, 0x40, 0x40, 0xFF},
     {0xFF, 0x90, 0x20, 0xFF},
@@ -98,6 +100,10 @@ static bool parse_hex_color(const char* s, Color* out) {
   return true;
 }
 
+static bool parse_bool(const char* s) {
+  return strcasecmp(s, "1") == 0 || strcasecmp(s, "true") == 0 || strcasecmp(s, "yes") == 0;
+}
+
 static Color* find_target(const char* key) {
   for (size_t i = 0; i < sizeof(THEME_FIELDS) / sizeof(THEME_FIELDS[0]); i++)
     if (strcmp(key, THEME_FIELDS[i].key) == 0)
@@ -132,6 +138,11 @@ bool theme_load(const char* path) {
     *eq = '\0';
     char* key = trim(l);
     char* val = trim(eq + 1);
+
+    if (strcmp(key, "hide_help") == 0) {
+      THEME_HIDE_HELP = parse_bool(val);
+      continue;
+    }
 
     Color* target = find_target(key);
     if (!target) {

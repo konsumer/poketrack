@@ -1,0 +1,43 @@
+# cyber — monochrome phosphor-green "hacker terminal" look.
+# Every color stays in the green family; hierarchy comes from brightness,
+# not hue, like an old CRT terminal.
+
+hide_help=0
+
+bg=000800
+bg_alt=001400
+cursor=145c28
+cursor2=0a3016
+sep=0a2810
+text=33ff33
+dim=1a4d1a
+header=1f8f3f
+note=00ff41
+note_off=ccffcc
+vel=66ff66
+inst=00cc44
+fx=39ff14
+play=00ff41
+status=7fff00
+title=eaffea
+edit_tag=9fff00
+fb_header=001400
+fb_dim=1a4d1a
+fb_input_bg=001a00
+
+track0=1aff1a
+track1=33ff55
+track2=00ff88
+track3=66ff33
+track4=00cc44
+track5=88ff00
+track6=39ff14
+track7=00ffaa
+track8=55ff99
+track9=aaff66
+track10=00e676
+track11=76ff03
+track12=00ff66
+track13=99ff33
+track14=44ff77
+track15=1de9b6

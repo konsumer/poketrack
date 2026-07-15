@@ -48,6 +48,33 @@ to your project directory as `theme.ptt` and start editing hex values:
 cp examples/theme.ptt theme.ptt
 ```
 
+## Gallery
+
+[`examples/themes/`](./examples/themes/) has more to try or pick apart:
+
+| Theme | Look |
+|---|---|
+| `cyber.ptt` | hand-tuned monochrome phosphor green — old hacker-terminal CRT |
+| `lgpt-default.ptt` | LGPT's own default — warm dusty rose |
+| `purple.ptt` | black + hot pink/magenta |
+| `furrest.ptt` | pale pink background, forest green accents |
+| `dustrial.ptt` | near-black, dusty mauve, industrial amber |
+| `sylveon.ptt` | off-white background, soft pink/blue pastel |
+| `minecraft.ptt` | parchment background, orange/red accents |
+| `rain.ptt` | dark olive, muted teal-green |
+| `808.ptt` | charcoal, orange + yellow accents |
+| `wavetable.ptt` | near-black, warm orange/teal |
+| `greeny.ptt` | teal background, lime/hot-pink accents |
+
+```
+raypoketrack --theme examples/themes/cyber.ptt
+```
+
+Every theme in the gallery except `cyber.ptt` was generated with
+`lgpt_theme.py` from the example palettes at
+[sixey.es/sounds/piggythemes](https://sixey.es/sounds/piggythemes/) — see
+below for how to convert your own.
+
 ## Fields
 
 | Key           | Default    | Used for                                   |
@@ -78,6 +105,18 @@ Controller-button glyphs (A/B/X/Y colors, keycaps) are not themeable —
 they mimic real gamepad button colors, so retheming them would make the
 on-screen hints misleading.
 
+## Options
+
+Non-color settings, same `key=value` file:
+
+| Key         | Default | Value               | Effect                                          |
+|-------------|---------|----------------------|--------------------------------------------------|
+| `hide_help` | `0`     | `1`/`true`/`yes` = on | Hides the button-help line at the bottom of every screen, reclaiming that strip for content. |
+
+```
+hide_help=1
+```
+
 ## Converting LGPT themes
 
 [LGPT (Little GPTracker)](https://sixey.es/sounds/piggythemes/) themes are a
@@ -86,8 +125,8 @@ on-screen hints misleading.
 fields by blending between those 4 anchors:
 
 ```
-./lgpt_theme.py CONFIG.xml cyber.ptt
-raypoketrack --theme cyber.ptt
+./lgpt_theme.py CONFIG.xml mytheme.ptt
+raypoketrack --theme mytheme.ptt
 ```
 
 Since LGPT only has 4 colors and raypoketrack has more roles, some roles
