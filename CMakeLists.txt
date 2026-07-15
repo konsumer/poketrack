@@ -181,6 +181,12 @@ if(WIN32)
     target_include_directories(${PROJECT_NAME} PRIVATE ${DIRENT_INCLUDE_DIR})
     # MSVC's math.h doesn't define M_PI etc. without this.
     target_compile_definitions(${PROJECT_NAME} PRIVATE _USE_MATH_DEFINES)
+    # NOGDI/NOUSER: raylib declares its own Rectangle/CloseWindow/ShowCursor,
+    # which collide with WinGDI/WinUser's identically-named ones — as a
+    # compile definition (not a local #define in one header) this applies
+    # no matter which file's <windows.h> include happens to come first in a
+    # translation unit (audio.h's own lock, or dirent.h's FindFirstFile use).
+    target_compile_definitions(${PROJECT_NAME} PRIVATE WIN32_LEAN_AND_MEAN NOGDI NOUSER)
     if(MSVC)
         # <stdatomic.h> (midi_in.c's lock-free ring buffer) needs this MSVC-only
         # flag to actually enable C11 atomics support.

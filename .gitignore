@@ -1,6 +1,6 @@
 .DS_Store
 build/
-build-web/
+build-*/
 .claude
 ports/poketrack
 __pycache__
