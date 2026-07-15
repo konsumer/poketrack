@@ -359,7 +359,7 @@ static void clap_unit_render(UnitState *s, const uint8_t *p,
 
 const UnitDef unit_clap = {
     .id = "clap",
-    .name = "CLAP",
+    .name = "PLUGIN",
     .data_hint = "plugin.wclap.wasm",
     .file_filter = "*.wasm",
     .is_source = true,
