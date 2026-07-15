@@ -187,11 +187,6 @@ if(WIN32)
     # no matter which file's <windows.h> include happens to come first in a
     # translation unit (audio.h's own lock, or dirent.h's FindFirstFile use).
     target_compile_definitions(${PROJECT_NAME} PRIVATE WIN32_LEAN_AND_MEAN NOGDI NOUSER)
-    if(MSVC)
-        # <stdatomic.h> (midi_in.c's lock-free ring buffer) needs this MSVC-only
-        # flag to actually enable C11 atomics support.
-        target_compile_options(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>)
-    endif()
 endif()
 
 if(EMSCRIPTEN)

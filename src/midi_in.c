@@ -1,9 +1,33 @@
 #include "midi_in.h"
 
-#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// MSVC's <stdatomic.h> needs an "/experimental:c11atomics" flag (as the name
+// implies, not something to depend on) — this ring buffer's needs are simple
+// enough (int load/store with acquire/release ordering between one writer
+// and one reader) to implement directly on Windows with Interlocked
+// intrinsics instead of fighting that flag.
+#ifdef _WIN32
+#include <windows.h>
+typedef volatile LONG atomic_int;
+#define memory_order_relaxed 0
+#define memory_order_acquire 0
+#define memory_order_release 0
+static inline int atomic_load_explicit(atomic_int *p, int order) {
+  (void)order;
+  MemoryBarrier();
+  return (int)*p;
+}
+static inline void atomic_store_explicit(atomic_int *p, int val, int order) {
+  (void)order;
+  *p = (LONG)val;
+  MemoryBarrier();
+}
+#else
+#include <stdatomic.h>
+#endif
 
 #define RING_SIZE 512
 
