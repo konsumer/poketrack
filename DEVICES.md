@@ -18,7 +18,7 @@ Joystick (analog/dpad/etc) worked for me without any config, but since SELECT is
 
 ### cheap handhelds (R36Max, R36S, etc.)
 
-These are gameboy-style ARM handhelds. I use the [R36Max](https://www.amazon.com/gp/product/B0G3PB3R5K) (~$43) with [dArkOS](https://github.com/christianhaitian/dArkOS).
+These are gameboy-style ARM handhelds. I use the [R36Max](https://handhelds.wiki/R36MAX) (generally under $50) with [dArkOS](https://github.com/christianhaitian/dArkOS).
 
 Notes for dArkOS / Rockchip BSP kernel (4.4.x):
 - Use the `poketrack-linux-arm64-sdl` build — the DRM build does not work due to EGL incompatibility with the 4.4 kernel
