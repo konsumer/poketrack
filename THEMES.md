@@ -7,7 +7,7 @@ raypoketrack --theme ~/cyber.ptt
 ```
 
 There's no persisted config — if you want a theme, pass it every time (alias
-the command, or wrap it in a launcher script).
+the command, or wrap it in a launcher script) or just put `theme.ptt` in your start-dir.
 
 ## Default theme
 
