@@ -5,6 +5,7 @@
 #include "input.h"
 #include "midi_in.h"
 #include "raylib.h"
+#include "theme.h"
 #include "tracker.h"
 #include "ui.h"
 #include "units/unit_registry.h"
@@ -21,8 +22,8 @@ static UIState g_ui;
 static AudioStream g_stream;
 static RenderTexture2D g_target;
 
-static void stream_callback(void *buf, unsigned int frames) {
-  audio_fill_buffer(&g_engine, (float *)buf, frames);
+static void stream_callback(void* buf, unsigned int frames) {
+  audio_fill_buffer(&g_engine, (float*)buf, frames);
 }
 
 static void main_loop(void) {
@@ -46,14 +47,19 @@ static void main_loop(void) {
   EndDrawing();
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   static TrackerSong song;
+
+  theme_load_default("theme.ptt");  // like song.rpt, loaded from the start directory if present
 
 #ifndef __EMSCRIPTEN__
   bool start_fullscreen = false;
-  for (int i = 1; i < argc; i++)
+  for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--fullscreen") == 0 || strcmp(argv[i], "-f") == 0)
       start_fullscreen = true;
+    else if (strcmp(argv[i], "--theme") == 0 && i + 1 < argc)
+      theme_load(argv[++i]);
+  }
 #else
   (void)argc;
   (void)argv;

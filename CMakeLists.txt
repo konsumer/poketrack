@@ -72,6 +72,7 @@ set(SOURCES
     src/icons.c
     src/audio.c
     src/ui.c
+    src/theme.c
     src/file_browser.c
     src/midi_in.c
     src/screen_song.c
