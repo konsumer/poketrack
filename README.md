@@ -1,6 +1,6 @@
 This is a cross-platform joystick-driven music-tracker.
 
-<img align="right" src="https://github.com/konsumer/poketrack/blob/main/art/square.png?raw=true" />
+<img align="right" width="150" src="https://github.com/konsumer/poketrack/blob/main/art/square.png?raw=true" />
 
 ## installation
 
