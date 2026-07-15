@@ -42,8 +42,16 @@ FetchContent_MakeAvailable(clap)
 # stand-in with the same public API) takes its place on the include path.
 if(NOT EMSCRIPTEN)
     enable_language(CXX)
-    set(CMAKE_CXX_STANDARD 17)
+    # C++20 for everyone, not just MSVC ("strict about designated
+    # initialisers" — wclap-bridge's own CMakeLists does this too, but only
+    # when it's the top-level project, which it isn't here since we pull it
+    # in via FetchContent). GCC/Clang have supported C++20 for years, so no
+    # need to branch by compiler.
+    set(CMAKE_CXX_STANDARD 20)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    if(MSVC)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
     FetchContent_Declare(wclap-bridge
         GIT_REPOSITORY https://github.com/WebCLAP/wclap-bridge.git
         GIT_TAG cd11d22afbe2af350f24cd56e6e0536e5ca86452
