@@ -2,7 +2,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 #ifndef __EMSCRIPTEN__
+#ifdef _WIN32
+// MSVC has no <pthread.h> (that only worked before via MinGW's winpthreads
+// shim) — use the native Win32 lock instead.
+#include <windows.h>
+#else
 #include <pthread.h>
+#endif
 #endif
 
 #include "clap_host.h"
@@ -26,7 +32,11 @@ typedef struct {
   // (e.g. swapping an instrument's SF2 file mid-playback destroys/frees the
   // UnitState the audio thread may be rendering right then).
 #ifndef __EMSCRIPTEN__
+#ifdef _WIN32
+  CRITICAL_SECTION lock;  // recursive by default, matching PTHREAD_MUTEX_RECURSIVE below
+#else
   pthread_mutex_t lock;
+#endif
 #endif
 
   bool playing;

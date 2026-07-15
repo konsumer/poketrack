@@ -35,18 +35,25 @@ FetchContent_MakeAvailable(clap)
 
 # wclap-bridge (native only) — loads WCLAP (CLAP-compiled-to-wasm32) plugins via
 # Wasmtime and hands back a normal CLAP factory, so the existing CLAP host code
-# barely changes. Pulls in wasmtime + a webview-gui dep transitively (unused by
-# poketrack — no plugin GUI support here — but it's built as part of the static lib).
+# barely changes. Its real webview-gui module (for CLAP_EXT_GUI, which poketrack
+# never uses) pulls in a hard GTK+WebKit runtime dependency on Linux — wrong for
+# a framebuffer-only handheld build with no desktop. patch-wclap-bridge.cmake
+# drops that module from the build; src/vendor/webview-gui-stub (a no-op
+# stand-in with the same public API) takes its place on the include path.
 if(NOT EMSCRIPTEN)
     enable_language(CXX)
     set(CMAKE_CXX_STANDARD 17)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
     FetchContent_Declare(wclap-bridge
         GIT_REPOSITORY https://github.com/WebCLAP/wclap-bridge.git
-        GIT_TAG main
+        GIT_TAG cd11d22afbe2af350f24cd56e6e0536e5ca86452
         GIT_SUBMODULES_RECURSE TRUE
+        PATCH_COMMAND ${CMAKE_COMMAND} -P ${CMAKE_SOURCE_DIR}/cmake/patch-wclap-bridge.cmake
     )
     FetchContent_MakeAvailable(wclap-bridge)
+    # Real webview-gui module was dropped by the patch above; give wclap-bridge's
+    # own sources the no-op stand-in on its include path instead.
+    target_include_directories(wclap-bridge PRIVATE ${CMAKE_SOURCE_DIR}/src/vendor/webview-gui-stub)
 endif()
 
 # TinySoundFont (single-header SF2 player)

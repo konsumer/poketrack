@@ -14,6 +14,9 @@
 #ifdef __EMSCRIPTEN__
 #define AUDIO_LOCK(eng) ((void)0)
 #define AUDIO_UNLOCK(eng) ((void)0)
+#elif defined(_WIN32)
+#define AUDIO_LOCK(eng) EnterCriticalSection(&(eng)->lock)
+#define AUDIO_UNLOCK(eng) LeaveCriticalSection(&(eng)->lock)
 #else
 #define AUDIO_LOCK(eng) pthread_mutex_lock(&(eng)->lock)
 #define AUDIO_UNLOCK(eng) pthread_mutex_unlock(&(eng)->lock)
@@ -422,11 +425,15 @@ void audio_init(AudioEngine* eng, TrackerSong* song) {
   // Recursive: several main-thread entry points call each other
   // (e.g. audio_play_pattern -> audio_stop -> audio_midi_kill_all) and all
   // need to hold the lock across the whole call chain.
+#ifdef _WIN32
+  InitializeCriticalSection(&eng->lock);  // CRITICAL_SECTION is recursive by default
+#else
   pthread_mutexattr_t attr;
   pthread_mutexattr_init(&attr);
   pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
   pthread_mutex_init(&eng->lock, &attr);
   pthread_mutexattr_destroy(&attr);
+#endif
 #endif
   eng->song = song;
   g_lfo_song = song;
@@ -456,7 +463,11 @@ void audio_shutdown(AudioEngine* eng) {
   for (int v = 0; v < 8; v++) midi_voice_destroy(eng, v);
   AUDIO_UNLOCK(eng);
 #ifndef __EMSCRIPTEN__
+#ifdef _WIN32
+  DeleteCriticalSection(&eng->lock);
+#else
   pthread_mutex_destroy(&eng->lock);
+#endif
 #endif
   memset(eng, 0, sizeof(AudioEngine));
 }

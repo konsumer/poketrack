@@ -50,20 +50,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ${{ matrix.linux_deps }}
 
-      - name: Install MinGW (Windows)
-        if: runner.os == 'Windows'
-        run: choco install mingw -y
-
       - name: Configure (Windows)
         if: runner.os == 'Windows'
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -G "MinGW Makefiles"
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+        # Default (Visual Studio/MSVC) generator, not MinGW — the prebuilt
+        # Wasmtime static libs wclap-bridge downloads are MSVC-only.
 
       - name: Configure (non-Windows)
         if: runner.os != 'Windows'
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_flags }}
 
       - name: Build
-        run: cmake --build build --parallel
+        run: cmake --build build --config Release --parallel
+        # --config Release matters for the MSVC generator on Windows (a
+        # multi-config generator, defaults to Debug otherwise); harmless
+        # no-op for the single-config Unix Makefiles generator elsewhere.
 
       - name: Zip artifact (Linux)
         if: runner.os == 'Linux'
@@ -78,7 +79,9 @@ jobs:
       - name: Zip artifact (Windows)
         if: runner.os == 'Windows'
         run: |
-          cp build/poketrack.exe poketrack.exe
+          # MSVC (multi-config) generator puts the binary under build/Release/,
+          # not build/ directly like the single-config Unix generators.
+          cp build/Release/poketrack.exe poketrack.exe
           Compress-Archive -Path poketrack.exe -DestinationPath ${{ matrix.name }}.zip
 
       - name: Upload to release
