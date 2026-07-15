@@ -70,66 +70,48 @@ It may seem a bit inscrutable at first, but input is meant to be consistent and 
 | A | Confirm action |
 
 
-The UI is themable at launch: `poketrack --theme ~/cyber.ptt`. See [THEMES](./THEMES.md) for the file format and how to convert LGPT themes.
-
-Read about [specific devices](DEVICES.md).
-
-Here are some videos:
-
-[![built-in synths](https://img.youtube.com/vi/3JeYaVriygU/0.jpg)](https://www.youtube.com/playlist?list=PLDE2Ywpu1J__p2yBXrMOoKCgtIYQgfGo7)
-
 ### units
 
 There are some built-in units (effects/sound-generators) that are documented [here](./src//units/README.md).
 
+### themes
+
+The UI is themable at launch: `poketrack --theme ~/cyber.ptt`. See [THEMES](./THEMES.md) for the file format and how to convert LGPT themes.
+
 
 ### plugins
 
-You can also use [CLAP](https://github.com/free-audio/clap) for sound-generation and effects.
+You can also use [CLAP](https://github.com/free-audio/clap) plugins for sound-generation and effects — specifically [WCLAP](https://github.com/WebCLAP) (CLAP compiled to wasm32), which runs sandboxed on every target (desktop and web) from a single `.wasm` file, and can be bundled alongside a song using a relative path. Point the DATA row at a `.wasm` file; if it bundles more than one plugin, a picker lets you choose which one.
 
-**Instruments**
-- [Surge XT](https://surge-synthesizer.github.io/) — subtractive/wavetable synth; good first test
-- [Vital](https://vital.audio/) — wavetable synth, free tier
-- [Dexed](https://asb2m10.github.io/dexed/) — DX7 FM emulation
-- [OB-Xd](https://www.discodsp.com/obxd/) — Oberheim-style analog
+These plugins can be written in any language that can compile to wasm (C, rust, assemblyscript, etc) and work on any client (web, native linux/mac/windows.)
 
-**Effects**
-- [Airwindows](https://www.airwindows.com/) — large collection of free DSP effects
-- [Dragonfly Reverb](https://michaelwillis.github.io/dragonfly-reverb/) — room/hall/plate reverbs
+There's no GUI support (CLAP plugin UIs aren't hosted), so you map plugin params to tracker-controllable slots via the ADD row instead — same workflow as any other unit.
 
-**CLAP lands at:**
-- macOS:  `/Library/Audio/Plug-Ins/CLAP/*.clap`
-- Windows: `C:\Program Files\Common Files\CLAP\*.clap`
-- Linux: `/usr/lib/clap/*.clap`
+Native `.clap` plugins (the traditional OS-loaded kind) aren't supported — only WCLAP `.wasm` files.
 
+`test_clap_plugin/` has a few real WCLAP plugins used for testing:
+- [as-clap](https://github.com/WebCLAP/as-clap) — WCLAP written in AssemblyScript (gain + synth example)
+- [clack](https://github.com/prokopyl/clack) — Rust CLAP host/plugin library (gain + polysynth examples)
+- [Signalsmith Basics](https://github.com/Signalsmith-Audio/basics) — MIT-licensed effects collection (chorus, crunch, freq-shifter, limiter, reverb, analyser)
+- [signalsmith-clap-cpp](https://github.com/geraintluff/signalsmith-clap-cpp) — Signalsmith's C++ CLAP examples, built via WASI-SDK
 
-They can be pretty confusing, since the original GUI is missing, and that is generally how these plugins were designed to be used, but it's doable. Here is an example test with "Surge XT":
-
-map these params:
-
-- 319 (cutoff)
-- 320 (resonance)
-- 317 (filter type)
-
-set resonance high, and filter-type to 10 hex (lowpass)
-
-Pattern would look like:
-
- ```
-C-4  00  00 80
----  00  00 90
----  00  00 A0
----  00  00 B0
-```
-
-which sequences cutoff.
-
-On linux, this didn't seem to work for me, but neither did the official Surge XT standalone (could not change reso/cut.) I did test linux with [a simple CLAP plugin](https://github.com/konsumer/poketrack/tree/main/test_clap_plugin) that worked fine, so I think it's an issue with Surge XT.
+All fetched/packaged as WCLAP by [WebCLAP/examples](https://github.com/WebCLAP/examples).
 
 ## samples & key-mapping
 
 Samples & instruments are intentionally simple. The idea is that you can be more "in the moment" and not uncomfortably tweaking samples & key/velocity maps with a small screen & limited controls. You can do your setup offline, and save it as a SFZ (or zip of SFZ.) I also made [this editor](https://konsumer.js.org/sfzmaker/) to facilitate that. It can do cool stuff with breakbeats, lots of samples, different velocity-zones, etc.
 
+
+### what about my handheld?
+
+Read about [specific devices](DEVICES.md).
+
+
+### videos
+
+Here are some videos:
+
+[![built-in synths](https://img.youtube.com/vi/3JeYaVriygU/0.jpg)](https://www.youtube.com/playlist?list=PLDE2Ywpu1J__p2yBXrMOoKCgtIYQgfGo7)
 
 ## development
 
@@ -137,9 +119,8 @@ I use `make` to record common tasks (and `cmake` to actually build) so you can r
 
 ## todo
 
-- simple set of cross-platform single-purpose CLAP plugins
-- [WebCLAP](https://github.com/WebCLAP/) support for web & native
 - "bundle" a save for distribution, that creates a zip with song + all referenced files
+- web: some WCLAP plugins (e.g. `signalsmith-clap-cpp.wasm`) declare shared/thread-capable memory and hang on load — needs real Worker-based multi-agent threading in the web CLAP host, not just single-threaded WASI. Native (Wasmtime) already handles this fine.
 
 
 

@@ -108,7 +108,7 @@ Sample player. Point the data field at a WAV/MP3/OGG/FLAC file. Pitch tracks the
 
 ### CLAP
 
-Loads a CLAP plugin. Point the data field at a `.clap` file. Use the ADD row to map up to 8 plugin parameters to tracker-controllable slots.
+Loads a WCLAP plugin — CLAP compiled to wasm32 (see [WebCLAP](https://github.com/WebCLAP)). Point the data field at a `.wasm` file. Same sandboxed format runs on every target (desktop and web), so it can be bundled alongside a song using a relative path, same as sf2/sfz. Use the ADD row to map up to 8 plugin parameters to tracker-controllable slots.
 
 ### MIDI
 

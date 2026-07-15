@@ -256,14 +256,6 @@ static void scan(void) {
     if (stat(full, &st))
       continue;
     bool isdir = S_ISDIR(st.st_mode);
-    if (isdir) {
-      const char* ext = strrchr(n, '.');
-      if (ext && strcasecmp(ext, ".clap") == 0) {
-        if (!strstr(g_filt, ".clap"))
-          continue;
-        isdir = false;
-      }
-    }
     if (!isdir) {
       if (!fmatch(n))
         continue;

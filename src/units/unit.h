@@ -18,6 +18,11 @@ typedef struct {
   const char *role_label;   // label shown after unit name (NULL = "SOURCE"/"EFFECT", "" = hidden)
   const char *file_filter;  // file dialog filter pattern e.g. "*.sf2" (NULL = any)
   bool is_source;           // true=generates audio, false=processes audio
+  // If true, the engine uses ONE instance of this unit's whole chain per
+  // instrument for real playback (pattern + MIDI), instead of one per
+  // active track/voice — for units (like CLAP) whose backing plugin
+  // already tracks its own polyphony from a stream of note events.
+  bool shared_instance;
   int num_params;
   const char *param_names[UNIT_MAX_PARAMS];
   uint8_t param_defaults[UNIT_MAX_PARAMS];

@@ -10,9 +10,7 @@ static const UnitDef *REGISTRY[] = {
 #ifndef __EMSCRIPTEN__
     &unit_sfz,
 #endif
-#ifndef __EMSCRIPTEN__
     &unit_clap,
-#endif
     &unit_delay,
     &unit_dist,
     &unit_reverb,

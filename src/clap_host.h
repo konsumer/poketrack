@@ -21,6 +21,11 @@ typedef struct {
 ClapPlugin *clap_host_load(const char *path, const char *plugin_id, float sample_rate, uint32_t block_size);
 void clap_host_unload(ClapPlugin *p);
 
+// List plugin ids/names in a WCLAP file without instantiating any of them
+// (for the DATA-row device picker, when a file bundles more than one plugin).
+// out_ids/out_names are id_name_sz-byte rows; returns the number filled (<= max_count).
+int clap_host_list_plugins(const char *path, char *out_ids, char *out_names, size_t id_name_sz, int max_count);
+
 void clap_host_note_on(ClapPlugin *p, uint8_t note, uint8_t velocity, uint32_t offset);
 void clap_host_note_off(ClapPlugin *p, uint8_t note, uint32_t offset);
 

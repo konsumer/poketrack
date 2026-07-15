@@ -285,6 +285,16 @@ void screen_instrument_update(UIState* ui) {
       strncpy(sl->data, rel, sizeof(sl->data) - 1);
       sl->data[sizeof(sl->data) - 1] = '\0';
       audio_rebuild_instrument(ui->engine, (uint8_t)ui->ctx_instrument);
+      // If the picked file bundles more than one plugin, jump straight into
+      // the picker instead of leaving the choice to a hidden second A-press.
+      if (def->dev_picker_count && def->dev_picker_set) {
+        audio_ensure_preview(ui->engine, (uint8_t)ui->ctx_instrument);
+        UnitState* fresh = ui->engine->preview_states[slot];
+        if (fresh && def->dev_picker_count(fresh) > 1) {
+          ui->dev_picker_active = true;
+          ui->dev_picker_row = 0;
+        }
+      }
       return;
     }
 
@@ -293,7 +303,14 @@ void screen_instrument_update(UIState* ui) {
 
     // A on DATA row: open device picker or file browser
     if (on_data && input_pressed(BTN_OK)) {
-      if (def->dev_picker_count && def->dev_picker_set && state) {
+      // Units with no file of their own (MIDI: picks a hardware port) always
+      // use the device picker. Units that ALSO have a file (CLAP: a .wasm
+      // may bundle several plugins) always re-open the file browser here —
+      // otherwise, once a multi-plugin file is loaded, there'd be no way to
+      // pick a different file again. The sub-plugin picker for those is
+      // reached by re-selecting a file (auto-opens right after, below).
+      bool prefer_device_picker = def->dev_picker_count && def->dev_picker_set && state && !def->file_filter;
+      if (prefer_device_picker) {
 #ifdef __EMSCRIPTEN__
         midi_web_request_access();
 #endif

@@ -9,6 +9,8 @@
 #include "../clap_host.h"
 #include "unit.h"
 
+#define MAX_CLAP_PLUGIN_CHOICES 16
+
 typedef struct {
   uint32_t id;
   double min_val, max_val, default_val;
@@ -40,6 +42,13 @@ struct UnitState {
   // Full param list for the picker (all plugin params)
   int total_params;
   ClapParamInfo *param_cache;  // malloc'd
+
+  // Plugins available in the loaded file, for the DATA-row device picker
+  // (a single .wasm can bundle more than one plugin, e.g. a gain effect
+  // and a synth registered in the same module).
+  int num_plugin_choices;
+  char plugin_choice_ids[MAX_CLAP_PLUGIN_CHOICES][128];
+  char plugin_choice_names[MAX_CLAP_PLUGIN_CHOICES][128];
 };
 
 static UnitState *clap_unit_create(float sr) {
@@ -84,30 +93,9 @@ static void fill_mapping_from_cache(UnitState *s, uint32_t id, ClapMapping *m) {
   m->last_sent = m->val;
 }
 
-static void clap_unit_set_data(UnitState *s, const char *data, const char *base_dir) {
-  if (!data || !data[0])
-    return;
-
-  char buf[640];
-  strncpy(buf, data, sizeof(buf) - 1);
-  buf[sizeof(buf) - 1] = '\0';
-
-  char *tab1 = strchr(buf, '\t');
-  char *id_str = "";
-  const char *hex_mappings = NULL;
-  if (tab1) {
-    *tab1 = '\0';
-    id_str = tab1 + 1;
-    char *tab2 = strchr(id_str, '\t');
-    if (tab2) {
-      *tab2 = '\0';
-      hex_mappings = tab2 + 1;
-    }
-  }
-
-  unit_resolve_path(base_dir, buf, s->resolved_path, sizeof(s->resolved_path));
-  strncpy(s->plugin_id, id_str, sizeof(s->plugin_id) - 1);
-
+// (Re)loads s->plugin from s->resolved_path/s->plugin_id, rebuilding the
+// param cache. Clears any existing mappings — caller restores them if needed.
+static void clap_reload_plugin(UnitState *s) {
   if (s->plugin) {
     clap_host_unload(s->plugin);
     s->plugin = NULL;
@@ -139,6 +127,57 @@ static void clap_unit_set_data(UnitState *s, const char *data, const char *base_
       c->is_stepped = stepped && !c->is_bool;
     }
   }
+}
+
+// Selecting a different plugin id in the DATA-row picker
+static void clap_dev_picker_set(UnitState *s, int idx) {
+  if (idx < 0 || idx >= s->num_plugin_choices)
+    return;
+  strncpy(s->plugin_id, s->plugin_choice_ids[idx], sizeof(s->plugin_id) - 1);
+  s->plugin_id[sizeof(s->plugin_id) - 1] = '\0';
+  clap_reload_plugin(s);
+}
+
+static int clap_dev_picker_count(UnitState *s) { return s->num_plugin_choices; }
+
+static const char *clap_dev_picker_name(UnitState *s, int idx) {
+  if (idx < 0 || idx >= s->num_plugin_choices)
+    return "";
+  return s->plugin_choice_names[idx];
+}
+
+static void clap_unit_set_data(UnitState *s, const char *data, const char *base_dir) {
+  if (!data || !data[0])
+    return;
+
+  char buf[640];
+  strncpy(buf, data, sizeof(buf) - 1);
+  buf[sizeof(buf) - 1] = '\0';
+
+  char *tab1 = strchr(buf, '\t');
+  char *id_str = "";
+  const char *hex_mappings = NULL;
+  if (tab1) {
+    *tab1 = '\0';
+    id_str = tab1 + 1;
+    char *tab2 = strchr(id_str, '\t');
+    if (tab2) {
+      *tab2 = '\0';
+      hex_mappings = tab2 + 1;
+    }
+  }
+
+  unit_resolve_path(base_dir, buf, s->resolved_path, sizeof(s->resolved_path));
+  strncpy(s->plugin_id, id_str, sizeof(s->plugin_id) - 1);
+
+  // Reload first (keeps the file's ref-count alive), then enumerate — doing
+  // it the other way round opens the file, drops the ref to 0 (freeing it),
+  // then reopens from scratch for the actual load.
+  clap_reload_plugin(s);
+
+  s->num_plugin_choices = clap_host_list_plugins(
+      s->resolved_path, &s->plugin_choice_ids[0][0], &s->plugin_choice_names[0][0],
+      sizeof(s->plugin_choice_ids[0]), MAX_CLAP_PLUGIN_CHOICES);
 
   // Restore saved mappings from hex
   if (hex_mappings) {
@@ -237,32 +276,23 @@ static const char *clap_format_param_val(UnitState *s, int idx, uint8_t val) {
 }
 
 static void clap_sync_to_data(UnitState *s, char *data_buf, size_t data_buf_sz) {
-  // Ensure format: path\tplugin_id\thex...
+  // Rebuild as: path\tplugin_id\thex... — path is whatever was before the
+  // first tab (set by the file browser); plugin_id/hex come from state.
+  char path_buf[512];
   char *tab1 = strchr(data_buf, '\t');
-  if (!tab1) {
-    size_t cur_len = strlen(data_buf);
-    if (cur_len + 2 >= data_buf_sz)
-      return;
-    data_buf[cur_len] = '\t';
-    data_buf[cur_len + 1] = '\t';
-    data_buf[cur_len + 2] = '\0';
-    tab1 = data_buf + cur_len;
-  }
-  char *tab2 = strchr(tab1 + 1, '\t');
-  if (!tab2) {
-    size_t cur_len = strlen(data_buf);
-    if (cur_len + 1 >= data_buf_sz)
-      return;
-    data_buf[cur_len] = '\t';
-    data_buf[cur_len + 1] = '\0';
-    tab2 = data_buf + cur_len;
-  }
-  char *hex_start = tab2 + 1;
-  size_t hex_offset = (size_t)(hex_start - data_buf);
-  if (hex_offset + (size_t)s->num_mappings * 10 + 1 > data_buf_sz) return;
+  size_t path_len = tab1 ? (size_t)(tab1 - data_buf) : strlen(data_buf);
+  if (path_len >= sizeof(path_buf))
+    path_len = sizeof(path_buf) - 1;
+  memcpy(path_buf, data_buf, path_len);
+  path_buf[path_len] = '\0';
+
+  char hex_buf[UNIT_MAX_PARAMS * 10 + 1];
+  int hex_len = 0;
   for (int i = 0; i < s->num_mappings; i++)
-    sprintf(hex_start + i * 10, "%08X%02X", s->mappings[i].id, s->mappings[i].val);
-  hex_start[s->num_mappings * 10] = '\0';
+    hex_len += sprintf(hex_buf + hex_len, "%08X%02X", s->mappings[i].id, s->mappings[i].val);
+  hex_buf[hex_len] = '\0';
+
+  snprintf(data_buf, data_buf_sz, "%s\t%s\t%s", path_buf, s->plugin_id, hex_buf);
 }
 
 // Picker callbacks
@@ -330,9 +360,10 @@ static void clap_unit_render(UnitState *s, const uint8_t *p,
 const UnitDef unit_clap = {
     .id = "clap",
     .name = "CLAP",
-    .data_hint = "plugin.clap",
-    .file_filter = "*.clap",
+    .data_hint = "plugin.wclap.wasm",
+    .file_filter = "*.wasm",
     .is_source = true,
+    .shared_instance = true,
     .num_params = 0,
     .dyn_num_params = clap_dyn_num_params,
     .dyn_param_name = clap_dyn_param_name,
@@ -345,6 +376,10 @@ const UnitDef unit_clap = {
     .picker_name = clap_picker_name,
     .picker_add = clap_picker_add,
     .mapping_remove = clap_mapping_remove,
+    .dev_picker_title = "SELECT PLUGIN",
+    .dev_picker_count = clap_dev_picker_count,
+    .dev_picker_name = clap_dev_picker_name,
+    .dev_picker_set = clap_dev_picker_set,
     .main_thread_work = clap_main_thread_work,
     .create = clap_unit_create,
     .destroy = clap_unit_destroy,

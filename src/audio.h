@@ -5,9 +5,7 @@
 #include <pthread.h>
 #endif
 
-#ifndef __EMSCRIPTEN__
 #include "clap_host.h"
-#endif
 #include "tracker.h"
 #include "units/unit_registry.h"
 
@@ -66,6 +64,14 @@ typedef struct {
     uint32_t rel_age;  // voice-clock at note-off (for stealing released)
   } midi_voices[8];
   uint32_t midi_voice_clock;
+
+  // Shared-instance playback (units with UnitDef.shared_instance, e.g. CLAP):
+  // ONE instance of the whole chain per instrument, used by both pattern
+  // playback and MIDI live input, instead of one per active track/voice —
+  // the plugin tracks its own note polyphony from the event stream.
+  UnitState* shared_states[NUM_INSTRUMENTS][CHAIN_MAX];
+  const UnitDef* shared_defs[NUM_INSTRUMENTS][CHAIN_MAX];
+  bool shared_active[NUM_INSTRUMENTS];
 
   // Temp buffers for per-channel mixing
   float tmp_l[AUDIO_BLOCK_SIZE];

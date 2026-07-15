@@ -1,40 +1,33 @@
+// Native WCLAP host: loads CLAP-compiled-to-wasm32 plugins via wclap-bridge
+// (Wasmtime), which hands back a real clap_plugin_factory_t — so everything
+// below this point (host callbacks, event lists, process loop) is unchanged
+// from a native-dlopen CLAP host.
 #include "clap_host.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-// Platform shared-library loading
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#define DL_OPEN(p) LoadLibraryA(p)
-#define DL_SYM(h, s) GetProcAddress((HMODULE)(h), s)
-#define DL_CLOSE(h) FreeLibrary((HMODULE)(h))
-typedef HMODULE dl_handle_t;
-#else
-#include <dlfcn.h>
-#define DL_OPEN(p) dlopen(p, RTLD_NOW | RTLD_LOCAL)
-#define DL_SYM(h, s) dlsym(h, s)
-#define DL_CLOSE(h) dlclose(h)
-typedef void *dl_handle_t;
-#endif
-
 #include "clap/clap.h"
+#include "wclap-bridge.h"
 
-// Per-library reference count so entry->init/deinit are called once per .clap file
+// Per-WCLAP reference count so wclap_open/wclap_close are called once per file.
 typedef struct LibEntry {
   char path[512];
-  dl_handle_t lib;
-  const clap_plugin_entry_t *entry;
+  void *wclap;  // opaque handle from wclap_open()
   int ref_count;
 } LibEntry;
 
 #define MAX_LOADED_LIBS 32
 static LibEntry s_libs[MAX_LOADED_LIBS];
 static int s_num_libs = 0;
+static bool s_bridge_inited = false;
 
 static LibEntry *lib_acquire(const char *path) {
+  if (!s_bridge_inited) {
+    wclap_global_init(0);
+    s_bridge_inited = true;
+  }
   for (int i = 0; i < s_num_libs; i++) {
     if (strcmp(s_libs[i].path, path) == 0) {
       s_libs[i].ref_count++;
@@ -42,22 +35,24 @@ static LibEntry *lib_acquire(const char *path) {
     }
   }
   if (s_num_libs >= MAX_LOADED_LIBS) return NULL;
-  dl_handle_t lib = DL_OPEN(path);
-  if (!lib) return NULL;
-  const clap_plugin_entry_t *entry = (const clap_plugin_entry_t *)DL_SYM(lib, "clap_entry");
-  if (!entry || !entry->init(path)) { DL_CLOSE(lib); return NULL; }
+  void *wclap = wclap_open(path);
+  if (!wclap) return NULL;
+  char err[256];
+  if (wclap_get_error(wclap, err, sizeof(err))) {
+    fprintf(stderr, "wclap_host: '%s': %s\n", path, err);
+    wclap_close(wclap);
+    return NULL;
+  }
   LibEntry *le = &s_libs[s_num_libs++];
   strncpy(le->path, path, sizeof(le->path) - 1);
-  le->lib = lib;
-  le->entry = entry;
+  le->wclap = wclap;
   le->ref_count = 1;
   return le;
 }
 
 static void lib_release(LibEntry *le) {
   if (!le || --le->ref_count > 0) return;
-  le->entry->deinit();
-  DL_CLOSE(le->lib);
+  wclap_close(le->wclap);
   int idx = (int)(le - s_libs);
   for (int i = idx; i < s_num_libs - 1; i++)
     s_libs[i] = s_libs[i + 1];
@@ -152,45 +147,17 @@ static const clap_host_t s_host_template = {
     host_request_callback,
 };
 
-// Resolve .clap bundle path to actual dylib path (macOS bundles)
-static void resolve_clap_path(const char *in, char *out, size_t out_size) {
-#ifdef __APPLE__
-  // Strip trailing slash (tinyfd_selectFolderDialog returns "path/")
-  char tmp[512];
-  strncpy(tmp, in, sizeof(tmp) - 1);
-  tmp[sizeof(tmp) - 1] = '\0';
-  size_t len = strlen(tmp);
-  while (len > 1 && tmp[len - 1] == '/') tmp[--len] = '\0';
-
-  // <name>.clap/Contents/MacOS/<name>
-  const char *slash = strrchr(tmp, '/');
-  const char *base = slash ? slash + 1 : tmp;
-  char stem[256];
-  strncpy(stem, base, sizeof(stem) - 1);
-  stem[sizeof(stem) - 1] = '\0';
-  char *dot = strrchr(stem, '.');
-  if (dot)
-    *dot = '\0';
-  snprintf(out, out_size, "%s/Contents/MacOS/%s", tmp, stem);
-#else
-  strncpy(out, in, out_size);
-#endif
-}
-
 ClapPlugin *clap_host_load(const char *path, const char *plugin_id, float sample_rate, uint32_t block_size) {
-  char real_path[512];
-  resolve_clap_path(path, real_path, sizeof(real_path));
-
-  LibEntry *le = lib_acquire(real_path);
+  LibEntry *le = lib_acquire(path);
   if (!le) {
-    fprintf(stderr, "clap_host: cannot load '%s'\n", real_path);
+    fprintf(stderr, "wclap_host: cannot load '%s'\n", path);
     return NULL;
   }
 
   const clap_plugin_factory_t *factory =
-      (const clap_plugin_factory_t *)le->entry->get_factory(CLAP_PLUGIN_FACTORY_ID);
+      (const clap_plugin_factory_t *)wclap_get_factory(le->wclap, CLAP_PLUGIN_FACTORY_ID);
   if (!factory) {
-    fprintf(stderr, "clap_host: no plugin factory\n");
+    fprintf(stderr, "wclap_host: no plugin factory\n");
     lib_release(le);
     return NULL;
   }
@@ -207,7 +174,7 @@ ClapPlugin *clap_host_load(const char *path, const char *plugin_id, float sample
   }
 
   if (!desc) {
-    fprintf(stderr, "clap_host: plugin id '%s' not found\n", plugin_id ? plugin_id : "(any)");
+    fprintf(stderr, "wclap_host: plugin id '%s' not found\n", plugin_id ? plugin_id : "(any)");
     lib_release(le);
     return NULL;
   }
@@ -218,7 +185,7 @@ ClapPlugin *clap_host_load(const char *path, const char *plugin_id, float sample
 
   const clap_plugin_t *plugin = factory->create_plugin(factory, &cp->host, desc->id);
   if (!plugin || !plugin->init(plugin)) {
-    fprintf(stderr, "clap_host: plugin init failed\n");
+    fprintf(stderr, "wclap_host: plugin init failed\n");
     if (plugin)
       plugin->destroy(plugin);
     lib_release(le);
@@ -235,7 +202,10 @@ ClapPlugin *clap_host_load(const char *path, const char *plugin_id, float sample
   // Check if instrument (has MIDI input)
   cp->note_ports = (const clap_plugin_note_ports_t *)
                        plugin->get_extension(plugin, CLAP_EXT_NOTE_PORTS);
-  cp->is_instrument = (cp->note_ports != NULL);
+  // Some plugin frameworks (e.g. as-clap) always expose CLAP_EXT_NOTE_PORTS
+  // even for effects that don't use it — check the port count, not just
+  // whether the extension pointer exists.
+  cp->is_instrument = cp->note_ports && cp->note_ports->count(plugin, true) > 0;
 
   cp->audio_ports = (const clap_plugin_audio_ports_t *)
                         plugin->get_extension(plugin, CLAP_EXT_AUDIO_PORTS);
@@ -243,19 +213,45 @@ ClapPlugin *clap_host_load(const char *path, const char *plugin_id, float sample
                        plugin->get_extension(plugin, CLAP_EXT_PARAMS);
 
   if (!plugin->activate(plugin, sample_rate, 1, block_size)) {
-    fprintf(stderr, "[CLAP] activate() failed for '%s'\n", real_path);
+    fprintf(stderr, "[CLAP] activate() failed for '%s'\n", path);
     plugin->destroy(plugin);
     lib_release(le);
     free(cp);
     return NULL;
   }
   if (!plugin->start_processing(plugin))
-    fprintf(stderr, "[CLAP] start_processing() failed for '%s' (continuing anyway)\n", real_path);
+    fprintf(stderr, "[CLAP] start_processing() failed for '%s' (continuing anyway)\n", path);
 
   cp->buf_out_l = calloc(block_size, sizeof(float));
   cp->buf_out_r = calloc(block_size, sizeof(float));
 
   return cp;
+}
+
+int clap_host_list_plugins(const char *path, char *out_ids, char *out_names, size_t id_name_sz, int max_count) {
+  LibEntry *le = lib_acquire(path);
+  if (!le)
+    return 0;
+
+  const clap_plugin_factory_t *factory =
+      (const clap_plugin_factory_t *)wclap_get_factory(le->wclap, CLAP_PLUGIN_FACTORY_ID);
+  if (!factory) {
+    lib_release(le);
+    return 0;
+  }
+
+  uint32_t count = factory->get_plugin_count(factory);
+  int n = 0;
+  for (uint32_t i = 0; i < count && n < max_count; i++) {
+    const clap_plugin_descriptor_t *d = factory->get_plugin_descriptor(factory, i);
+    if (!d)
+      continue;
+    snprintf(out_ids + n * id_name_sz, id_name_sz, "%s", d->id);
+    snprintf(out_names + n * id_name_sz, id_name_sz, "%s", d->name);
+    n++;
+  }
+  lib_release(le);
+  return n;
 }
 
 void clap_host_unload(ClapPlugin *p) {

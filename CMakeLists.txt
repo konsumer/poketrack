@@ -33,6 +33,22 @@ FetchContent_MakeAvailable(raylib)
 FetchContent_Declare(clap URL https://github.com/free-audio/clap/archive/refs/tags/1.2.6.zip)
 FetchContent_MakeAvailable(clap)
 
+# wclap-bridge (native only) — loads WCLAP (CLAP-compiled-to-wasm32) plugins via
+# Wasmtime and hands back a normal CLAP factory, so the existing CLAP host code
+# barely changes. Pulls in wasmtime + a webview-gui dep transitively (unused by
+# poketrack — no plugin GUI support here — but it's built as part of the static lib).
+if(NOT EMSCRIPTEN)
+    enable_language(CXX)
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    FetchContent_Declare(wclap-bridge
+        GIT_REPOSITORY https://github.com/WebCLAP/wclap-bridge.git
+        GIT_TAG main
+        GIT_SUBMODULES_RECURSE TRUE
+    )
+    FetchContent_MakeAvailable(wclap-bridge)
+endif()
+
 # TinySoundFont (single-header SF2 player)
 set(TSF_HEADER "${CMAKE_BINARY_DIR}/tsf_include/tsf.h")
 if(NOT EXISTS "${TSF_HEADER}")
@@ -100,10 +116,11 @@ set(SOURCES
     src/units/unit_registry.c
 )
 
-# CLAP & SFZ — desktop only
-list(APPEND SOURCES src/midi_out.c src/units/midi_unit.c)
-if(NOT EMSCRIPTEN)
-    list(APPEND SOURCES src/clap_host.c src/units/clap_unit.c src/units/sfz.c)
+list(APPEND SOURCES src/midi_out.c src/units/midi_unit.c src/units/clap_unit.c)
+if(EMSCRIPTEN)
+    list(APPEND SOURCES src/wclap_host_web.c)
+else()
+    list(APPEND SOURCES src/wclap_host_native.c src/units/sfz.c)
 endif()
 
 add_executable(${PROJECT_NAME} ${SOURCES})
@@ -120,8 +137,11 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${TFD_DIR}
     src
 )
+target_include_directories(${PROJECT_NAME} PRIVATE ${clap_SOURCE_DIR}/include)
 if(NOT EMSCRIPTEN)
-    target_include_directories(${PROJECT_NAME} PRIVATE ${clap_SOURCE_DIR}/include)
+    target_include_directories(${PROJECT_NAME} PRIVATE ${wclap-bridge_SOURCE_DIR}/include)
+    # wclap-bridge is C++ (Wasmtime embedding); force the C++ linker for the final link.
+    set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 endif()
 
 if(EMSCRIPTEN)
@@ -140,6 +160,7 @@ if(EMSCRIPTEN)
         -sASSERTIONS=0
         -sWASM=1
         --no-heap-copy
+        --js-library "${CMAKE_SOURCE_DIR}/src/wclap_host_web.lib.js"
     )
     target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
 else()
@@ -155,17 +176,7 @@ else()
     if(WIN32)
         target_link_libraries(${PROJECT_NAME} PRIVATE winmm)
     endif()
-    if(UNIX AND NOT APPLE)
-        # Test CLAP plugin (diagnostic tool)
-        add_library(test_clap SHARED test_clap_plugin/test_clap.c)
-        target_include_directories(test_clap PRIVATE ${clap_SOURCE_DIR}/include)
-        target_link_libraries(test_clap PRIVATE m)
-        set_target_properties(test_clap PROPERTIES
-            PREFIX ""
-            OUTPUT_NAME "test_clap"
-            SUFFIX ".clap"
-        )
-    endif()
+    target_link_libraries(${PROJECT_NAME} PRIVATE wclap-bridge)
     if(APPLE)
         target_sources(${PROJECT_NAME} PRIVATE src/macos_dialog.m)
         target_link_libraries(${PROJECT_NAME} PRIVATE "-framework Cocoa" "-framework AppKit" "-framework CoreMIDI" "-framework CoreFoundation")

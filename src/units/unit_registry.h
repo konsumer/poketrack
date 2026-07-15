@@ -8,9 +8,7 @@ extern const UnitDef unit_sf2;
 #ifndef __EMSCRIPTEN__
 extern const UnitDef unit_sfz;
 #endif
-#ifndef __EMSCRIPTEN__
 extern const UnitDef unit_clap;
-#endif
 extern const UnitDef unit_delay;
 extern const UnitDef unit_dist;
 extern const UnitDef unit_reverb;

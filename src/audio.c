@@ -32,6 +32,64 @@ static uint32_t calc_samples_per_tick(uint16_t bpm) {
   return (AUDIO_SAMPLE_RATE * 60u) / ((uint32_t)bpm * 4u);
 }
 
+// True if this instrument's source unit manages its own polyphony (CLAP) —
+// playback should use one shared instance instead of one per track/voice.
+static bool inst_is_shared(AudioEngine* eng, uint8_t inst_idx) {
+  TrackerInstrument* inst = &eng->song->instruments[inst_idx];
+  for (int s = 0; s < CHAIN_MAX; s++) {
+    if (!inst->chain[s].unit_id[0] || !inst->chain[s].enabled)
+      continue;
+    const UnitDef* def = unit_find(inst->chain[s].unit_id);
+    if (def && def->is_source)
+      return def->shared_instance;
+  }
+  return false;
+}
+
+static void destroy_shared_states(AudioEngine* eng, uint8_t inst_idx) {
+  if (!eng->shared_active[inst_idx])
+    return;
+  for (int s = 0; s < CHAIN_MAX; s++) {
+    if (eng->shared_states[inst_idx][s]) {
+      if (eng->shared_defs[inst_idx][s])
+        eng->shared_defs[inst_idx][s]->destroy(eng->shared_states[inst_idx][s]);
+      eng->shared_states[inst_idx][s] = NULL;
+      eng->shared_defs[inst_idx][s] = NULL;
+    }
+  }
+  eng->shared_active[inst_idx] = false;
+}
+
+static void ensure_shared_states(AudioEngine* eng, uint8_t inst_idx) {
+  if (eng->shared_active[inst_idx])
+    return;
+  TrackerInstrument* inst = &eng->song->instruments[inst_idx];
+  for (int s = 0; s < CHAIN_MAX; s++) {
+    ChainSlot* slot = &inst->chain[s];
+    if (!slot->unit_id[0] || !slot->enabled)
+      continue;
+    const UnitDef* def = unit_find(slot->unit_id);
+    if (!def)
+      continue;
+    eng->shared_states[inst_idx][s] = def->create(AUDIO_SAMPLE_RATE);
+    eng->shared_defs[inst_idx][s] = def;
+    if (def->set_data && eng->shared_states[inst_idx][s])
+      def->set_data(eng->shared_states[inst_idx][s], slot->data, eng->save_dir);
+  }
+  eng->shared_active[inst_idx] = true;
+}
+
+static void kill_shared_states(AudioEngine* eng) {
+  for (int i = 0; i < NUM_INSTRUMENTS; i++) {
+    if (!eng->shared_active[i])
+      continue;
+    for (int s = 0; s < CHAIN_MAX; s++) {
+      if (eng->shared_states[i][s] && eng->shared_defs[i][s] && eng->shared_defs[i][s]->kill)
+        eng->shared_defs[i][s]->kill(eng->shared_states[i][s]);
+    }
+  }
+}
+
 // Destroy all states for one (lane, track) — uses stored defs, not current unit_id
 static void destroy_chan_states(AudioEngine* eng, int ch, int tr) {
   for (int s = 0; s < CHAIN_MAX; s++) {
@@ -68,6 +126,11 @@ static void ensure_chan_states(AudioEngine* eng, int ch, int tr, uint8_t inst_id
   if (eng->active_inst[ch][tr] == inst_idx)
     return;
   destroy_chan_states(eng, ch, tr);
+  if (inst_is_shared(eng, inst_idx)) {
+    ensure_shared_states(eng, inst_idx);
+    eng->active_inst[ch][tr] = inst_idx;
+    return;
+  }
   TrackerInstrument* inst = &eng->song->instruments[inst_idx];
   for (int s = 0; s < CHAIN_MAX; s++) {
     ChainSlot* slot = &inst->chain[s];
@@ -104,19 +167,22 @@ static void ensure_preview_states(AudioEngine* eng, uint8_t inst_idx) {
   eng->preview_inst = inst_idx;
 }
 
-// Fire note on/off through a (lane,track)'s unit states
+// Fire note on/off through a (lane,track)'s unit states. Shared-instance
+// instruments (CLAP) route into the one instance for the whole instrument
+// instead of this track's own copy — the plugin tracks its own voices.
 static void chan_note_on(AudioEngine* eng, int ch, int tr, uint8_t note, uint8_t vel) {
   uint8_t ii = eng->active_inst[ch][tr];
   if (ii == TRACKER_EMPTY)
     return;
   TrackerInstrument* inst = &eng->song->instruments[ii];
+  UnitState** states = inst_is_shared(eng, ii) ? eng->shared_states[ii] : eng->chan_states[ch][tr];
   for (int s = 0; s < CHAIN_MAX; s++) {
-    if (!eng->chan_states[ch][tr][s])
+    if (!states[s])
       continue;
     ChainSlot* slot = &inst->chain[s];
     const UnitDef* def = unit_find(slot->unit_id);
     if (def && def->is_source)
-      def->note_on(eng->chan_states[ch][tr][s], note, vel, slot->params);
+      def->note_on(states[s], note, vel, slot->params);
   }
 }
 
@@ -125,19 +191,23 @@ static void chan_note_off(AudioEngine* eng, int ch, int tr, uint8_t note) {
   if (ii == TRACKER_EMPTY)
     return;
   TrackerInstrument* inst = &eng->song->instruments[ii];
+  UnitState** states = inst_is_shared(eng, ii) ? eng->shared_states[ii] : eng->chan_states[ch][tr];
   for (int s = 0; s < CHAIN_MAX; s++) {
-    if (!eng->chan_states[ch][tr][s])
+    if (!states[s])
       continue;
     ChainSlot* slot = &inst->chain[s];
     const UnitDef* def = unit_find(slot->unit_id);
     if (def && def->is_source)
-      def->note_off(eng->chan_states[ch][tr][s], note);
+      def->note_off(states[s], note);
   }
 }
 
 static void chan_kill(AudioEngine* eng, int ch, int tr) {
   uint8_t ii = eng->active_inst[ch][tr];
   if (ii == TRACKER_EMPTY)
+    return;
+  // Shared instances are killed once (across all tracks) via kill_shared_states.
+  if (inst_is_shared(eng, ii))
     return;
   TrackerInstrument* inst = &eng->song->instruments[ii];
   for (int s = 0; s < CHAIN_MAX; s++) {
@@ -313,6 +383,7 @@ static void fire_step(AudioEngine* eng, int ch, int tr, PatternStep* step) {
   // fx[i] is a global param index spanning all chain slots in order:
   // slot 0 params 0..(n0-1), slot 1 params n0..(n0+n1-1), etc.
   TrackerInstrument* inst = &eng->song->instruments[inst_idx];
+  bool shared = inst_is_shared(eng, inst_idx);
   for (int fi = 0; fi < FX_PER_STEP; fi++) {
     if (step->fx[fi] == TRACKER_EMPTY)
       continue;
@@ -323,7 +394,7 @@ static void fire_step(AudioEngine* eng, int ch, int tr, PatternStep* step) {
       const UnitDef* def = unit_find(inst->chain[s].unit_id);
       if (!def)
         continue;
-      UnitState* st = eng->chan_states[ch][tr][s];
+      UnitState* st = shared ? eng->shared_states[inst_idx][s] : eng->chan_states[ch][tr][s];
       int nparams = (def->dyn_num_params && st) ? def->dyn_num_params(st) : def->num_params;
       if (remaining < nparams) {
         if (def->set_param_val && st)
@@ -373,6 +444,7 @@ void audio_rebuild_instrument(AudioEngine* eng, uint8_t inst_idx) {
         destroy_chan_states(eng, ch, tr);
   if (eng->preview_inst == inst_idx)
     destroy_preview_states(eng);
+  destroy_shared_states(eng, inst_idx);
   AUDIO_UNLOCK(eng);
 }
 
@@ -380,6 +452,7 @@ void audio_shutdown(AudioEngine* eng) {
   AUDIO_LOCK(eng);
   for (int ch = 0; ch < SONG_CHANNELS; ch++) destroy_lane_states(eng, ch);
   destroy_preview_states(eng);
+  for (int i = 0; i < NUM_INSTRUMENTS; i++) destroy_shared_states(eng, i);
   for (int v = 0; v < 8; v++) midi_voice_destroy(eng, v);
   AUDIO_UNLOCK(eng);
 #ifndef __EMSCRIPTEN__
@@ -519,6 +592,7 @@ void audio_set_save_dir(AudioEngine* eng, const char* save_file_path) {
   for (int ch = 0; ch < SONG_CHANNELS; ch++)
     destroy_lane_states(eng, ch);
   destroy_preview_states(eng);
+  for (int i = 0; i < NUM_INSTRUMENTS; i++) destroy_shared_states(eng, i);
   AUDIO_UNLOCK(eng);
 }
 
@@ -621,6 +695,20 @@ static int midi_voice_alloc(AudioEngine* eng, uint8_t inst_idx) {
 
 void audio_midi_note_on(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
   AUDIO_LOCK(eng);
+  if (inst_is_shared(eng, inst_idx)) {
+    ensure_shared_states(eng, inst_idx);
+    TrackerInstrument* inst = &eng->song->instruments[inst_idx];
+    for (int s = 0; s < CHAIN_MAX; s++) {
+      if (!eng->shared_states[inst_idx][s])
+        continue;
+      ChainSlot* slot = &inst->chain[s];
+      const UnitDef* def = eng->shared_defs[inst_idx][s];
+      if (def && def->is_source && def->note_on)
+        def->note_on(eng->shared_states[inst_idx][s], note, 100, slot->params);
+    }
+    AUDIO_UNLOCK(eng);
+    return;
+  }
   // Release any voice already playing this note on this instrument
   audio_midi_note_off(eng, inst_idx, note);
   int v = midi_voice_alloc(eng, inst_idx);
@@ -642,6 +730,14 @@ void audio_midi_note_on(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
 
 void audio_midi_note_off(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
   AUDIO_LOCK(eng);
+  if (inst_is_shared(eng, inst_idx)) {
+    if (eng->shared_active[inst_idx])
+      for (int s = 0; s < CHAIN_MAX; s++)
+        if (eng->shared_states[inst_idx][s] && eng->shared_defs[inst_idx][s] && eng->shared_defs[inst_idx][s]->note_off)
+          eng->shared_defs[inst_idx][s]->note_off(eng->shared_states[inst_idx][s], note);
+    AUDIO_UNLOCK(eng);
+    return;
+  }
   for (int v = 0; v < 8; v++) {
     struct MidiVoice* mv = &eng->midi_voices[v];
     if (mv->vstate != 1 || mv->inst_idx != inst_idx || mv->note != note)
@@ -659,6 +755,7 @@ void audio_midi_note_off(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
 
 void audio_midi_kill_all(AudioEngine* eng) {
   AUDIO_LOCK(eng);
+  kill_shared_states(eng);
   for (int v = 0; v < 8; v++) {
     struct MidiVoice* mv = &eng->midi_voices[v];
     if (mv->vstate == 0)
@@ -679,6 +776,8 @@ void audio_set_dyn_param(AudioEngine* eng, uint8_t inst_idx, int slot_idx, int p
   AUDIO_LOCK(eng);
   if (eng->preview_inst == inst_idx && eng->preview_states[slot_idx])
     def->set_param_val(eng->preview_states[slot_idx], param, val);
+  if (eng->shared_active[inst_idx] && eng->shared_states[inst_idx][slot_idx])
+    def->set_param_val(eng->shared_states[inst_idx][slot_idx], param, val);
   for (int ch = 0; ch < SONG_CHANNELS; ch++)
     for (int tr = 0; tr < PATTERN_TRACKS; tr++)
       if (eng->active_inst[ch][tr] == inst_idx && eng->chan_states[ch][tr][slot_idx])
@@ -705,6 +804,10 @@ void audio_do_main_thread_work(AudioEngine* eng) {
       struct MidiVoice* mv = &eng->midi_voices[v];
       if (mv->states[s] && mv->defs[s] && mv->defs[s]->main_thread_work)
         mv->defs[s]->main_thread_work(mv->states[s]);
+    }
+    for (int i = 0; i < NUM_INSTRUMENTS; i++) {
+      if (eng->shared_states[i][s] && eng->shared_defs[i][s] && eng->shared_defs[i][s]->main_thread_work)
+        eng->shared_defs[i][s]->main_thread_work(eng->shared_states[i][s]);
     }
   }
   AUDIO_UNLOCK(eng);
@@ -885,6 +988,40 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
       }
     }
 
+    // Shared-instance instruments (CLAP etc.) — one render per instrument
+    // total, covering both pattern playback and MIDI live input, since the
+    // plugin already mixes its own polyphony internally.
+    for (int i = 0; i < NUM_INSTRUMENTS; i++) {
+      if (!eng->shared_active[i])
+        continue;
+      TrackerInstrument* inst = &eng->song->instruments[i];
+      float pl[AUDIO_BLOCK_SIZE] = {0}, pr[AUDIO_BLOCK_SIZE] = {0};
+      for (int s = 0; s < CHAIN_MAX; s++) {
+        if (!eng->shared_states[i][s] || !inst->chain[s].enabled)
+          continue;
+        const UnitDef* def = eng->shared_defs[i][s];
+        if (!def || !def->is_source)
+          continue;
+        def->render(eng->shared_states[i][s], inst->chain[s].params, NULL, NULL, pl, pr, count);
+      }
+      for (int s = 0; s < CHAIN_MAX; s++) {
+        if (!eng->shared_states[i][s] || !inst->chain[s].enabled)
+          continue;
+        const UnitDef* def = eng->shared_defs[i][s];
+        if (!def || def->is_source)
+          continue;
+        def->render(eng->shared_states[i][s], inst->chain[s].params, pl, pr, pl, pr, count);
+      }
+      for (uint32_t f = 0; f < count; f++) {
+        float v = (pl[f] + pr[f]) * 0.5f;
+        sc_energy[i] += (double)v * v;
+      }
+      for (uint32_t f = 0; f < count; f++) {
+        blk_l[f] += pl[f];
+        blk_r[f] += pr[f];
+      }
+    }
+
     for (uint32_t f = 0; f < count; f++) {
       out[(pos + f) * 2] = tanhf(blk_l[f] * 0.7f);
       out[(pos + f) * 2 + 1] = tanhf(blk_r[f] * 0.7f);
@@ -1028,6 +1165,7 @@ bool audio_render_wav(AudioEngine* eng, const char* path) {
   for (int ch = 0; ch < SONG_CHANNELS; ch++)
     for (int tr = 0; tr < PATTERN_TRACKS; tr++)
       chan_kill(eng, ch, tr);
+  kill_shared_states(eng);
   memset(eng->active_note, 0, sizeof(eng->active_note));
   AUDIO_UNLOCK(eng);
 
