@@ -19,6 +19,7 @@ typedef enum {
   MENU_SCALE_ROOT,
   MENU_SCALE,
   MENU_LOOP,
+  MENU_PREVIEW,
   MENU_SONG_NAME,
   MENU_SAVE,
   MENU_EXPORT,
@@ -36,6 +37,7 @@ static const char *menu_labels[] = {
     "KEY",
     "SCALE",
     "LOOP",
+    "PREVIEW",
     "NAME",
     "SAVE",
     "EXPORT WAV",
@@ -273,6 +275,11 @@ void screen_menu_update(UIState *ui) {
           ui->song->loop = !ui->song->loop;
         break;
 
+      case MENU_PREVIEW:
+        if (input_pressed(BTN_UP) || input_pressed(BTN_DOWN) || input_pressed(BTN_OK))
+          g_preview_disabled = !g_preview_disabled;
+        break;
+
       case MENU_SAVE: {
         if (input_pressed(BTN_OK)) {
           char fname[64], path[576];
@@ -464,6 +471,10 @@ void screen_menu_draw(UIState *ui) {
         break;
       case MENU_LOOP:
         DrawText(ui->song->loop ? "ON" : "OFF",
+                 100, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_TEXT);
+        break;
+      case MENU_PREVIEW:
+        DrawText(g_preview_disabled ? "OFF" : "ON",
                  100, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_TEXT);
         break;
       case MENU_SAVE:

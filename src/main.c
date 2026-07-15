@@ -59,6 +59,8 @@ int main(int argc, char** argv) {
       start_fullscreen = true;
     else if (strcmp(argv[i], "--theme") == 0 && i + 1 < argc)
       theme_load(argv[++i]);
+    else if (strcmp(argv[i], "--no-preview") == 0)
+      g_preview_disabled = true;
   }
 #else
   (void)argc;

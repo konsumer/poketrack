@@ -613,7 +613,11 @@ void audio_ensure_preview(AudioEngine* eng, uint8_t inst_idx) {
   AUDIO_UNLOCK(eng);
 }
 
+bool g_preview_disabled = false;
+
 void audio_preview_note(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
+  if (g_preview_disabled)
+    return;
   AUDIO_LOCK(eng);
   ensure_preview_states(eng, inst_idx);
   audio_preview_kill(eng);

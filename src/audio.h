@@ -142,3 +142,6 @@ void audio_set_dyn_param(AudioEngine* eng, uint8_t inst_idx, int slot_idx, int p
 extern float g_sidechain_rms[NUM_INSTRUMENTS];
 // Global song pointer for LFO param modulation
 extern TrackerSong* g_lfo_song;
+// When true, audio_preview_note() is a no-op (--no-preview CLI flag) — for
+// editing sequences live without every cursor move re-triggering a note.
+extern bool g_preview_disabled;

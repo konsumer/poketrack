@@ -78,6 +78,14 @@ There are some built-in units (effects/sound-generators) that are documented [he
 
 The UI is themable at launch: `poketrack --theme ~/cyber.ptt`. See [THEMES](./THEMES.md) for the file format and how to convert LGPT themes.
 
+### CLI flags
+
+| Flag | Purpose |
+|---|---|
+| `-f`, `--fullscreen` | Start in fullscreen |
+| `--theme <file.ptt>` | Load a theme at launch |
+| `--no-preview` | Disable the note preview that normally fires as the cursor moves over pattern cells — useful when editing sequences live (e.g. against an external clock/sequencer) where you don't want every cursor move to also trigger a note |
+
 
 ### plugins
 
