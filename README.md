@@ -70,6 +70,8 @@ It may seem a bit inscrutable at first, but input is meant to be consistent and 
 | A | Confirm action |
 
 
+The UI is themable at launch: `raypoketrack --theme ~/cyber.ptt`. See [THEMES](./THEMES.md) for the file format and how to convert LGPT themes.
+
 Read about [specific devices](DEVICES.md).
 
 Here are some videos:

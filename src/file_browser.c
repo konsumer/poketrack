@@ -11,13 +11,13 @@ static int g_ready = 0;
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 
-EMSCRIPTEN_KEEPALIVE void c_file_browser_ready(const char *path) {
+EMSCRIPTEN_KEEPALIVE void c_file_browser_ready(const char* path) {
   strncpy(g_result, path, sizeof(g_result) - 1);
   g_result[sizeof(g_result) - 1] = '\0';
   g_ready = 1;
 }
 
-EM_JS(void, js_file_open, (const char *filter_c), {
+EM_JS(void, js_file_open, (const char* filter_c), {
   var filterStr = UTF8ToString(filter_c);
   var accept = filterStr.split(' ').map(function(p) {
                                      return p.replace("*", "");
@@ -38,7 +38,8 @@ EM_JS(void, js_file_open, (const char *filter_c), {
       var path = '/uploads/' + file.name;
       try {
         FS.mkdir('/uploads');
-      } catch (err) {
+      }
+      catch(err) {
         void err;
       }
       FS.writeFile(path, data);
@@ -51,7 +52,7 @@ EM_JS(void, js_file_open, (const char *filter_c), {
   input.click();
 });
 
-EM_JS(void, js_file_download, (const char *fs_path_c, const char *name_c), {
+EM_JS(void, js_file_download, (const char* fs_path_c, const char* name_c), {
   var path = UTF8ToString(fs_path_c);
   var name = UTF8ToString(name_c);
   try {
@@ -66,26 +67,27 @@ EM_JS(void, js_file_download, (const char *fs_path_c, const char *name_c), {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  } catch (err) {
+  }
+  catch(err) {
     console.error('download:', err);
   }
 });
 
-void file_browser_open(const char *title, const char *filter) {
+void file_browser_open(const char* title, const char* filter) {
   (void)title;
   g_ready = 0;
   js_file_open(filter ? filter : "");
 }
 
-void file_browser_save_as(const char *title, const char *default_name) {
+void file_browser_save_as(const char* title, const char* default_name) {
   (void)title;
-  const char *p = default_name ? default_name : "song.rpt";
+  const char* p = default_name ? default_name : "song.rpt";
   strncpy(g_result, p, sizeof(g_result) - 1);
   g_result[sizeof(g_result) - 1] = '\0';
   g_ready = 1;
 }
 
-void file_browser_download(const char *fs_path, const char *suggested_name) {
+void file_browser_download(const char* fs_path, const char* suggested_name) {
   js_file_download(fs_path, suggested_name ? suggested_name : "download");
 }
 
@@ -101,23 +103,26 @@ bool file_browser_active(void) { return false; }
 #include "bip39_en.h"
 #include "input.h"
 #include "raylib.h"
+#include "theme.h"
 
 #define FB_W 480
 #define FB_H 320
 #define FB_FS 10
 #define FB_RH 14
 
-static const Color C_HDR = {0x0A, 0x0A, 0x28, 0xFF};
-static const Color C_ROW0 = {0x00, 0x00, 0x08, 0xFF};
-static const Color C_ROW1 = {0x06, 0x06, 0x10, 0xFF};
-static const Color C_SEL = {0x18, 0x28, 0x68, 0xFF};
-static const Color C_SEP = {0x20, 0x20, 0x30, 0xFF};
-static const Color C_TXT = {0xB8, 0xB8, 0xC8, 0xFF};
-static const Color C_DIM = {0x40, 0x40, 0x60, 0xFF};
-static const Color C_DIR = {0xFF, 0xA0, 0x30, 0xFF};
-static const Color C_FILE = {0x40, 0xFF, 0xC0, 0xFF};
-static const Color C_WHT = {0xFF, 0xFF, 0xFF, 0xFF};
-static const Color C_INP = {0x08, 0x08, 0x20, 0xFF};
+// Aliases onto the shared theme globals (see theme.h) so the file browser
+// stays in sync with `--theme`. C_HDR/C_DIM/C_INP have no equivalent in the
+// main palette, so they get their own themeable fields (C_FB_*).
+#define C_HDR C_FB_HEADER
+#define C_ROW0 C_BG
+#define C_ROW1 C_BG_ALT
+#define C_SEL C_CURSOR
+#define C_TXT C_TEXT
+#define C_DIM C_FB_DIM
+#define C_DIR C_INST
+#define C_FILE C_NOTE
+#define C_WHT C_TITLE
+#define C_INP C_FB_INPUT_BG
 
 #define MAX_ENT 1024
 #define MAX_PATH 512
@@ -142,11 +147,11 @@ static char g_fname[256] = {0};
 static bool g_fname_ed = false;
 
 // On-screen keyboard for filename entry
-#define FB_KB_KEY_W     42
-#define FB_KB_KEY_H     22
-#define FB_KB_GAP       2
+#define FB_KB_KEY_W 42
+#define FB_KB_KEY_H 22
+#define FB_KB_GAP 2
 #define FB_KB_CHAR_ROWS 4
-static const char *FB_KB_CHARS[FB_KB_CHAR_ROWS] = {
+static const char* FB_KB_CHARS[FB_KB_CHAR_ROWS] = {
     "1234567890",
     "QWERTYUIOP",
     "ASDFGHJKL-",
@@ -154,32 +159,37 @@ static const char *FB_KB_CHARS[FB_KB_CHAR_ROWS] = {
 };
 static const int FB_KB_CHAR_COLS[FB_KB_CHAR_ROWS] = {10, 10, 10, 9};
 #define FB_KB_SPECIAL 4
-#define FB_KB_ROWS    5
+#define FB_KB_ROWS 5
 // Special row cols: 0=SHIFT 1=SPACE 2=DEL 3=SUGGEST 4=OK
 #define FB_KB_SPECIAL_COLS 5
-static int  g_kb_row   = FB_KB_SPECIAL;
-static int  g_kb_col   = 3;
+static int g_kb_row = FB_KB_SPECIAL;
+static int g_kb_col = 3;
 static bool g_kb_shift = false;
 
 static int fb_kb_max_col(int row) {
   return (row < FB_KB_CHAR_ROWS) ? FB_KB_CHAR_COLS[row] : FB_KB_SPECIAL_COLS;
 }
 
-static void fb_strip_ext(char *name) {
+static void fb_strip_ext(char* name) {
   size_t l = strlen(name), el = strlen(g_ext);
   if (el && l > el + 1 && name[l - el - 1] == '.' && strcasecmp(name + l - el, g_ext) == 0)
     name[l - el - 1] = '\0';
 }
 static void fb_fname_append(char c) {
   size_t l = strlen(g_fname);
-  if (l < sizeof(g_fname) - 2) { g_fname[l] = c; g_fname[l + 1] = '\0'; }
+  if (l < sizeof(g_fname) - 2) {
+    g_fname[l] = c;
+    g_fname[l + 1] = '\0';
+  }
 }
 static void fb_fname_backspace(void) {
   size_t l = strlen(g_fname);
-  if (l) g_fname[l - 1] = '\0';
+  if (l)
+    g_fname[l - 1] = '\0';
 }
 static void fb_fname_confirm(void) {
-  if (!g_fname[0]) return;
+  if (!g_fname[0])
+    return;
   snprintf(g_result, sizeof(g_result), "%s/%s.%s", g_dir, g_fname, g_ext);
   g_ready = 1;
   g_mode = FB_NONE;
@@ -187,27 +197,30 @@ static void fb_fname_confirm(void) {
 }
 static void fb_suggest(void) {
   static bool seeded = false;
-  if (!seeded) { srand((unsigned int)time(NULL)); seeded = true; }
+  if (!seeded) {
+    srand((unsigned int)time(NULL));
+    seeded = true;
+  }
   int a = rand() % 2048, b = rand() % 2048, c = rand() % 2048;
   snprintf(g_fname, sizeof(g_fname), "%s-%s-%s", bip39_en[a], bip39_en[b], bip39_en[c]);
 }
 static void fb_enter_kb(void) {
   g_fname_ed = true;
-  g_kb_row   = FB_KB_SPECIAL;
-  g_kb_col   = 3;  // SUGGEST preselected
+  g_kb_row = FB_KB_SPECIAL;
+  g_kb_col = 3;  // SUGGEST preselected
 }
 
 bool file_browser_active(void) { return g_mode != FB_NONE; }
 
-static bool fmatch(const char *name) {
+static bool fmatch(const char* name) {
   if (!g_filt[0])
     return true;
   char buf[128];
   strncpy(buf, g_filt, sizeof(buf) - 1);
-  char *tok = strtok(buf, " ");
+  char* tok = strtok(buf, " ");
   while (tok) {
     if (tok[0] == '*' && tok[1] == '.') {
-      const char *ext = strrchr(name, '.');
+      const char* ext = strrchr(name, '.');
       if (ext && strcasecmp(ext, tok + 1) == 0)
         return true;
     }
@@ -216,7 +229,7 @@ static bool fmatch(const char *name) {
   return false;
 }
 
-static int ecmp(const void *a, const void *b) {
+static int ecmp(const void* a, const void* b) {
   const Ent *ea = a, *eb = b;
   if (!strcmp(ea->name, ".."))
     return -1;
@@ -229,12 +242,12 @@ static int ecmp(const void *a, const void *b) {
 
 static void scan(void) {
   g_cnt = g_cur = g_scr = 0;
-  DIR *d = opendir(g_dir);
+  DIR* d = opendir(g_dir);
   if (!d)
     return;
-  struct dirent *de;
+  struct dirent* de;
   while ((de = readdir(d)) && g_cnt < MAX_ENT) {
-    const char *n = de->d_name;
+    const char* n = de->d_name;
     if (n[0] == '.' && strcmp(n, "..") != 0)
       continue;
     char full[MAX_PATH];
@@ -244,7 +257,7 @@ static void scan(void) {
       continue;
     bool isdir = S_ISDIR(st.st_mode);
     if (isdir) {
-      const char *ext = strrchr(n, '.');
+      const char* ext = strrchr(n, '.');
       if (ext && strcasecmp(ext, ".clap") == 0) {
         if (!strstr(g_filt, ".clap"))
           continue;
@@ -264,7 +277,7 @@ static void scan(void) {
 }
 
 static void go_up(void) {
-  char *last = strrchr(g_dir, '/');
+  char* last = strrchr(g_dir, '/');
   if (!last) {
     g_mode = FB_NONE;
     g_ready = 0;
@@ -295,7 +308,7 @@ static bool fb_rep(TrackerButton b) {
   return (f > 20) && (f % 4 == 0);
 }
 
-void file_browser_open(const char *title, const char *filter) {
+void file_browser_open(const char* title, const char* filter) {
   (void)title;
   g_mode = FB_OPEN;
   g_ready = 0;
@@ -307,7 +320,7 @@ void file_browser_open(const char *title, const char *filter) {
   scan();
 }
 
-void file_browser_save_as(const char *title, const char *def_name) {
+void file_browser_save_as(const char* title, const char* def_name) {
   (void)title;
   g_mode = FB_SAVE;
   g_ready = 0;
@@ -315,7 +328,7 @@ void file_browser_save_as(const char *title, const char *def_name) {
   if (!g_dir[0])
     strncpy(g_dir, GetWorkingDirectory(), MAX_PATH - 1);
   // Derive extension from def_name (e.g. "song.rpt" → "rpt", "inst.rpti" → "rpti")
-  const char *dot = def_name ? strrchr(def_name, '.') : NULL;
+  const char* dot = def_name ? strrchr(def_name, '.') : NULL;
   strncpy(g_ext, (dot && dot[1]) ? dot + 1 : "rpt", sizeof(g_ext) - 1);
   snprintf(g_filt, sizeof(g_filt), "*.%s", g_ext);
   strncpy(g_fname, def_name ? def_name : "song", sizeof(g_fname) - 1);
@@ -323,7 +336,7 @@ void file_browser_save_as(const char *title, const char *def_name) {
   scan();
 }
 
-void file_browser_download(const char *p, const char *n) {
+void file_browser_download(const char* p, const char* n) {
   (void)p;
   (void)n;
 }
@@ -341,23 +354,33 @@ void file_browser_tick(void) {
   }
 
   if (g_fname_ed) {
-    while (GetCharPressed() > 0) {}  // drain queue — on-screen keyboard handles input
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) { fb_fname_confirm(); return; }
+    while (GetCharPressed() > 0) {
+    }  // drain queue — on-screen keyboard handles input
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
+      fb_fname_confirm();
+      return;
+    }
 
     // On-screen keyboard navigation
     if (fb_rep(BTN_LEFT)) {
-      if (--g_kb_col < 0) g_kb_col = fb_kb_max_col(g_kb_row) - 1;
+      if (--g_kb_col < 0)
+        g_kb_col = fb_kb_max_col(g_kb_row) - 1;
     }
     if (fb_rep(BTN_RIGHT)) {
-      if (++g_kb_col >= fb_kb_max_col(g_kb_row)) g_kb_col = 0;
+      if (++g_kb_col >= fb_kb_max_col(g_kb_row))
+        g_kb_col = 0;
     }
     if (fb_rep(BTN_UP)) {
-      if (--g_kb_row < 0) g_kb_row = FB_KB_ROWS - 1;
-      if (g_kb_col >= fb_kb_max_col(g_kb_row)) g_kb_col = fb_kb_max_col(g_kb_row) - 1;
+      if (--g_kb_row < 0)
+        g_kb_row = FB_KB_ROWS - 1;
+      if (g_kb_col >= fb_kb_max_col(g_kb_row))
+        g_kb_col = fb_kb_max_col(g_kb_row) - 1;
     }
     if (fb_rep(BTN_DOWN)) {
-      if (++g_kb_row >= FB_KB_ROWS) g_kb_row = 0;
-      if (g_kb_col >= fb_kb_max_col(g_kb_row)) g_kb_col = fb_kb_max_col(g_kb_row) - 1;
+      if (++g_kb_row >= FB_KB_ROWS)
+        g_kb_row = 0;
+      if (g_kb_col >= fb_kb_max_col(g_kb_row))
+        g_kb_col = fb_kb_max_col(g_kb_row) - 1;
     }
 
     if (input_pressed(BTN_OK)) {
@@ -366,11 +389,21 @@ void file_browser_tick(void) {
         fb_fname_append(g_kb_shift ? (c >= 'A' && c <= 'Z' ? c + 32 : c) : c);
       } else {
         switch (g_kb_col) {
-          case 0: g_kb_shift = !g_kb_shift; break;
-          case 1: fb_fname_append(' ');     break;
-          case 2: fb_fname_backspace();     break;
-          case 3: fb_suggest();             break;
-          case 4: fb_fname_confirm();       break;
+          case 0:
+            g_kb_shift = !g_kb_shift;
+            break;
+          case 1:
+            fb_fname_append(' ');
+            break;
+          case 2:
+            fb_fname_backspace();
+            break;
+          case 3:
+            fb_suggest();
+            break;
+          case 4:
+            fb_fname_confirm();
+            break;
         }
       }
     }
@@ -392,10 +425,11 @@ void file_browser_tick(void) {
 
   if (input_pressed(BTN_OK)) {
     if (g_cnt == 0) {
-      if (g_mode == FB_SAVE) fb_fname_confirm();
+      if (g_mode == FB_SAVE)
+        fb_fname_confirm();
       return;
     }
-    Ent *e = &g_ents[g_cur];
+    Ent* e = &g_ents[g_cur];
     if (e->is_dir) {
       if (!strcmp(e->name, "..")) {
         go_up();
@@ -420,8 +454,10 @@ void file_browser_tick(void) {
     if (input_pressed(BTN_NONE))
       fb_enter_kb();
     if (input_pressed(BTN_PLAY)) {
-      if (g_fname[0]) fb_fname_confirm();
-      else fb_enter_kb();
+      if (g_fname[0])
+        fb_fname_confirm();
+      else
+        fb_enter_kb();
     }
   }
 }
@@ -435,11 +471,11 @@ void file_browser_draw(void) {
 
   // Title bar (always)
   DrawRectangle(0, 0, FB_W, title_h, C_HDR);
-  const char *mstr = (g_mode == FB_SAVE) ? "SAVE" : "LOAD";
+  const char* mstr = (g_mode == FB_SAVE) ? "SAVE" : "LOAD";
   char hdr[MAX_PATH + 16];
   snprintf(hdr, sizeof(hdr), "%s  %s", mstr, g_dir);
   if (MeasureText(hdr, FB_FS) > FB_W - 8) {
-    const char *tail = g_dir + strlen(g_dir);
+    const char* tail = g_dir + strlen(g_dir);
     while (tail > g_dir && *(tail - 1) != '/') tail--;
     snprintf(hdr, sizeof(hdr), "%s  .../%s", mstr, tail);
   }
@@ -468,53 +504,53 @@ void file_browser_draw(void) {
     Color kb_cur = {0x20, 0x60, 0xC0, 0xFF};
 
     for (int r = 0; r < FB_KB_CHAR_ROWS; r++) {
-      int ncols   = FB_KB_CHAR_COLS[r];
+      int ncols = FB_KB_CHAR_COLS[r];
       int total_w = ncols * FB_KB_KEY_W + (ncols - 1) * FB_KB_GAP;
-      int sx      = (FB_W - total_w) / 2;
-      int y       = kb_y + r * (FB_KB_KEY_H + FB_KB_GAP);
+      int sx = (FB_W - total_w) / 2;
+      int y = kb_y + r * (FB_KB_KEY_H + FB_KB_GAP);
       for (int c = 0; c < ncols; c++) {
-        int  x   = sx + c * (FB_KB_KEY_W + FB_KB_GAP);
+        int x = sx + c * (FB_KB_KEY_W + FB_KB_GAP);
         bool cur = (g_kb_row == r && g_kb_col == c);
         DrawRectangle(x, y, FB_KB_KEY_W, FB_KB_KEY_H, cur ? kb_cur : kb_key);
         char raw = FB_KB_CHARS[r][c];
         char label[2] = {(g_kb_shift && raw >= 'A' && raw <= 'Z') ? raw + 32 : raw, 0};
-        int  tw       = MeasureText(label, FB_FS);
+        int tw = MeasureText(label, FB_FS);
         DrawText(label, x + (FB_KB_KEY_W - tw) / 2, y + (FB_KB_KEY_H - FB_FS) / 2,
                  FB_FS, cur ? C_WHT : C_TXT);
       }
     }
 
     // Special row: SHIFT | SPACE | DEL | SUGGEST | OK
-    int sy      = kb_y + FB_KB_CHAR_ROWS * (FB_KB_KEY_H + FB_KB_GAP);
-    int sh_x    = 8,           sh_w  = 72;
-    int sp_x    = sh_x + sh_w + 3, sp_w = 100;
-    int del_x   = sp_x + sp_w + 3, del_w = 66;
-    int sug_x   = del_x + del_w + 3, sug_w = 112;
-    int ok_x    = sug_x + sug_w + 3, ok_w = FB_W - ok_x - 8;
+    int sy = kb_y + FB_KB_CHAR_ROWS * (FB_KB_KEY_H + FB_KB_GAP);
+    int sh_x = 8, sh_w = 72;
+    int sp_x = sh_x + sh_w + 3, sp_w = 100;
+    int del_x = sp_x + sp_w + 3, del_w = 66;
+    int sug_x = del_x + del_w + 3, sug_w = 112;
+    int ok_x = sug_x + sug_w + 3, ok_w = FB_W - ok_x - 8;
 
-    bool sh_cur  = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 0);
-    bool sp_cur  = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 1);
+    bool sh_cur = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 0);
+    bool sp_cur = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 1);
     bool del_cur = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 2);
     bool sug_cur = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 3);
-    bool ok_cur  = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 4);
+    bool ok_cur = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 4);
 
     Color sh_bg = g_kb_shift ? (Color){0x60, 0x40, 0x00, 0xFF} : kb_key;
-    DrawRectangle(sh_x,  sy, sh_w,  FB_KB_KEY_H, sh_cur  ? kb_cur : sh_bg);
-    DrawRectangle(sp_x,  sy, sp_w,  FB_KB_KEY_H, sp_cur  ? kb_cur : kb_key);
+    DrawRectangle(sh_x, sy, sh_w, FB_KB_KEY_H, sh_cur ? kb_cur : sh_bg);
+    DrawRectangle(sp_x, sy, sp_w, FB_KB_KEY_H, sp_cur ? kb_cur : kb_key);
     DrawRectangle(del_x, sy, del_w, FB_KB_KEY_H, del_cur ? kb_cur : kb_key);
-    DrawRectangle(sug_x, sy, sug_w, FB_KB_KEY_H, sug_cur ? kb_cur : (Color){0x00,0x28,0x40,0xFF});
-    DrawRectangle(ok_x,  sy, ok_w,  FB_KB_KEY_H, ok_cur  ? kb_cur : kb_key);
+    DrawRectangle(sug_x, sy, sug_w, FB_KB_KEY_H, sug_cur ? kb_cur : (Color){0x00, 0x28, 0x40, 0xFF});
+    DrawRectangle(ok_x, sy, ok_w, FB_KB_KEY_H, ok_cur ? kb_cur : kb_key);
 
-    DrawText("SHIFT",   sh_x  + (sh_w  - MeasureText("SHIFT",   FB_FS)) / 2,
-             sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, sh_cur  ? C_WHT : (g_kb_shift ? (Color){0xFF,0xC0,0x00,0xFF} : C_TXT));
-    DrawText("SPACE",   sp_x  + (sp_w  - MeasureText("SPACE",   FB_FS)) / 2,
-             sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, sp_cur  ? C_WHT : C_TXT);
-    DrawText("DEL",     del_x + (del_w - MeasureText("DEL",     FB_FS)) / 2,
+    DrawText("SHIFT", sh_x + (sh_w - MeasureText("SHIFT", FB_FS)) / 2,
+             sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, sh_cur ? C_WHT : (g_kb_shift ? (Color){0xFF, 0xC0, 0x00, 0xFF} : C_TXT));
+    DrawText("SPACE", sp_x + (sp_w - MeasureText("SPACE", FB_FS)) / 2,
+             sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, sp_cur ? C_WHT : C_TXT);
+    DrawText("DEL", del_x + (del_w - MeasureText("DEL", FB_FS)) / 2,
              sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, del_cur ? C_WHT : (Color){0xFF, 0x50, 0x50, 0xFF});
     DrawText("SUGGEST", sug_x + (sug_w - MeasureText("SUGGEST", FB_FS)) / 2,
              sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, sug_cur ? C_WHT : (Color){0x40, 0xC0, 0xFF, 0xFF});
-    DrawText("OK",      ok_x  + (ok_w  - MeasureText("OK",      FB_FS)) / 2,
-             sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, ok_cur  ? C_WHT : (Color){0x00, 0xFF, 0x60, 0xFF});
+    DrawText("OK", ok_x + (ok_w - MeasureText("OK", FB_FS)) / 2,
+             sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, ok_cur ? C_WHT : (Color){0x00, 0xFF, 0x60, 0xFF});
 
     DrawText("DPAD=navigate   A=type   B=back to list   Enter=save",
              4, FB_H - FB_FS - 4, FB_FS - 1, C_DIM);
@@ -524,16 +560,16 @@ void file_browser_draw(void) {
   // File list
   int bot_h = (g_mode == FB_SAVE) ? 48 : 20;
   int list_y = title_h;
-  int bot_y  = FB_H - bot_h;
+  int bot_y = FB_H - bot_h;
   int list_h = bot_y - list_y;
-  int vis    = list_h / FB_RH;
+  int vis = list_h / FB_RH;
 
   for (int i = 0; i < vis && (g_scr + i) < g_cnt; i++) {
     int idx = g_scr + i;
-    int y   = list_y + i * FB_RH;
+    int y = list_y + i * FB_RH;
     bool cur = (idx == g_cur);
     DrawRectangle(0, y, FB_W, FB_RH, cur ? C_SEL : (i % 2 == 0 ? C_ROW1 : C_ROW0));
-    Ent *e = &g_ents[idx];
+    Ent* e = &g_ents[idx];
     char label[260];
     if (!strcmp(e->name, ".."))
       snprintf(label, sizeof(label), "[ .. ]");
@@ -549,7 +585,8 @@ void file_browser_draw(void) {
     int sx = FB_W - 5, sh = list_h, denom = g_cnt - vis;
     DrawRectangle(sx, list_y, 5, sh, C_DIM);
     int th = (vis * sh) / g_cnt;
-    if (th < 6) th = 6;
+    if (th < 6)
+      th = 6;
     int ty = list_y + (denom > 0 ? (g_scr * (sh - th)) / denom : 0);
     DrawRectangle(sx, ty, 5, th, C_TXT);
   }
@@ -574,7 +611,7 @@ void file_browser_draw(void) {
 
 #endif  // __EMSCRIPTEN__
 
-const char *file_browser_poll(void) {
+const char* file_browser_poll(void) {
   if (!g_ready)
     return NULL;
   g_ready = 0;
