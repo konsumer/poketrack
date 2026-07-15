@@ -1,9 +1,9 @@
 # Themes
 
-raypoketrack's colors can be overridden at launch:
+poketrack's colors can be overridden at launch:
 
 ```
-raypoketrack --theme ~/cyber.ptt
+poketrack --theme ~/cyber.ptt
 ```
 
 There's no persisted config — if you want a theme, pass it every time (alias
@@ -12,7 +12,7 @@ the command, or wrap it in a launcher script) or just put `theme.ptt` in your st
 ## Default theme
 
 If a file named `theme.ptt` exists in the start directory (the directory you
-launch raypoketrack from), it's loaded automatically at startup — same as
+launch poketrack from), it's loaded automatically at startup — same as
 `song.rpt`. It's silently skipped if missing, so this is opt-in: drop a
 `theme.ptt` next to your `song.rpt` to theme a project without touching the
 command line.
@@ -67,7 +67,7 @@ cp examples/theme.ptt theme.ptt
 | `greeny.ptt` | teal background, lime/hot-pink accents |
 
 ```
-raypoketrack --theme examples/themes/cyber.ptt
+poketrack --theme examples/themes/cyber.ptt
 ```
 
 Every theme in the gallery except `cyber.ptt` was generated with
@@ -126,10 +126,10 @@ fields by blending between those 4 anchors:
 
 ```
 ./lgpt_theme.py CONFIG.xml mytheme.ptt
-raypoketrack --theme mytheme.ptt
+poketrack --theme mytheme.ptt
 ```
 
-Since LGPT only has 4 colors and raypoketrack has more roles, some roles
+Since LGPT only has 4 colors and poketrack has more roles, some roles
 collapse onto the same anchor color (e.g. there's no dedicated LGPT
 "note-off" color, so it reuses `HICOLOR2`). Edit the generated `.ptt` by
 hand afterwards if you want to split any of those apart.

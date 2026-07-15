@@ -2,7 +2,7 @@
 build/
 build-web/
 .claude
-ports/raypoketrack
+ports/poketrack
 __pycache__
 *.rpt
 *.rpti

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert a Standard MIDI File into a raypoketrack pattern (.rptp).
+"""Convert a Standard MIDI File into a poketrack pattern (.rptp).
 
 Like midi2rpt.py, but writes a single multi-track pattern instead of a whole
 song — which is all you need now that patterns hold up to PATTERN_TRACKS (16)
@@ -114,7 +114,7 @@ def convert(midi_path, out_path, steps_per_beat=4):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Convert a MIDI file to a raypoketrack .rptp pattern")
+    ap = argparse.ArgumentParser(description="Convert a MIDI file to a poketrack .rptp pattern")
     ap.add_argument("input", help="input .mid file")
     ap.add_argument("--out", help="output .rptp (default: input name with .rptp)")
     ap.add_argument("--steps-per-beat", type=int, default=4,

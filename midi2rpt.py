@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert a Standard MIDI File into a raypoketrack song (.rpt).
+"""Convert a Standard MIDI File into a poketrack song (.rpt).
 
 See FORMATS.md for the binary layout. No third-party dependencies.
 
@@ -342,7 +342,7 @@ def convert(midi_path, out_path, soundfont=None, steps_per_beat=4, name=None):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Convert a MIDI file to a raypoketrack .rpt song")
+    ap = argparse.ArgumentParser(description="Convert a MIDI file to a poketrack .rpt song")
     ap.add_argument("input", help="input .mid file")
     ap.add_argument("--soundfont", help="soundfont (.sf2); stored relative to --out")
     ap.add_argument("--out", help="output .rpt (default: input name with .rpt)")

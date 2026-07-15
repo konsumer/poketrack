@@ -1,11 +1,11 @@
 <html>
   <head>
-    <title>raypoketrack</title>
+    <title>poketrack</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32" />
     <link rel="shortcut icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <meta name="apple-mobile-web-app-title" content="RayPokeTrack" />
+    <meta name="apple-mobile-web-app-title" content="PokeTrack" />
     <link rel="manifest" href="/site.webmanifest" />
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -191,7 +191,7 @@
     </div>
 
     <script type="module">
-      import raypoketrack from './raypoketrack.mjs'
+      import poketrack from './poketrack.mjs'
 
       const AW = 480, AH = 320  // game internal resolution aspect
 
@@ -246,7 +246,7 @@
         }
       }
 
-      const mod = await raypoketrack({
+      const mod = await poketrack({
         canvas: document.getElementById('canvas'),
         preRun({ FS_createDataFile }) {
           if (songBytes) {

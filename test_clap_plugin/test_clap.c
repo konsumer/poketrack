@@ -1,5 +1,5 @@
 // Minimal CLAP test instrument: sawtooth oscillator with gain + cutoff params.
-// Used to verify that the raypoketrack CLAP host correctly delivers param events.
+// Used to verify that the poketrack CLAP host correctly delivers param events.
 // If gain/cutoff changes are audible here but not in Surge XT, the issue is Surge-specific.
 #include <math.h>
 #include <stdint.h>
@@ -9,7 +9,7 @@
 
 #include "clap/clap.h"
 
-#define PLUGIN_ID "raypoketrack.test.oscillator"
+#define PLUGIN_ID "poketrack.test.oscillator"
 #define PLUGIN_NAME "Test Oscillator"
 #define PARAM_GAIN   0
 #define PARAM_CUTOFF 1
@@ -256,7 +256,7 @@ static const clap_plugin_descriptor_t s_desc = {
   .clap_version = CLAP_VERSION_INIT,
   .id = PLUGIN_ID,
   .name = PLUGIN_NAME,
-  .vendor = "raypoketrack",
+  .vendor = "poketrack",
   .url = "",
   .manual_url = "",
   .support_url = "",

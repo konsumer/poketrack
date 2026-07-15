@@ -79,7 +79,7 @@ int main(int argc, char** argv) {
 #ifndef __EMSCRIPTEN__
   SetConfigFlags(FLAG_WINDOW_RESIZABLE);
 #endif
-  InitWindow(WIN_W, WIN_H, "raypoketrack");
+  InitWindow(WIN_W, WIN_H, "poketrack");
   SetTargetFPS(60);
   g_target = LoadRenderTexture(WIN_W, WIN_H);
   SetTextureFilter(g_target.texture, TEXTURE_FILTER_POINT);

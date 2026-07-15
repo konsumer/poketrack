@@ -34,7 +34,7 @@ jobs:
       - name: Collect output
         run: |
           mkdir -p dist
-          cp build-web/raypoketrack.mjs dist/
+          cp build-web/poketrack.mjs dist/
           cp webroot/* dist/
 
       - name: Upload Pages artifact

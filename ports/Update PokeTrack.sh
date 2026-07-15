@@ -3,8 +3,8 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 main() {
-  DEST="$SCRIPT_DIR/raypoketrack"
-  REPO="konsumer/raypoketrack"
+  DEST="$SCRIPT_DIR/poketrack"
+  REPO="konsumer/poketrack"
   API="https://api.github.com/repos/$REPO/releases/latest"
   RAW="https://raw.githubusercontent.com/$REPO/refs/tags"
   LOG="$SCRIPT_DIR/update.log"
@@ -26,15 +26,15 @@ main() {
       case "$ARCH" in
         aarch64|arm64)
           if [ -z "$DISPLAY" ] && [ -z "$WAYLAND_DISPLAY" ]; then
-            ASSET="raypoketrack-linux-arm64-sdl.zip"
+            ASSET="poketrack-linux-arm64-sdl.zip"
           else
-            ASSET="raypoketrack-linux-arm64.zip"
+            ASSET="poketrack-linux-arm64.zip"
           fi
           ;;
-        *) ASSET="raypoketrack-linux.zip" ;;
+        *) ASSET="poketrack-linux.zip" ;;
       esac
       ;;
-    Darwin) ASSET="raypoketrack-macos.zip" ;;
+    Darwin) ASSET="poketrack-macos.zip" ;;
     *) error "Unsupported platform: $OS" ;;
   esac
   log "Platform: $OS/$ARCH -> $ASSET"
@@ -51,7 +51,7 @@ main() {
   [ -z "$URL" ] && error "Could not find asset: $ASSET"
 
   notify "Updating port scripts..."
-  for SCRIPT in "RayPokeTrack.sh" "Update RayPokeTrack.sh"; do
+  for SCRIPT in "PokeTrack.sh" "Update PokeTrack.sh"; do
     ENCODED="$(echo "$SCRIPT" | sed 's/ /%20/g')"
     curl -sf "$RAW/$TAG/ports/$ENCODED" -o "$SCRIPT_DIR/$SCRIPT" 2>>"$LOG" \
       && log "  updated: $SCRIPT" || log "  warning: could not update $SCRIPT"
@@ -66,10 +66,10 @@ main() {
   rm -rf "$DEST"
   mkdir -p "$DEST"
   unzip -q "$TMP/$ASSET" -d "$DEST" 2>>"$LOG" || error "Extract failed"
-  chmod +x "$DEST"/raypoketrack* 2>/dev/null
+  chmod +x "$DEST"/poketrack* 2>/dev/null
   rm -rf "$TMP"
 
-  notify "RayPokeTrack updated to $TAG."
+  notify "PokeTrack updated to $TAG."
   sleep 3
 }
 

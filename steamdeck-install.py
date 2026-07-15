@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Steam Deck installer for RayPokeTrack. Downloads the latest release,
+# Steam Deck installer for PokeTrack. Downloads the latest release,
 # optionally the example songs, and optionally adds a non-Steam game
 # shortcut. Only needs python3 + zenity, both preinstalled on SteamOS.
 #
@@ -19,8 +19,8 @@ import zipfile
 import zlib
 from pathlib import Path
 
-REPO = "konsumer/raypoketrack"
-ASSET = "raypoketrack-linux.zip"  # steamdeck is x86_64
+REPO = "konsumer/poketrack"
+ASSET = "poketrack-linux.zip"  # steamdeck is x86_64
 ART_BASE_URL = f"https://raw.githubusercontent.com/{REPO}/main/art"
 
 
@@ -227,7 +227,7 @@ def add_steam_shortcut(exe_path, start_dir):
         return False
     config_dir = vdf_path.parent
     exe = f'"{exe_path}"'
-    unsigned_appid, _ = compute_appid(exe, "RayPokeTrack")
+    unsigned_appid, _ = compute_appid(exe, "PokeTrack")
 
     icon_path = config_dir / "grid" / f"{unsigned_appid}_icon.png"
     icon_ok = download_art(f"{ART_BASE_URL}/square.png", icon_path)
@@ -235,7 +235,7 @@ def add_steam_shortcut(exe_path, start_dir):
     download_art(f"{ART_BASE_URL}/horiz.png", config_dir / "grid" / f"{unsigned_appid}_hero.png")
 
     shortcuts = load_shortcuts(vdf_path)
-    add_shortcut(shortcuts, exe, "RayPokeTrack", f'"{start_dir}"', "--fullscreen",
+    add_shortcut(shortcuts, exe, "PokeTrack", f'"{start_dir}"', "--fullscreen",
                  icon=str(icon_path) if icon_ok else "")
     config_dir.mkdir(parents=True, exist_ok=True)
     vdf_path.write_bytes(_serialize_dict(shortcuts))
@@ -263,8 +263,8 @@ def main():
         print("zenity is required", file=sys.stderr)
         sys.exit(1)
 
-    install_root = choose_dir("Choose a directory for RayPokeTrack", Path.home())
-    dest = install_root / "raypoketrack"
+    install_root = choose_dir("Choose a directory for PokeTrack", Path.home())
+    dest = install_root / "poketrack"
 
     release = latest_release()
     tag = release["tag_name"]
@@ -275,7 +275,7 @@ def main():
 
     with tempfile.TemporaryDirectory() as tmp:
         zip_path = Path(tmp) / ASSET
-        download_with_progress(asset_url, zip_path, f"Downloading RayPokeTrack {tag}...")
+        download_with_progress(asset_url, zip_path, f"Downloading PokeTrack {tag}...")
         dest.mkdir(parents=True, exist_ok=True)
         try:
             with zipfile.ZipFile(zip_path) as z:
@@ -283,12 +283,12 @@ def main():
         except zipfile.BadZipFile as e:
             die(f"Downloaded file isn't a valid zip: {e}")
 
-    bin_path = dest / "raypoketrack"
+    bin_path = dest / "poketrack"
     if not bin_path.exists():
-        die(f"{ASSET} didn't contain a raypoketrack binary as expected")
+        die(f"{ASSET} didn't contain a poketrack binary as expected")
     bin_path.chmod(bin_path.stat().st_mode | 0o111)
 
-    run_dir = choose_dir("Choose a directory to run RayPokeTrack from (examples go here)",
+    run_dir = choose_dir("Choose a directory to run PokeTrack from (examples go here)",
                           dest, exit_on_cancel=False)
 
     if question("Download example songs and instruments too?"):
@@ -298,13 +298,13 @@ def main():
             warn(f"Skipping examples: {e}")
 
     shortcut_added = False
-    if question("Add RayPokeTrack as a non-Steam game?"):
+    if question("Add PokeTrack as a non-Steam game?"):
         try:
             shortcut_added = add_steam_shortcut(bin_path, run_dir)
         except InstallError as e:
             warn(f"Skipping Steam shortcut: {e}")
 
-    msg = f"RayPokeTrack {tag} installed to:\n{dest}"
+    msg = f"PokeTrack {tag} installed to:\n{dest}"
     if run_dir != dest:
         msg += f"\nRun-in directory: {run_dir}"
     if shortcut_added:

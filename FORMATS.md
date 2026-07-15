@@ -1,6 +1,6 @@
 # File Formats
 
-raypoketrack reads and writes three binary file types. All multi-byte integers
+poketrack reads and writes three binary file types. All multi-byte integers
 are little-endian. Strings are fixed-width, NUL-padded, not necessarily
 NUL-terminated when they fill their field (readers always cap them).
 

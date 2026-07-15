@@ -15,27 +15,27 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            name: raypoketrack-linux
+            name: poketrack-linux
             linux_deps: libgl1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libasound2-dev
             cmake_flags: ""
           - os: ubuntu-24.04-arm
-            name: raypoketrack-linux-arm64
+            name: poketrack-linux-arm64
             linux_deps: libgl1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libasound2-dev
             cmake_flags: ""
           - os: ubuntu-24.04-arm
-            name: raypoketrack-linux-arm64-drm
+            name: poketrack-linux-arm64-drm
             linux_deps: libdrm-dev libgbm-dev libgles2-mesa-dev libasound2-dev
             cmake_flags: -DPLATFORM=DRM
           - os: ubuntu-24.04-arm
-            name: raypoketrack-linux-arm64-sdl
+            name: poketrack-linux-arm64-sdl
             linux_deps: libsdl2-dev libgles2-mesa-dev libasound2-dev
             cmake_flags: -DPLATFORM=SDL -DGRAPHICS=GRAPHICS_API_OPENGL_ES2
           - os: macos-latest
-            name: raypoketrack-macos
+            name: poketrack-macos
             linux_deps: ""
             cmake_flags: ""
           - os: windows-latest
-            name: raypoketrack-windows
+            name: poketrack-windows
             linux_deps: ""
             cmake_flags: ""
 
@@ -68,18 +68,18 @@ jobs:
       - name: Zip artifact (Linux)
         if: runner.os == 'Linux'
         run: |
-          cp build/raypoketrack raypoketrack
-          zip ${{ matrix.name }}.zip raypoketrack
+          cp build/poketrack poketrack
+          zip ${{ matrix.name }}.zip poketrack
 
       - name: Zip artifact (macOS)
         if: runner.os == 'macOS'
-        run: zip -r ${{ matrix.name }}.zip build/raypoketrack.app
+        run: zip -r ${{ matrix.name }}.zip build/poketrack.app
 
       - name: Zip artifact (Windows)
         if: runner.os == 'Windows'
         run: |
-          cp build/raypoketrack.exe raypoketrack.exe
-          Compress-Archive -Path raypoketrack.exe -DestinationPath ${{ matrix.name }}.zip
+          cp build/poketrack.exe poketrack.exe
+          Compress-Archive -Path poketrack.exe -DestinationPath ${{ matrix.name }}.zip
 
       - name: Upload to release
         if: github.event_name == 'release'

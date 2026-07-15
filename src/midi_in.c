@@ -63,7 +63,7 @@ static void midi_in_cb(const MIDIPacketList *pktlist, void *readProc, void *srcR
 }
 
 void midi_in_global_init(void) {
-  MIDIClientCreate(CFSTR("raypoketrack_in"), NULL, NULL, &g_in_client);
+  MIDIClientCreate(CFSTR("poketrack_in"), NULL, NULL, &g_in_client);
   MIDIInputPortCreate(g_in_client, CFSTR("input"), midi_in_cb, NULL, &g_in_port);
   g_port_count = (int)MIDIGetNumberOfSources();
   if (g_port_count > MAX_IN_PORTS)
@@ -187,7 +187,7 @@ void midi_in_global_init(void) {
     g_in_seq = NULL;
     return;
   }
-  snd_seq_set_client_name(g_in_seq, "raypoketrack_in");
+  snd_seq_set_client_name(g_in_seq, "poketrack_in");
   g_in_myport = snd_seq_create_simple_port(g_in_seq, "input",
                                            SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE,
                                            SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION);

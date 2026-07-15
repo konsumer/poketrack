@@ -21,7 +21,7 @@ struct MidiOut {
 };
 
 void midi_out_global_init(void) {
-  MIDIClientCreate(CFSTR("raypoketrack"), NULL, NULL, &g_client);
+  MIDIClientCreate(CFSTR("poketrack"), NULL, NULL, &g_client);
   MIDIOutputPortCreate(g_client, CFSTR("output"), &g_port);
 }
 
@@ -147,7 +147,7 @@ void midi_out_global_init(void) {
     g_seq = NULL;
     return;
   }
-  snd_seq_set_client_name(g_seq, "raypoketrack");
+  snd_seq_set_client_name(g_seq, "poketrack");
   g_myport = snd_seq_create_simple_port(g_seq, "output",
                                         SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ,
                                         SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION);

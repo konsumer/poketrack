@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Convert an LGPT (Little GPTracker) CONFIG.xml theme into a raypoketrack
+"""Convert an LGPT (Little GPTracker) CONFIG.xml theme into a poketrack
 .ptt theme file.
 
 LGPT themes only define 4 colors:
   BACKGROUND, FOREGROUND, HICOLOR1, HICOLOR2
 (see https://sixey.es/sounds/piggythemes/ for examples)
 
-raypoketrack has more named roles than that, so the extra fields are
+poketrack has more named roles than that, so the extra fields are
 derived by blending between those 4 anchors. There's no way to recover
 colors LGPT never had an opinion on (e.g. a dedicated "note off" red) -
 those roles just reuse the closest anchor. Edit the generated .ptt file

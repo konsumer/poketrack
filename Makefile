@@ -18,10 +18,10 @@ clean: ## Delete built files
 	rm -rf build-web build
 
 run: build ## Build & run native build
-	./build/raypoketrack || ./build/raypoketrack.app/Contents/MacOS/raypoketrack
+	./build/poketrack || ./build/poketrack.app/Contents/MacOS/poketrack
 
 serve: build-web ## Build & run watching web build
-	npx -y live-server webroot --mount=/raypoketrack.mjs:./build-web/raypoketrack.mjs
+	npx -y live-server webroot --mount=/poketrack.mjs:./build-web/poketrack.mjs
 
 format: ## Format all C/H source files with clang-format
 	find . -name "*.c" -o -name "*.h" | grep -v build | xargs clang-format -i

@@ -1,28 +1,28 @@
 #!/bin/bash
 
 # this dir is where file-browser starts. it can get large, so reuse an existing
-# raypoketrack dir on the ROM tree if there is one (roms2 first, then roms).
+# poketrack dir on the ROM tree if there is one (roms2 first, then roms).
 # on first run none exist, so default to HOME rather than risk creating it in an
 # unused ROM mount-point. users can move it onto the SD card and it'll be found.
-for WORK_DIR in /roms2/raypoketrack /roms/raypoketrack "$HOME/raypoketrack"; do
+for WORK_DIR in /roms2/poketrack /roms/poketrack "$HOME/poketrack"; do
   [ -d "$WORK_DIR" ] && break
 done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BIN="${SCRIPT_DIR}/raypoketrack/raypoketrack"
+BIN="${SCRIPT_DIR}/poketrack/poketrack"
 LOG="$SCRIPT_DIR/launch.log"
 
 echo "=== Launch started $(date) =>" >> "$LOG"
 
 if [ ! -x "${BIN}" ]; then
-  MSG="RayPokeTrack not found. Run 'Update RayPokeTrack' first."
+  MSG="PokeTrack not found. Run 'Update PokeTrack' first."
   echo "ERROR: $MSG" >> "$LOG"
 
   CURR_TTY="/dev/tty1"
   export TERM=linux
-  pkill -f "gptokeyb -1 raypoketrack_err" || true
+  pkill -f "gptokeyb -1 poketrack_err" || true
   sleep 0.1
-  /opt/inttools/gptokeyb -1 "raypoketrack_err" -c "/opt/inttools/keys.gptk" >/dev/null 2>&1 &
+  /opt/inttools/gptokeyb -1 "poketrack_err" -c "/opt/inttools/keys.gptk" >/dev/null 2>&1 &
   GPTOKEYB_PID=$!
   sleep 0.2
 

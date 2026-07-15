@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upgrade raypoketrack .rpt songs from v1 (single-track patterns) to v2
+"""Upgrade poketrack .rpt songs from v1 (single-track patterns) to v2
 (multi-track patterns).
 
 In v1 the SONG grid had 16 lanes, each cell referencing a single-track pattern,

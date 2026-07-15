@@ -95,7 +95,7 @@ struct ClapPlugin {
 
 static const char *host_get_name(const clap_host_t *host) {
   (void)host;
-  return "raypoketrack";
+  return "poketrack";
 }
 
 // CLAP_EXT_PARAMS host side — plugins call these to notify the host of param changes.
@@ -142,8 +142,8 @@ static void host_request_callback(const clap_host_t *host) {
 static const clap_host_t s_host_template = {
     CLAP_VERSION_INIT,
     NULL,  // host_data — set per-instance in clap_host_load
-    "raypoketrack",
-    "raypoketrack",
+    "poketrack",
+    "poketrack",
     "",
     "0.1.0",
     host_get_extension,

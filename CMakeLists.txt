@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
 if(APPLE)
-  project(raypoketrack VERSION 0.2.0 LANGUAGES C OBJC)
+  project(poketrack VERSION 0.2.0 LANGUAGES C OBJC)
 else()
-  project(raypoketrack VERSION 0.2.0 LANGUAGES C)
+  project(poketrack VERSION 0.2.0 LANGUAGES C)
 endif()
 
 if(POLICY CMP0135)
@@ -171,7 +171,7 @@ else()
         target_link_libraries(${PROJECT_NAME} PRIVATE "-framework Cocoa" "-framework AppKit" "-framework CoreMIDI" "-framework CoreFoundation")
         set_target_properties(${PROJECT_NAME} PROPERTIES
             MACOSX_BUNDLE TRUE
-            MACOSX_BUNDLE_BUNDLE_NAME "raypoketrack"
+            MACOSX_BUNDLE_BUNDLE_NAME "poketrack"
             MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
             MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
             MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/Info.plist.in"

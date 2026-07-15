@@ -4,7 +4,7 @@ This is a cross-platform joystick-driven music-tracker.
 
 ## installation
 
-Grab [the latest release](https://github.com/konsumer/raypoketrack/releases/latest) for your platform.
+Grab [the latest release](https://github.com/konsumer/poketrack/releases/latest) for your platform.
 
 You can find device-specific instructions in [DEVICES](./DEVICES.md).
 
@@ -70,7 +70,7 @@ It may seem a bit inscrutable at first, but input is meant to be consistent and 
 | A | Confirm action |
 
 
-The UI is themable at launch: `raypoketrack --theme ~/cyber.ptt`. See [THEMES](./THEMES.md) for the file format and how to convert LGPT themes.
+The UI is themable at launch: `poketrack --theme ~/cyber.ptt`. See [THEMES](./THEMES.md) for the file format and how to convert LGPT themes.
 
 Read about [specific devices](DEVICES.md).
 
@@ -124,7 +124,7 @@ C-4  00  00 80
 
 which sequences cutoff.
 
-On linux, this didn't seem to work for me, but neither did the official Surge XT standalone (could not change reso/cut.) I did test linux with [a simple CLAP plugin](https://github.com/konsumer/raypoketrack/tree/main/test_clap_plugin) that worked fine, so I think it's an issue with Surge XT.
+On linux, this didn't seem to work for me, but neither did the official Surge XT standalone (could not change reso/cut.) I did test linux with [a simple CLAP plugin](https://github.com/konsumer/poketrack/tree/main/test_clap_plugin) that worked fine, so I think it's an issue with Surge XT.
 
 ## samples & key-mapping
 
