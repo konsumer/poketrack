@@ -253,6 +253,13 @@ void screen_instrument_update(UIState* ui) {
     int add_row = INST_PARAM_BASE + nparams;
     int data_row = INST_PARAM_BASE + nparams + (has_add_row ? 1 : 0);
     bool has_data = (def->data_hint != NULL);
+    // ctx_instrument can change from the pattern screen; if this instrument's
+    // unit has fewer rows than where the cursor was, clamp to the last one.
+    {
+      int max_row = has_data ? data_row : (has_add_row ? add_row : INST_PARAM_BASE + nparams - 1);
+      if (ui->inst_row > max_row)
+        ui->inst_row = max_row;
+    }
     int param = ui->inst_row - INST_PARAM_BASE;
     bool on_add = has_add_row && (ui->inst_row == add_row);
     bool on_data = has_data && (ui->inst_row == data_row);

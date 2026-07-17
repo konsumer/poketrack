@@ -35,12 +35,13 @@ void screen_song_update(UIState* ui) {
         ui->song_scroll = ui->song_row;
       return;
     }
-    if (ui_repeat(BTN_LEFT))
-      ui->song_col = 0;
-    if (ui_repeat(BTN_RIGHT))
-      ui->song_col = 1;
+    // Same cell-stepping as the pattern footer
     if (ui->song_col > 1)
       ui->song_col = 1;
+    if (ui_repeat(BTN_LEFT) && ui->song_col > 0)
+      ui->song_col--;
+    if (ui_repeat(BTN_RIGHT) && ui->song_col < 1)
+      ui->song_col++;
 
     // col 0 = "+", col 1 = "-"
     if (input_pressed(BTN_OK)) {

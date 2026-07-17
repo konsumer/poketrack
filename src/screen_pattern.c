@@ -85,6 +85,12 @@ void screen_pattern_update(UIState* ui) {
   if (input_released(BTN_OK))
     audio_preview_kill(ui->engine);
 
+  // ctx_pattern can change from the song screen; if the new pattern is
+  // shorter than where the cursor was, land on the footer instead of an
+  // undrawn row past it.
+  if (ui->pattern_row > (int)pat->len)
+    ui->pattern_row = (int)pat->len;
+
   // Footer row: pat->len  (cols: 0=+ 1=- 2=SAVE 3=LOAD)
   bool in_footer = (ui->pattern_row == (int)pat->len);
 
