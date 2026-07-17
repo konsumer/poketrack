@@ -114,6 +114,23 @@ void tracker_inst_set_slot(TrackerInstrument* inst, int slot, const char* unit_i
   }
 }
 
+void tracker_set_global_param(TrackerSong* song, uint8_t inst_idx, uint8_t global_param, uint8_t val) {
+  TrackerInstrument* inst = &song->instruments[inst_idx];
+  int remaining = global_param;
+  for (int s = 0; s < CHAIN_MAX; s++) {
+    if (!inst->chain[s].unit_id[0])
+      continue;
+    const UnitDef* def = unit_find(inst->chain[s].unit_id);
+    if (!def)
+      continue;
+    if (remaining < def->num_params) {
+      inst->chain[s].params[remaining] = val;
+      return;
+    }
+    remaining -= def->num_params;
+  }
+}
+
 // Reset a pattern to defaults: given length, all tracks empty (note 0, fx = none).
 static void pattern_reset(Pattern* p, uint16_t len) {
   p->len = len;

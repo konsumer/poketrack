@@ -100,6 +100,11 @@ void tracker_clear(TrackerSong* song);
 
 void tracker_inst_set_slot(TrackerInstrument* inst, int slot, const char* unit_id, int inst_idx);
 
+// Write a param addressed by global index across an instrument's chain
+// (slot 0 owns indices 0..n0-1, slot 1 owns n0.., ...). Used by modulation
+// units (LFO, DUCKER) that target params on arbitrary instruments.
+void tracker_set_global_param(TrackerSong* song, uint8_t inst_idx, uint8_t global_param, uint8_t val);
+
 // Returns true on success
 bool tracker_save(const TrackerSong* song, const char* path);
 bool tracker_load(TrackerSong* song, const char* path);

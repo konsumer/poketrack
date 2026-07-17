@@ -43,69 +43,37 @@ static void ducker_note_off(UnitState *s, uint8_t n) {
 }
 static void ducker_kill(UnitState *s) { s->env = 0.0f; }
 
-// Resolve global param index to (slot, local_param) and write val
-static void ducker_write_param(TrackerSong *song, int inst_idx, int global_param, uint8_t val) {
-  TrackerInstrument *inst = &song->instruments[inst_idx];
-  int remaining = global_param;
-  for (int sl = 0; sl < CHAIN_MAX; sl++) {
-    if (!inst->chain[sl].unit_id[0])
-      continue;
-    extern const UnitDef *unit_find(const char *id);
-    const UnitDef *def = unit_find(inst->chain[sl].unit_id);
-    if (!def)
-      continue;
-    int cnt = def->num_params;
-    if (remaining < cnt) {
-      inst->chain[sl].params[remaining] = val;
-      return;
-    }
-    remaining -= cnt;
-  }
-}
-
 static void ducker_render(UnitState *s, const uint8_t *p,
                           const float *in_l, const float *in_r,
                           float *out_l, float *out_r, uint32_t frames) {
   // Pass audio through unchanged — ducking happens by writing to a target param.
-  if (in_l) memcpy(out_l, in_l, frames * sizeof(float));
-  if (in_r) memcpy(out_r, in_r, frames * sizeof(float));
-
-  int src_inst = p[0];
-  float rel_ms = p2f(p[2], 10.0f, 500.0f);
-  float amount = p[3] / 255.0f;
-  float cntr = (float)p[4];
-  int invert = p[5] ? 1 : 0;
-  int inst = p[6];
-  int prm = p[7];
-  int on = p[8];
-
-  float sr = s->sample_rate;
-  float rel_coef = expf(-1.0f / (sr * rel_ms * 0.001f));
+  if (in_l && out_l != in_l) memcpy(out_l, in_l, frames * sizeof(float));
+  if (in_r && out_r != in_r) memcpy(out_r, in_r, frames * sizeof(float));
 
   // Continuous level, not a hard gate — ramps from THRESH up to "fully
   // ducked" over a small window, so a tuned threshold catches only the
   // loud attack (e.g. a kick) and ignores its own quieter decay tail.
   float thresh = p2f(p[1], 0.0f, 0.5f);
-  float sc_rms = g_sidechain_rms[src_inst];
-  float target = (sc_rms - thresh) / 0.05f;
+  float target = (g_sidechain_rms[p[0]] - thresh) / 0.05f;
   target = target < 0.0f ? 0.0f : target > 1.0f ? 1.0f : target;
 
-  float env = s->env;
-  for (uint32_t f = 0; f < frames; f++) {
-    if (target > env)
-      env = target;  // instant attack
-    else
-      env = rel_coef * env + (1.0f - rel_coef) * target;
+  if (target >= s->env) {
+    s->env = target;  // instant attack
+  } else {
+    // Exponential release toward target, one step covering the whole block
+    float rel_ms = p2f(p[2], 10.0f, 500.0f);
+    float decay = expf(-(float)frames / (s->sample_rate * rel_ms * 0.001f));
+    s->env = target + (s->env - target) * decay;
   }
-  s->env = env;
 
-  if (!on || amount <= 0.0f || !g_lfo_song)
+  if (!p[8] || !p[3] || !g_lfo_song)  // ON; AMNT=0 also means "don't touch the target"
     return;
 
-  float env_eff = invert ? (1.0f - env) : env;
-  float raw = cntr * (1.0f - amount * env_eff);
+  float env_eff = p[5] ? (1.0f - s->env) : s->env;  // INV
+  float amount = p[3] / 255.0f;
+  float raw = (float)p[4] * (1.0f - amount * env_eff);  // CNTR pulled down
   uint8_t val = raw < 0.0f ? 0 : raw > 255.0f ? 255 : (uint8_t)raw;
-  ducker_write_param(g_lfo_song, inst, prm, val);
+  tracker_set_global_param(g_lfo_song, p[6], p[7], val);  // INST, PARAM
 }
 
 static void ducker_init_params(uint8_t *params, int inst_idx) {

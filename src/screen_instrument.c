@@ -36,6 +36,32 @@ static const UnitDef* slot_def(TrackerInstrument* inst, int s) {
   return unit_find(inst->chain[s].unit_id);
 }
 
+// Read/write/default for a slot param, routing through the unit's dynamic
+// accessors when it has them (CLAP, MIDI) or the plain slot byte otherwise.
+static uint8_t param_get(const UnitDef* def, UnitState* state, const ChainSlot* sl, int param) {
+  if (def->get_param_val && state)
+    return def->get_param_val(state, param);
+  return param < UNIT_MAX_PARAMS ? sl->params[param] : 0;
+}
+
+static uint8_t param_get_default(const UnitDef* def, UnitState* state, int param) {
+  if (def->get_param_default && state)
+    return def->get_param_default(state, param);
+  return param < UNIT_MAX_PARAMS ? def->param_defaults[param] : 0;
+}
+
+static void param_set(UIState* ui, const UnitDef* def, UnitState* state,
+                      ChainSlot* sl, int slot, int param, uint8_t val) {
+  if (def->set_param_val && state) {
+    // Propagates to every live instance of this unit, not just `state`
+    audio_set_dyn_param(ui->engine, (uint8_t)ui->ctx_instrument, slot, param, val);
+    if (def->sync_to_data)
+      def->sync_to_data(state, sl->data, sizeof(sl->data));
+  } else if (param < UNIT_MAX_PARAMS) {
+    sl->params[param] = val;
+  }
+}
+
 void screen_instrument_update(UIState* ui) {
   TrackerInstrument* inst = &ui->song->instruments[ui->ctx_instrument];
 
@@ -328,29 +354,6 @@ void screen_instrument_update(UIState* ui) {
       ui->clap_picker_row = 0;
     }
 
-    // A tap on a 2-state param (ON/OFF, or any 2-value enum like NORM/INV)
-    // toggles it directly, same as the Menu screen's LOOP/PREVIEW rows —
-    // no need to hold+arrow just to flip a switch.
-    if (!on_data && !on_add && !ui->inst_param_cc_col && param >= 0 && param < nparams &&
-        input_pressed(BTN_OK)) {
-      bool use_dyn = def->get_param_val && def->set_param_val && state;
-      uint8_t cur_v = use_dyn ? def->get_param_val(state, param)
-                              : (param < UNIT_MAX_PARAMS ? sl->params[param] : 0);
-      const char* fmt_cur = (def->format_param_val && state) ? def->format_param_val(state, param, cur_v) : NULL;
-      bool is_bool_fmt = fmt_cur && (strcmp(fmt_cur, "ON") == 0 || strcmp(fmt_cur, "OFF") == 0);
-      bool is_bin_enum = !use_dyn && param < UNIT_MAX_PARAMS && def->param_enum_count[param] == 2 && def->param_enums[param];
-      if (is_bool_fmt || is_bin_enum) {
-        uint8_t new_v = is_bool_fmt ? (cur_v >= 128 ? 0 : 255) : (cur_v ? 0 : 1);
-        if (use_dyn) {
-          audio_set_dyn_param(ui->engine, (uint8_t)ui->ctx_instrument, slot, param, new_v);
-          if (def->sync_to_data)
-            def->sync_to_data(state, sl->data, sizeof(sl->data));
-        } else if (param < UNIT_MAX_PARAMS) {
-          sl->params[param] = new_v;
-        }
-      }
-    }
-
     bool on_cc_col = ui->inst_param_cc_col && !on_data && !on_add && param >= 0 && param < nparams && param < UNIT_MAX_PARAMS;
 
     if (!edit) {
@@ -397,16 +400,7 @@ void screen_instrument_update(UIState* ui) {
             if (ui->inst_row > INST_PARAM_BASE)
               ui->inst_row--;
           } else {
-            uint8_t def_val = (def->get_param_default && state)
-                                  ? def->get_param_default(state, param)
-                                  : (param < UNIT_MAX_PARAMS ? def->param_defaults[param] : 0);
-            if (def->set_param_val && state) {
-              def->set_param_val(state, param, def_val);
-              if (def->sync_to_data)
-                def->sync_to_data(state, sl->data, sizeof(sl->data));
-            } else if (param < UNIT_MAX_PARAMS) {
-              sl->params[param] = def_val;
-            }
+            param_set(ui, def, state, sl, slot, param, param_get_default(def, state, param));
           }
         }
       }
@@ -435,19 +429,24 @@ void screen_instrument_update(UIState* ui) {
     } else {
       if (!on_data && !on_add && param >= 0 && param < nparams) {
         bool use_dyn = def->get_param_val && def->set_param_val && state;
-        uint8_t cur_v = use_dyn ? def->get_param_val(state, param)
-                                : (param < UNIT_MAX_PARAMS ? sl->params[param] : 0);
+        uint8_t cur_v = param_get(def, state, sl, param);
         const char* fmt_cur = (def->format_param_val && state) ? def->format_param_val(state, param, cur_v) : NULL;
         bool is_bool_param = fmt_cur && (strcmp(fmt_cur, "ON") == 0 || strcmp(fmt_cur, "OFF") == 0);
         bool is_enum = !use_dyn && param < UNIT_MAX_PARAMS && def->param_enum_count[param] > 0 && def->param_enums[param];
         bool changed = false;
         if (is_bool_param) {
-          if (ui_repeat(BTN_UP) || ui_repeat(BTN_DOWN)) {
+          // Tap A or up/down: toggle (same as Menu's LOOP/PREVIEW rows)
+          if (input_pressed(BTN_OK) || ui_repeat(BTN_UP) || ui_repeat(BTN_DOWN)) {
             cur_v = (cur_v >= 128) ? 0 : 255;
             changed = true;
           }
         } else if (is_enum) {
           int cnt = def->param_enum_count[param];
+          // Tap A on a 2-state enum (ON/OFF, NORM/INV): toggle directly
+          if (cnt == 2 && input_pressed(BTN_OK)) {
+            cur_v = cur_v ? 0 : 1;
+            changed = true;
+          }
           if (ui_repeat(BTN_UP)) {
             cur_v = (uint8_t)((cur_v + 1) % cnt);
             changed = true;
@@ -475,20 +474,11 @@ void screen_instrument_update(UIState* ui) {
           }
         }
         if (input_pressed(BTN_NO)) {
-          cur_v = (def->get_param_default && state)
-                      ? def->get_param_default(state, param)
-                      : (param < UNIT_MAX_PARAMS ? def->param_defaults[param] : 0);
+          cur_v = param_get_default(def, state, param);
           changed = true;
         }
-        if (changed) {
-          if (use_dyn) {
-            audio_set_dyn_param(ui->engine, (uint8_t)ui->ctx_instrument, slot, param, cur_v);
-            if (def->sync_to_data)
-              def->sync_to_data(state, sl->data, sizeof(sl->data));
-          } else if (param < UNIT_MAX_PARAMS) {
-            sl->params[param] = cur_v;
-          }
-        }
+        if (changed)
+          param_set(ui, def, state, sl, slot, param, cur_v);
       }
     }
   }
@@ -636,8 +626,7 @@ void screen_instrument_draw(UIState* ui) {
       DrawText(name_buf, PANEL_W + 4, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_TITLE : C_TEXT);
 
       bool use_dyn_val = def->get_param_val && cur_state;
-      uint8_t pv = use_dyn_val ? def->get_param_val(cur_state, pi)
-                               : (pi < UNIT_MAX_PARAMS ? sl->params[pi] : 0);
+      uint8_t pv = param_get(def, cur_state, sl, pi);
       bool is_enum = !use_dyn_val && pi < UNIT_MAX_PARAMS && def->param_enum_count[pi] > 0 && def->param_enums[pi];
 
       const char* fmt = (def->format_param_val && cur_state) ? def->format_param_val(cur_state, pi, pv) : NULL;

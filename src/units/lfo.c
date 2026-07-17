@@ -34,32 +34,12 @@ static void lfo_note_on(UnitState *s, uint8_t n, uint8_t v, const uint8_t *p) {
 static void lfo_note_off(UnitState *s, uint8_t n) { (void)s; (void)n; }
 static void lfo_kill(UnitState *s) { (void)s; }
 
-// Resolve global param index to (slot, local_param) and write val
-static void write_param(TrackerSong *song, int inst_idx, int global_param, uint8_t val) {
-  TrackerInstrument *inst = &song->instruments[inst_idx];
-  int remaining = global_param;
-  for (int sl = 0; sl < CHAIN_MAX; sl++) {
-    if (!inst->chain[sl].unit_id[0])
-      continue;
-    extern const UnitDef *unit_find(const char *id);
-    const UnitDef *def = unit_find(inst->chain[sl].unit_id);
-    if (!def)
-      continue;
-    int cnt = def->num_params;
-    if (remaining < cnt) {
-      inst->chain[sl].params[remaining] = val;
-      return;
-    }
-    remaining -= cnt;
-  }
-}
-
 static void lfo_render(UnitState *s, const uint8_t *p,
                        const float *in_l, const float *in_r,
                        float *out_l, float *out_r, uint32_t frames) {
-  // Pass audio through unchanged
-  if (in_l) memcpy(out_l, in_l, frames * sizeof(float));
-  if (in_r) memcpy(out_r, in_r, frames * sizeof(float));
+  // Pass audio through unchanged (effects usually render in-place: skip the copy)
+  if (in_l && out_l != in_l) memcpy(out_l, in_l, frames * sizeof(float));
+  if (in_r && out_r != in_r) memcpy(out_r, in_r, frames * sizeof(float));
 
   if (!g_lfo_song || !p[6])
     return;
@@ -88,7 +68,7 @@ static void lfo_render(UnitState *s, const uint8_t *p,
 
   float raw = cntr + lfo * depth;
   uint8_t val = raw < 0.0f ? 0 : raw > 255.0f ? 255 : (uint8_t)raw;
-  write_param(g_lfo_song, inst, prm, val);
+  tracker_set_global_param(g_lfo_song, inst, prm, val);
 
   // Advance phase over full block
   s->phase += phase_inc * frames;
