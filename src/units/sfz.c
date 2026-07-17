@@ -608,6 +608,12 @@ static void sfz_parse(SfzShared *sh, const char *path) {
 
 // --- shared cache ---
 
+static void sfz_shared_free(SfzShared *sh) {
+  for (int i = 0; i < sh->num_pool; i++)
+    free(sh->sample_pool[i].samples);
+  free(sh);
+}
+
 static SfzShared *sfz_shared_acquire(const char *path) {
   for (int i = 0; i < SFZ_CACHE_MAX; i++) {
     if (sfz_cache[i] && strcmp(sfz_cache[i]->path, path) == 0) {
@@ -627,24 +633,27 @@ static SfzShared *sfz_shared_acquire(const char *path) {
       return sh;
     }
   }
-  // Cache full: return detached (won't be shared but still works)
+  // Cache full of live entries: evict the one with the fewest current refs
+  // (ties broken by first found) to make room, rather than reloading on
+  // every acquire/release cycle for whichever file loses the race.
+  int evict = 0;
+  for (int i = 1; i < SFZ_CACHE_MAX; i++)
+    if (sfz_cache[i]->refs < sfz_cache[evict]->refs)
+      evict = i;
+  sfz_shared_free(sfz_cache[evict]);
+  sfz_cache[evict] = sh;
   return sh;
 }
 
+// Drops a reference. Entries are kept warm in the cache even at refs==0 —
+// tracker tracks routinely alternate between several instruments across
+// steps, so a momentary zero-ref dip is normal and shouldn't discard a
+// fully-decoded kit just to reload it on the next note. Reclaimed lazily
+// by sfz_shared_acquire when the cache is full and a new file needs a slot.
 static void sfz_shared_release(SfzShared *sh) {
   if (!sh)
     return;
-  if (--sh->refs > 0)
-    return;
-  for (int i = 0; i < sh->num_pool; i++)
-    free(sh->sample_pool[i].samples);
-  for (int i = 0; i < SFZ_CACHE_MAX; i++) {
-    if (sfz_cache[i] == sh) {
-      sfz_cache[i] = NULL;
-      break;
-    }
-  }
-  free(sh);
+  sh->refs--;
 }
 
 // --- .zip bundle support (data field points at a .zip containing an .sfz + samples) ---
