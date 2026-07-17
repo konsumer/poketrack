@@ -1,14 +1,14 @@
 // Sidechain ducker — modulates a param on any instrument each render block,
 // pulling it down from CNTR while the SRC instrument is sounding.
-// P0 AMNT:   00=no duck  FF=full duck (down to 0 at CNTR)
-// P1 SRC:    sidechain source instrument 00-FF
+// P0 SRC:    sidechain source instrument 00-FF
+// P1 THRESH: sidechain level below which SRC is ignored (00=any sound  FF=0.5 RMS)
 // P2 REL:    00=10ms  FF=500ms
-// P3 INV:    0=duck when src plays  1=duck when src silent
-// P4 INST:   target instrument 0-FF (defaults to self)
-// P5 PARAM:  target param (global index across chain slots, 0-FF)
-// P6 CNTR:   center/unduck value for the target param (default 0x80)
-// P7 ON:     0=off 1=on
-// P8 THRESH: sidechain level below which SRC is ignored (00=any sound  FF=0.5 RMS)
+// P3 AMNT:   00=no duck  FF=full duck (down to 0 at CNTR)
+// P4 CNTR:   center/unduck value for the target param (default 0x80)
+// P5 INV:    0=duck when src plays  1=duck when src silent
+// P6 INST:   target instrument 0-FF (defaults to self)
+// P7 PARAM:  target param (global index across chain slots, 0-FF)
+// P8 ON:     0=off 1=on
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -70,14 +70,14 @@ static void ducker_render(UnitState *s, const uint8_t *p,
   if (in_l) memcpy(out_l, in_l, frames * sizeof(float));
   if (in_r) memcpy(out_r, in_r, frames * sizeof(float));
 
-  float amount = p[0] / 255.0f;
-  int src_inst = p[1];
+  int src_inst = p[0];
   float rel_ms = p2f(p[2], 10.0f, 500.0f);
-  int invert = p[3] ? 1 : 0;
-  int inst = p[4];
-  int prm = p[5];
-  float cntr = (float)p[6];
-  int on = p[7];
+  float amount = p[3] / 255.0f;
+  float cntr = (float)p[4];
+  int invert = p[5] ? 1 : 0;
+  int inst = p[6];
+  int prm = p[7];
+  int on = p[8];
 
   float sr = s->sample_rate;
   float rel_coef = expf(-1.0f / (sr * rel_ms * 0.001f));
@@ -85,7 +85,7 @@ static void ducker_render(UnitState *s, const uint8_t *p,
   // Continuous level, not a hard gate — ramps from THRESH up to "fully
   // ducked" over a small window, so a tuned threshold catches only the
   // loud attack (e.g. a kick) and ignores its own quieter decay tail.
-  float thresh = p2f(p[8], 0.0f, 0.5f);
+  float thresh = p2f(p[1], 0.0f, 0.5f);
   float sc_rms = g_sidechain_rms[src_inst];
   float target = (sc_rms - thresh) / 0.05f;
   target = target < 0.0f ? 0.0f : target > 1.0f ? 1.0f : target;
@@ -109,7 +109,7 @@ static void ducker_render(UnitState *s, const uint8_t *p,
 }
 
 static void ducker_init_params(uint8_t *params, int inst_idx) {
-  params[4] = (uint8_t)(inst_idx & 0xFF);
+  params[6] = (uint8_t)(inst_idx & 0xFF);
 }
 
 static const char *const ducker_inv_names[] = {"NORM", "INV"};
@@ -120,10 +120,10 @@ const UnitDef unit_ducker = {
     .name = "DUCKER",
     .is_source = false,
     .num_params = 9,
-    .param_names = {"AMNT", "SRC", "REL", "INV", "INST", "PARAM", "CNTR", "ON", "THRESH"},
-    .param_defaults = {0xC0, 0, 0x40, 0, 0, 0, 0x80, 0, 0},
-    .param_enums = {NULL, NULL, NULL, ducker_inv_names, NULL, NULL, NULL, ducker_on_names, NULL},
-    .param_enum_count = {0, 0, 0, 2, 0, 0, 0, 2, 0},
+    .param_names = {"SRC", "THRESH", "REL", "AMNT", "CNTR", "INV", "INST", "PARAM", "ON"},
+    .param_defaults = {0, 0, 0x40, 0xC0, 0x80, 0, 0, 0, 0},
+    .param_enums = {NULL, NULL, NULL, NULL, NULL, ducker_inv_names, NULL, NULL, ducker_on_names},
+    .param_enum_count = {0, 0, 0, 0, 0, 2, 0, 0, 2},
     .init_params = ducker_init_params,
     .create = ducker_create,
     .destroy = ducker_destroy,

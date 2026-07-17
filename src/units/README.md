@@ -252,15 +252,15 @@ ON defaults to Off, same as LFO — leave it off while you set INST/PARAM/AMNT s
 
 | Param | Range | Notes |
 |-------|-------|-------|
-| AMNT | 0–full | Duck depth (fraction pulled down from CNTR) |
 | SRC | 00–FF | Source instrument index to sidechain from |
+| THRESH | 00–FF (0–0.5 RMS) | Sidechain level below which SRC is ignored — tune above a hit's decay tail so only its attack triggers the duck |
 | REL | 10ms–500ms | Release time |
+| AMNT | 0–full | Duck depth (fraction pulled down from CNTR) |
+| CNTR | 00–FF | Center/unduck value for the target param (default 80) |
 | INV | 0 / 1 | Invert: duck when source is *silent* instead |
 | INST | 00–FF | Target instrument index (defaults to current) |
 | PARAM | 00–FF | Target param (global index across chain slots) |
-| CNTR | 00–FF | Center/unduck value for the target param (default 80) |
 | ON | Off / On | Enable/disable |
-| THRESH | 00–FF (0–0.5 RMS) | Sidechain level below which SRC is ignored — tune above a hit's decay tail so only its attack triggers the duck |
 
 ### LFO
 
