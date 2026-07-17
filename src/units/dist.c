@@ -14,23 +14,13 @@ struct UnitState {
   float sample_rate;
 };
 
-static UnitState *dist_create(float sr) {
-  UnitState *s = calloc(1, sizeof(*s));
+static UnitState* dist_create(float sr) {
+  UnitState* s = calloc(1, sizeof(*s));
   s->sample_rate = sr;
   return s;
 }
-static void dist_destroy(UnitState *s) { free(s); }
-static void dist_note_on(UnitState *s, uint8_t n, uint8_t v, const uint8_t *p) {
-  (void)s;
-  (void)n;
-  (void)v;
-  (void)p;
-}
-static void dist_note_off(UnitState *s, uint8_t n) {
-  (void)s;
-  (void)n;
-}
-static void dist_kill(UnitState *s) { s->lp_l = s->lp_r = 0; }
+static void dist_destroy(UnitState* s) { free(s); }
+static void dist_kill(UnitState* s) { s->lp_l = s->lp_r = 0; }
 
 static float waveshape(float x, float drive) {
   // Soft clip at low drive, hard clip at high drive
@@ -49,9 +39,9 @@ static float waveshape(float x, float drive) {
   }
 }
 
-static void dist_render(UnitState *s, const uint8_t *p,
-                        const float *in_l, const float *in_r,
-                        float *out_l, float *out_r, uint32_t frames) {
+static void dist_render(UnitState* s, const uint8_t* p,
+                        const float* in_l, const float* in_r,
+                        float* out_l, float* out_r, uint32_t frames) {
   float drive = p2f(p[0], 0.0f, 1.0f);
   float tone = p2f(p[1], 0.02f, 1.0f);  // LP cutoff normalized
   float pre = p2f(p[2], 0.0f, 4.0f);    // input gain into shaper
@@ -79,8 +69,6 @@ const UnitDef unit_dist = {
     .param_defaults = {80, 180, 64, 128},
     .create = dist_create,
     .destroy = dist_destroy,
-    .note_on = dist_note_on,
-    .note_off = dist_note_off,
     .kill = dist_kill,
     .render = dist_render,
 };

@@ -19,12 +19,12 @@ static const int ABUF_L[AP_N] = {556, 441, 341, 225};
 static const int ABUF_R[AP_N] = {579, 464, 364, 248};
 
 typedef struct {
-  float *buf;
+  float* buf;
   int n, pos;
   float fstore, fb, d1, d2;
 } CombF;
 typedef struct {
-  float *buf;
+  float* buf;
   int n, pos;
 } ApF;
 
@@ -34,8 +34,8 @@ struct UnitState {
   float sample_rate;
 };
 
-static UnitState *reverb_create(float sr) {
-  UnitState *s = calloc(1, sizeof(*s));
+static UnitState* reverb_create(float sr) {
+  UnitState* s = calloc(1, sizeof(*s));
   s->sample_rate = sr;
   for (int i = 0; i < COMB_N; i++) {
     s->cl[i].buf = calloc(CBUF_L[i], sizeof(float));
@@ -52,7 +52,7 @@ static UnitState *reverb_create(float sr) {
   return s;
 }
 
-static void reverb_destroy(UnitState *s) {
+static void reverb_destroy(UnitState* s) {
   for (int i = 0; i < COMB_N; i++) {
     free(s->cl[i].buf);
     free(s->cr[i].buf);
@@ -64,17 +64,7 @@ static void reverb_destroy(UnitState *s) {
   free(s);
 }
 
-static void reverb_note_on(UnitState *s, uint8_t n, uint8_t v, const uint8_t *p) {
-  (void)s;
-  (void)n;
-  (void)v;
-  (void)p;
-}
-static void reverb_note_off(UnitState *s, uint8_t n) {
-  (void)s;
-  (void)n;
-}
-static void reverb_kill(UnitState *s) {
+static void reverb_kill(UnitState* s) {
   for (int i = 0; i < COMB_N; i++) {
     memset(s->cl[i].buf, 0, s->cl[i].n * sizeof(float));
     memset(s->cr[i].buf, 0, s->cr[i].n * sizeof(float));
@@ -86,7 +76,7 @@ static void reverb_kill(UnitState *s) {
   }
 }
 
-static inline float comb_tick(CombF *c, float x) {
+static inline float comb_tick(CombF* c, float x) {
   float out = c->buf[c->pos];
   c->fstore = out * c->d2 + c->fstore * c->d1;
   c->buf[c->pos] = x + c->fstore * c->fb;
@@ -95,7 +85,7 @@ static inline float comb_tick(CombF *c, float x) {
   return out;
 }
 
-static inline float ap_tick(ApF *a, float x) {
+static inline float ap_tick(ApF* a, float x) {
   float b = a->buf[a->pos];
   a->buf[a->pos] = x + b * 0.5f;
   if (++a->pos >= a->n)
@@ -103,9 +93,9 @@ static inline float ap_tick(ApF *a, float x) {
   return b - x;
 }
 
-static void reverb_render(UnitState *s, const uint8_t *p,
-                          const float *in_l, const float *in_r,
-                          float *out_l, float *out_r, uint32_t frames) {
+static void reverb_render(UnitState* s, const uint8_t* p,
+                          const float* in_l, const float* in_r,
+                          float* out_l, float* out_r, uint32_t frames) {
   float room = p2f(p[0], 0.1f, 0.98f);
   float damp = p2f(p[1], 0.0f, 1.0f);
   float width = p2f(p[2], 0.0f, 1.0f);
@@ -147,8 +137,6 @@ const UnitDef unit_reverb = {
     .param_defaults = {140, 80, 200, 100},
     .create = reverb_create,
     .destroy = reverb_destroy,
-    .note_on = reverb_note_on,
-    .note_off = reverb_note_off,
     .kill = reverb_kill,
     .render = reverb_render,
 };

@@ -11,7 +11,6 @@
 #include "unit.h"
 
 #define MAX_STAGES 8
-#define TWO_PI 6.28318530718f
 
 typedef struct {
   float x1, y1;
@@ -24,23 +23,13 @@ struct UnitState {
   float sample_rate;
 };
 
-static UnitState *phaser_create(float sr) {
-  UnitState *s = calloc(1, sizeof(*s));
+static UnitState* phaser_create(float sr) {
+  UnitState* s = calloc(1, sizeof(*s));
   s->sample_rate = sr;
   return s;
 }
-static void phaser_destroy(UnitState *s) { free(s); }
-static void phaser_note_on(UnitState *s, uint8_t n, uint8_t v, const uint8_t *p) {
-  (void)s;
-  (void)n;
-  (void)v;
-  (void)p;
-}
-static void phaser_note_off(UnitState *s, uint8_t n) {
-  (void)s;
-  (void)n;
-}
-static void phaser_kill(UnitState *s) {
+static void phaser_destroy(UnitState* s) { free(s); }
+static void phaser_kill(UnitState* s) {
   memset(s->apl, 0, sizeof(s->apl));
   memset(s->apr, 0, sizeof(s->apr));
   s->lfo = s->fdbk_l = s->fdbk_r = 0;
@@ -48,16 +37,16 @@ static void phaser_kill(UnitState *s) {
 }
 
 // 1st-order all-pass: a = (tan(pi*fc/sr)-1)/(tan(pi*fc/sr)+1)
-static inline float ap_tick1(AP1 *ap, float x, float a) {
+static inline float ap_tick1(AP1* ap, float x, float a) {
   float y = a * x + ap->x1 - a * ap->y1;
   ap->x1 = x;
   ap->y1 = y;
   return y;
 }
 
-static void phaser_render(UnitState *s, const uint8_t *p,
-                          const float *in_l, const float *in_r,
-                          float *out_l, float *out_r, uint32_t frames) {
+static void phaser_render(UnitState* s, const uint8_t* p,
+                          const float* in_l, const float* in_r,
+                          float* out_l, float* out_r, uint32_t frames) {
   if (s->sample_rate <= 0)
     return;
   float rate = p2f(p[0], 0.1f, 6.0f);
@@ -72,11 +61,15 @@ static void phaser_render(UnitState *s, const uint8_t *p,
   float f_lo = 100.0f / s->sample_rate;
   float f_hi = 4000.0f / s->sample_rate;
 
+  float a = 0.0f;
   for (uint32_t f = 0; f < frames; f++) {
-    float lfo_val = (sinf(s->lfo * TWO_PI) * 0.5f + 0.5f) * depth;
-    float fc = f_lo + lfo_val * (f_hi - f_lo);
-    float t = tanf(M_PI * fc);
-    float a = (t - 1.0f) / (t + 1.0f);
+    // Coefficient at control rate — the sweep is <=6Hz, tanf per sample is waste
+    if ((f & 15) == 0) {
+      float lfo_val = (unit_sin(s->lfo) * 0.5f + 0.5f) * depth;
+      float fc = f_lo + lfo_val * (f_hi - f_lo);
+      float t = tanf((float)M_PI * fc);
+      a = (t - 1.0f) / (t + 1.0f);
+    }
 
     float xl = in_l[f] + s->fdbk_l * fdbk;
     float xr = in_r[f] + s->fdbk_r * fdbk;
@@ -105,8 +98,6 @@ const UnitDef unit_phaser = {
     .param_defaults = {25, 200, 64, 60, 150},
     .create = phaser_create,
     .destroy = phaser_destroy,
-    .note_on = phaser_note_on,
-    .note_off = phaser_note_off,
     .kill = phaser_kill,
     .render = phaser_render,
 };

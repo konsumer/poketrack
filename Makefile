@@ -24,4 +24,7 @@ serve: build-web ## Build & run watching web build
 	npx -y live-server webroot --mount=/poketrack.mjs:./build-web/poketrack.mjs
 
 format: ## Format all C/H source files with clang-format
-	find . -name "*.c" -o -name "*.h" | grep -v build | xargs clang-format -i
+	find src -name "*.c" -o -name "*.h" | xargs clang-format -i
+
+format-check: ## Fail if any source file is not clang-format clean (for CI)
+	find src -name "*.c" -o -name "*.h" | xargs clang-format --dry-run --Werror

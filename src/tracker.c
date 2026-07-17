@@ -301,6 +301,8 @@ static size_t wb_chunk_start(WBuf* b, const char* tag) {
 }
 // Patch size field written by wb_chunk_start.
 static void wb_chunk_end(WBuf* b, size_t off) {
+  if (!b->data || b->len < off + 4)
+    return;  // allocation failed earlier; save is aborted by the b.data check
   uint32_t sz = (uint32_t)(b->len - off - 4);
   b->data[off] = sz & 0xFF;
   b->data[off + 1] = (sz >> 8) & 0xFF;

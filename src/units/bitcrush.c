@@ -11,31 +11,21 @@ struct UnitState {
   int step_counter;
 };
 
-static UnitState *bitcrush_create(float sr) {
+static UnitState* bitcrush_create(float sr) {
   (void)sr;
-  UnitState *s = calloc(1, sizeof(*s));
+  UnitState* s = calloc(1, sizeof(*s));
   s->step_counter = 0;
   return s;
 }
-static void bitcrush_destroy(UnitState *s) { free(s); }
-static void bitcrush_note_on(UnitState *s, uint8_t n, uint8_t v, const uint8_t *p) {
-  (void)s;
-  (void)n;
-  (void)v;
-  (void)p;
-}
-static void bitcrush_note_off(UnitState *s, uint8_t n) {
-  (void)s;
-  (void)n;
-}
-static void bitcrush_kill(UnitState *s) {
+static void bitcrush_destroy(UnitState* s) { free(s); }
+static void bitcrush_kill(UnitState* s) {
   s->held_l = s->held_r = 0.0f;
   s->step_counter = 0;
 }
 
-static void bitcrush_render(UnitState *s, const uint8_t *p,
-                            const float *in_l, const float *in_r,
-                            float *out_l, float *out_r, uint32_t frames) {
+static void bitcrush_render(UnitState* s, const uint8_t* p,
+                            const float* in_l, const float* in_r,
+                            float* out_l, float* out_r, uint32_t frames) {
   // bits: 0xFF=16, 0x00=1 — map linearly
   int bits = 1 + (int)(p[0] / 255.0f * 15.0f + 0.5f);
   if (bits < 1)
@@ -85,8 +75,6 @@ const UnitDef unit_bitcrush = {
     .param_defaults = {0xFF, 0xFF},
     .create = bitcrush_create,
     .destroy = bitcrush_destroy,
-    .note_on = bitcrush_note_on,
-    .note_off = bitcrush_note_off,
     .kill = bitcrush_kill,
     .render = bitcrush_render,
 };

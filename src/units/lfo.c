@@ -13,61 +13,49 @@
 #include "../tracker.h"
 #include "unit.h"
 
-#define TWO_PI 6.28318530718f
-
-extern TrackerSong *g_lfo_song;
+extern TrackerSong* g_lfo_song;
 
 struct UnitState {
   float phase;
   float sample_rate;
 };
 
-static UnitState *lfo_create(float sr) {
-  UnitState *s = calloc(1, sizeof(*s));
+static UnitState* lfo_create(float sr) {
+  UnitState* s = calloc(1, sizeof(*s));
   s->sample_rate = sr;
   return s;
 }
-static void lfo_destroy(UnitState *s) { free(s); }
-static void lfo_note_on(UnitState *s, uint8_t n, uint8_t v, const uint8_t *p) {
-  (void)s; (void)n; (void)v; (void)p;
-}
-static void lfo_note_off(UnitState *s, uint8_t n) { (void)s; (void)n; }
-static void lfo_kill(UnitState *s) { (void)s; }
+static void lfo_destroy(UnitState* s) { free(s); }
 
-static void lfo_render(UnitState *s, const uint8_t *p,
-                       const float *in_l, const float *in_r,
-                       float *out_l, float *out_r, uint32_t frames) {
+static void lfo_render(UnitState* s, const uint8_t* p,
+                       const float* in_l, const float* in_r,
+                       float* out_l, float* out_r, uint32_t frames) {
   // Pass audio through unchanged (effects usually render in-place: skip the copy)
-  if (in_l && out_l != in_l) memcpy(out_l, in_l, frames * sizeof(float));
-  if (in_r && out_r != in_r) memcpy(out_r, in_r, frames * sizeof(float));
+  if (in_l && out_l != in_l)
+    memcpy(out_l, in_l, frames * sizeof(float));
+  if (in_r && out_r != in_r)
+    memcpy(out_r, in_r, frames * sizeof(float));
 
   if (!g_lfo_song || !p[6])
     return;
 
-  float rate  = p2f(p[0], 0.1f, 20.0f);
-  int   shape = p[1] > 3 ? 3 : p[1];
-  int   inst  = p[2];
-  int   prm   = p[3];
-  float cntr  = (float)p[4];
-  float depth = p[5] / 2.0f;   // 0-127 swing each side
+  float rate = p2f(p[0], 0.1f, 20.0f);
+  int shape = p[1] > 3 ? 3 : p[1];
+  int inst = p[2];
+  int prm = p[3];
+  float cntr = (float)p[4];
+  float depth = p[5] / 2.0f;  // 0-127 swing each side
 
   float phase_inc = rate / s->sample_rate;
 
   // Compute LFO at midpoint of block for param update (one write per block is fine)
   float phase = s->phase + phase_inc * (frames / 2.0f);
-  if (phase >= 1.0f) phase -= (float)(int)phase;
+  if (phase >= 1.0f)
+    phase -= (float)(int)phase;
 
-  float lfo;
-  switch (shape) {
-    case 0: lfo = sinf(TWO_PI * phase); break;
-    case 1: lfo = (phase < 0.5f) ? 1.0f : -1.0f; break;
-    case 2: lfo = 2.0f * phase - 1.0f; break;
-    case 3: lfo = 1.0f - 4.0f * fabsf(phase - 0.5f); break;
-    default: lfo = 0.0f;
-  }
-
-  float raw = cntr + lfo * depth;
-  uint8_t val = raw < 0.0f ? 0 : raw > 255.0f ? 255 : (uint8_t)raw;
+  float raw = cntr + unit_lfo_wave(shape, phase) * depth;
+  uint8_t val = raw < 0.0f ? 0 : raw > 255.0f ? 255
+                                              : (uint8_t)raw;
   tracker_set_global_param(g_lfo_song, inst, prm, val);
 
   // Advance phase over full block
@@ -75,12 +63,12 @@ static void lfo_render(UnitState *s, const uint8_t *p,
   while (s->phase >= 1.0f) s->phase -= 1.0f;
 }
 
-static void lfo_init_params(uint8_t *params, int inst_idx) {
+static void lfo_init_params(uint8_t* params, int inst_idx) {
   params[2] = (uint8_t)(inst_idx & 0xFF);
 }
 
-static const char *const lfo_shape_names[] = {"SINE", "SQR", "SAW", "TRI"};
-static const char *const lfo_on_names[] = {"OFF", "ON"};
+static const char* const lfo_shape_names[] = {"SINE", "SQR", "SAW", "TRI"};
+static const char* const lfo_on_names[] = {"OFF", "ON"};
 
 const UnitDef unit_lfo = {
     .id = "lfo",
@@ -94,8 +82,5 @@ const UnitDef unit_lfo = {
     .init_params = lfo_init_params,
     .create = lfo_create,
     .destroy = lfo_destroy,
-    .note_on = lfo_note_on,
-    .note_off = lfo_note_off,
-    .kill = lfo_kill,
     .render = lfo_render,
 };

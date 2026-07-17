@@ -19,30 +19,20 @@ struct UnitState {
   float sample_rate;
 };
 
-static UnitState *delay_create(float sr) {
-  UnitState *s = calloc(1, sizeof(*s));
+static UnitState* delay_create(float sr) {
+  UnitState* s = calloc(1, sizeof(*s));
   s->sample_rate = sr;
   return s;
 }
-static void delay_destroy(UnitState *s) { free(s); }
-static void delay_note_on(UnitState *s, uint8_t n, uint8_t v, const uint8_t *p) {
-  (void)s;
-  (void)n;
-  (void)v;
-  (void)p;
-}
-static void delay_note_off(UnitState *s, uint8_t n) {
-  (void)s;
-  (void)n;
-}
-static void delay_kill(UnitState *s) {
+static void delay_destroy(UnitState* s) { free(s); }
+static void delay_kill(UnitState* s) {
   memset(s->buf_l, 0, sizeof(s->buf_l));
   memset(s->buf_r, 0, sizeof(s->buf_r));
 }
 
-static void delay_render(UnitState *s, const uint8_t *p,
-                         const float *in_l, const float *in_r,
-                         float *out_l, float *out_r, uint32_t frames) {
+static void delay_render(UnitState* s, const uint8_t* p,
+                         const float* in_l, const float* in_r,
+                         float* out_l, float* out_r, uint32_t frames) {
   float delay_secs = p2f(p[0], 0.004f, 1.0f);
   float feedback = p2f(p[1], 0.0f, 0.95f);
   float mix = p2f(p[2], 0.0f, 1.0f);
@@ -80,8 +70,6 @@ const UnitDef unit_delay = {
     .param_defaults = {64, 100, 80, 0},
     .create = delay_create,
     .destroy = delay_destroy,
-    .note_on = delay_note_on,
-    .note_off = delay_note_off,
     .kill = delay_kill,
     .render = delay_render,
 };

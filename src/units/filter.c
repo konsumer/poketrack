@@ -13,29 +13,19 @@ struct UnitState {
   float sample_rate;
 };
 
-static UnitState *filter_create(float sr) {
-  UnitState *s = calloc(1, sizeof(*s));
+static UnitState* filter_create(float sr) {
+  UnitState* s = calloc(1, sizeof(*s));
   s->sample_rate = sr;
   return s;
 }
-static void filter_destroy(UnitState *s) { free(s); }
-static void filter_note_on(UnitState *s, uint8_t n, uint8_t v, const uint8_t *p) {
-  (void)s;
-  (void)n;
-  (void)v;
-  (void)p;
-}
-static void filter_note_off(UnitState *s, uint8_t n) {
-  (void)s;
-  (void)n;
-}
-static void filter_kill(UnitState *s) {
+static void filter_destroy(UnitState* s) { free(s); }
+static void filter_kill(UnitState* s) {
   s->low_l = s->band_l = s->low_r = s->band_r = 0.0f;
 }
 
-static void filter_render(UnitState *s, const uint8_t *p,
-                          const float *in_l, const float *in_r,
-                          float *out_l, float *out_r, uint32_t frames) {
+static void filter_render(UnitState* s, const uint8_t* p,
+                          const float* in_l, const float* in_r,
+                          float* out_l, float* out_r, uint32_t frames) {
   int mode = p[0];
   if (mode > 3)
     mode = 3;
@@ -113,7 +103,7 @@ static void filter_render(UnitState *s, const uint8_t *p,
   s->band_r = band_r;
 }
 
-static const char *const filter_mode_names[] = {"LP", "HP", "BP", "NOTCH"};
+static const char* const filter_mode_names[] = {"LP", "HP", "BP", "NOTCH"};
 
 const UnitDef unit_filter = {
     .id = "filter",
@@ -126,8 +116,6 @@ const UnitDef unit_filter = {
     .param_enum_count = {4},
     .create = filter_create,
     .destroy = filter_destroy,
-    .note_on = filter_note_on,
-    .note_off = filter_note_off,
     .kill = filter_kill,
     .render = filter_render,
 };

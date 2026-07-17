@@ -15,12 +15,12 @@ typedef volatile LONG atomic_int;
 #define memory_order_relaxed 0
 #define memory_order_acquire 0
 #define memory_order_release 0
-static inline int atomic_load_explicit(atomic_int *p, int order) {
+static inline int atomic_load_explicit(atomic_int* p, int order) {
   (void)order;
   MemoryBarrier();
   return (int)*p;
 }
-static inline void atomic_store_explicit(atomic_int *p, int val, int order) {
+static inline void atomic_store_explicit(atomic_int* p, int val, int order) {
   (void)order;
   *p = (LONG)val;
   MemoryBarrier();
@@ -47,7 +47,7 @@ static void push_msg(uint8_t status, uint8_t d1, uint8_t d2, int port_idx) {
   atomic_store_explicit(&g_head, next, memory_order_release);
 }
 
-bool midi_in_poll(MidiInMsg *msg) {
+bool midi_in_poll(MidiInMsg* msg) {
   int t = atomic_load_explicit(&g_tail, memory_order_relaxed);
   if (t == atomic_load_explicit(&g_head, memory_order_acquire))
     return false;
@@ -71,10 +71,10 @@ static int g_port_count = 0;
 static MIDIClientRef g_in_client = 0;
 static MIDIPortRef g_in_port = 0;
 
-static void midi_in_cb(const MIDIPacketList *pktlist, void *readProc, void *srcRefCon) {
+static void midi_in_cb(const MIDIPacketList* pktlist, void* readProc, void* srcRefCon) {
   (void)readProc;
   int port_idx = (int)(intptr_t)srcRefCon;
-  const MIDIPacket *pkt = &pktlist->packet[0];
+  const MIDIPacket* pkt = &pktlist->packet[0];
   for (UInt32 i = 0; i < pktlist->numPackets; i++) {
     if (pkt->length >= 1) {
       uint8_t status = pkt->data[0];
@@ -102,7 +102,7 @@ void midi_in_global_init(void) {
     } else {
       snprintf(g_port_names[i], 256, "Source %d", i);
     }
-    MIDIPortConnectSource(g_in_port, src, (void *)(intptr_t)i);
+    MIDIPortConnectSource(g_in_port, src, (void*)(intptr_t)i);
   }
 }
 
@@ -119,7 +119,7 @@ void midi_in_global_shutdown(void) {
 
 int midi_in_port_count(void) { return g_port_count; }
 
-const char *midi_in_port_name(int idx) {
+const char* midi_in_port_name(int idx) {
   if (idx < 0 || idx >= g_port_count)
     return "?";
   return g_port_names[idx];
@@ -143,7 +143,7 @@ typedef struct {
 static AlsaInPort g_in_ports[MAX_IN_PORTS];
 static int g_in_nports = 0;
 
-static snd_seq_t *g_in_seq = NULL;
+static snd_seq_t* g_in_seq = NULL;
 static int g_in_myport = -1;
 static pthread_t g_in_thread;
 static bool g_in_running = false;
@@ -153,8 +153,8 @@ static void refresh_in_ports(void) {
   g_in_nports = 0;
   if (!g_in_seq)
     return;
-  snd_seq_client_info_t *ci;
-  snd_seq_port_info_t *pi;
+  snd_seq_client_info_t* ci;
+  snd_seq_port_info_t* pi;
   snd_seq_client_info_alloca(&ci);
   snd_seq_port_info_alloca(&pi);
   snd_seq_client_info_set_client(ci, -1);
@@ -188,10 +188,10 @@ static int find_port_idx(int client, int port) {
   return 0;
 }
 
-static void *alsa_in_thread(void *arg) {
+static void* alsa_in_thread(void* arg) {
   (void)arg;
   while (g_in_running) {
-    snd_seq_event_t *ev = NULL;
+    snd_seq_event_t* ev = NULL;
     int r = snd_seq_event_input(g_in_seq, &ev);
     if (r < 0 || !ev)
       continue;
@@ -234,7 +234,7 @@ void midi_in_global_shutdown(void) {
 }
 
 int midi_in_port_count(void) { return g_in_nports; }
-const char *midi_in_port_name(int idx) { return (idx >= 0 && idx < g_in_nports) ? g_in_ports[idx].name : "?"; }
+const char* midi_in_port_name(int idx) { return (idx >= 0 && idx < g_in_nports) ? g_in_ports[idx].name : "?"; }
 
 // ============================================================
 // Windows — WinMM
@@ -242,8 +242,8 @@ const char *midi_in_port_name(int idx) { return (idx >= 0 && idx < g_in_nports) 
 #elif defined(_WIN32)
 
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #include <mmsystem.h>
+#include <windows.h>
 
 #define MAX_IN_DEVS 32
 static HMIDIIN g_in_handles[MAX_IN_DEVS];
@@ -285,7 +285,7 @@ void midi_in_global_shutdown(void) {
 
 int midi_in_port_count(void) { return g_in_count; }
 
-const char *midi_in_port_name(int idx) {
+const char* midi_in_port_name(int idx) {
   static char buf[MAXPNAMELEN + 4];
   MIDIINCAPSA caps;
   if (idx >= 0 && idx < g_in_count && midiInGetDevCapsA((UINT)idx, &caps, sizeof(caps)) == MMSYSERR_NOERROR)
@@ -311,7 +311,7 @@ void midi_in_global_init(void) {}
 void midi_in_global_shutdown(void) {}
 int midi_in_port_count(void) { return g_web_count; }
 
-const char *midi_in_port_name(int idx) {
+const char* midi_in_port_name(int idx) {
   if (idx < 0 || idx >= g_web_count)
     return "?";
   return g_web_names[idx];
@@ -320,7 +320,7 @@ const char *midi_in_port_name(int idx) {
 EMSCRIPTEN_KEEPALIVE void midi_in_web_set_port_count(int n) {
   g_web_count = (n < MAX_IN_PORTS) ? n : MAX_IN_PORTS;
 }
-EMSCRIPTEN_KEEPALIVE void midi_in_web_set_port_name(int idx, const char *name) {
+EMSCRIPTEN_KEEPALIVE void midi_in_web_set_port_name(int idx, const char* name) {
   if (idx < 0 || idx >= MAX_IN_PORTS || !name)
     return;
   strncpy(g_web_names[idx], name, 255);
@@ -337,7 +337,6 @@ void midi_web_request_access(void) {
       "typeof window._midiWebRequestAccess==='function'&&window._midiWebRequestAccess();");
 }
 
-
 // ============================================================
 // Fallback — no MIDI input support
 // ============================================================
@@ -346,6 +345,9 @@ void midi_web_request_access(void) {
 void midi_in_global_init(void) {}
 void midi_in_global_shutdown(void) {}
 int midi_in_port_count(void) { return 0; }
-const char *midi_in_port_name(int idx) { (void)idx; return "?"; }
+const char* midi_in_port_name(int idx) {
+  (void)idx;
+  return "?";
+}
 
 #endif

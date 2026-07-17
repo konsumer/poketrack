@@ -18,7 +18,7 @@
 #define LOOP_REV 3
 
 struct UnitState {
-  float *samples;  // mono float samples
+  float* samples;  // mono float samples
   uint32_t num_samples;
   uint32_t wav_sr;  // sample rate from WAV header
 
@@ -33,7 +33,7 @@ struct UnitState {
 
 // Load audio file via raylib (WAV/MP3/OGG/FLAC) → mono float32.
 // Returns malloc'd float array; caller frees with free().
-static float *load_audio(const char *path, uint32_t *out_count, uint32_t *out_sr) {
+static float* load_audio(const char* path, uint32_t* out_count, uint32_t* out_sr) {
   Wave w = LoadWave(path);
   if (w.frameCount == 0 || !w.data)
     return NULL;
@@ -41,13 +41,13 @@ static float *load_audio(const char *path, uint32_t *out_count, uint32_t *out_sr
   *out_sr = w.sampleRate;
   WaveFormat(&w, w.sampleRate, 32, 1);  // convert in-place: mono, 32-bit float
 
-  float *smp = LoadWaveSamples(w);  // raylib alloc
+  float* smp = LoadWaveSamples(w);  // raylib alloc
   uint32_t n = w.frameCount;
   UnloadWave(w);
   if (!smp)
     return NULL;
 
-  float *out = malloc(n * sizeof(float));
+  float* out = malloc(n * sizeof(float));
   if (!out) {
     UnloadWaveSamples(smp);
     return NULL;
@@ -59,19 +59,19 @@ static float *load_audio(const char *path, uint32_t *out_count, uint32_t *out_sr
   return out;
 }
 
-static UnitState *sampler_create(float sr) {
-  UnitState *s = calloc(1, sizeof(*s));
+static UnitState* sampler_create(float sr) {
+  UnitState* s = calloc(1, sizeof(*s));
   s->engine_sr = sr;
   s->direction = 1;
   return s;
 }
 
-static void sampler_destroy(UnitState *s) {
+static void sampler_destroy(UnitState* s) {
   free(s->samples);
   free(s);
 }
 
-static void sampler_set_data(UnitState *s, const char *data, const char *base_dir) {
+static void sampler_set_data(UnitState* s, const char* data, const char* base_dir) {
   free(s->samples);
   s->samples = NULL;
   s->num_samples = 0;
@@ -84,7 +84,7 @@ static void sampler_set_data(UnitState *s, const char *data, const char *base_di
   unit_resolve_path(base_dir, data, path, sizeof(path));
 
   uint32_t count = 0, wav_sr = 44100;
-  float *smp = load_audio(path, &count, &wav_sr);
+  float* smp = load_audio(path, &count, &wav_sr);
   if (!smp)
     return;
 
@@ -93,7 +93,7 @@ static void sampler_set_data(UnitState *s, const char *data, const char *base_di
   s->wav_sr = wav_sr;
 }
 
-static void sampler_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t *p) {
+static void sampler_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* p) {
   (void)vel;
   if (!s->samples || s->num_samples == 0)
     return;
@@ -107,7 +107,7 @@ static void sampler_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8
   s->last_note = note;
 }
 
-static void sampler_note_off(UnitState *s, uint8_t note) {
+static void sampler_note_off(UnitState* s, uint8_t note) {
   (void)note;
   // Only stop if not looping
   // We don't have params here; kill for non-looping handled in render
@@ -118,13 +118,13 @@ static void sampler_note_off(UnitState *s, uint8_t note) {
   s->playing = false;
 }
 
-static void sampler_kill(UnitState *s) {
+static void sampler_kill(UnitState* s) {
   s->playing = false;
 }
 
-static void sampler_render(UnitState *s, const uint8_t *p,
-                           const float *in_l, const float *in_r,
-                           float *out_l, float *out_r, uint32_t frames) {
+static void sampler_render(UnitState* s, const uint8_t* p,
+                           const float* in_l, const float* in_r,
+                           float* out_l, float* out_r, uint32_t frames) {
   (void)in_l;
   (void)in_r;
   if (!s->playing || !s->samples || s->num_samples == 0)
@@ -204,7 +204,7 @@ static void sampler_render(UnitState *s, const uint8_t *p,
   s->direction = dir;
 }
 
-static const char *const sampler_loop_names[] = {"OFF", "FWD", "PING", "REV"};
+static const char* const sampler_loop_names[] = {"OFF", "FWD", "PING", "REV"};
 
 const UnitDef unit_sampler = {
     .id = "sampler",

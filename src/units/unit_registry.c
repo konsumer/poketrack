@@ -1,8 +1,16 @@
 #include "unit_registry.h"
 
+#include <math.h>
 #include <string.h>
 
-static const UnitDef *REGISTRY[] = {
+float g_unit_sin_lut[UNIT_SIN_N + 1];
+
+void unit_dsp_init(void) {
+  for (int i = 0; i <= UNIT_SIN_N; i++)
+    g_unit_sin_lut[i] = sinf(2.0f * (float)M_PI * i / UNIT_SIN_N);
+}
+
+static const UnitDef* REGISTRY[] = {
     &unit_osc,
     &unit_fm,
     &unit_drum,
@@ -30,7 +38,7 @@ static const UnitDef *REGISTRY[] = {
     NULL,
 };
 
-const UnitDef *unit_find(const char *id) {
+const UnitDef* unit_find(const char* id) {
   if (!id || !id[0])
     return NULL;
   for (int i = 0; REGISTRY[i]; i++)
@@ -39,7 +47,7 @@ const UnitDef *unit_find(const char *id) {
   return NULL;
 }
 
-void unit_list(const UnitDef **out, int *count) {
+void unit_list(const UnitDef** out, int* count) {
   *count = 0;
   for (int i = 0; REGISTRY[i]; i++) out[(*count)++] = REGISTRY[i];
 }

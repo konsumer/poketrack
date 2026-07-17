@@ -35,8 +35,8 @@ typedef struct {
 } GranVoice;
 
 struct UnitState {
-  float *buf_l;
-  float *buf_r;
+  float* buf_l;
+  float* buf_r;
   uint32_t buf_len;
   bool stereo;
   float sample_rate;
@@ -46,25 +46,25 @@ struct UnitState {
   uint32_t rng;
 };
 
-static float gran_rand(uint32_t *r) {
+static float gran_rand(uint32_t* r) {
   *r = *r * 1664525u + 1013904223u;
   return (float)(*r & 0x7fffffff) / (float)0x7fffffff;
 }
 
-static UnitState *gran_create(float sr) {
-  UnitState *s = calloc(1, sizeof(*s));
+static UnitState* gran_create(float sr) {
+  UnitState* s = calloc(1, sizeof(*s));
   s->sample_rate = sr;
   s->rng = 0xdeadbeef;
   return s;
 }
 
-static void gran_destroy(UnitState *s) {
+static void gran_destroy(UnitState* s) {
   free(s->buf_l);
   free(s->buf_r);
   free(s);
 }
 
-static void gran_set_data(UnitState *s, const char *data, const char *base_dir) {
+static void gran_set_data(UnitState* s, const char* data, const char* base_dir) {
   if (!data || !data[0])
     return;
   unit_resolve_path(base_dir, data, s->path, sizeof(s->path));
@@ -80,7 +80,7 @@ static void gran_set_data(UnitState *s, const char *data, const char *base_dir) 
     return;
 
   // LoadWaveSamples returns interleaved float32 normalised to [-1,1]
-  float *samples = LoadWaveSamples(wav);
+  float* samples = LoadWaveSamples(wav);
   uint32_t frames = wav.frameCount;
   int ch = (int)wav.channels;
   s->stereo = (ch >= 2);
@@ -104,10 +104,10 @@ static void gran_set_data(UnitState *s, const char *data, const char *base_dir) 
   UnloadWave(wav);
 }
 
-static void spawn_grain(UnitState *s, GranVoice *v, const uint8_t *p) {
+static void spawn_grain(UnitState* s, GranVoice* v, const uint8_t* p) {
   if (!s->buf_len)
     return;
-  Grain *g = NULL;
+  Grain* g = NULL;
   for (int i = 0; i < MAX_GRAINS; i++)
     if (!s->grains[i].active) {
       g = &s->grains[i];
@@ -141,8 +141,8 @@ static void spawn_grain(UnitState *s, GranVoice *v, const uint8_t *p) {
   };
 }
 
-static void gran_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t *p) {
-  GranVoice *v = NULL;
+static void gran_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* p) {
+  GranVoice* v = NULL;
   for (int i = 0; i < GRAN_POLY; i++)
     if (!s->voices[i].active) {
       v = &s->voices[i];
@@ -154,13 +154,13 @@ static void gran_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t 
   spawn_grain(s, v, p);
 }
 
-static void gran_note_off(UnitState *s, uint8_t note) {
+static void gran_note_off(UnitState* s, uint8_t note) {
   for (int i = 0; i < GRAN_POLY; i++)
     if (s->voices[i].active && s->voices[i].note == note)
       s->voices[i].active = false;
 }
 
-static void gran_kill(UnitState *s) {
+static void gran_kill(UnitState* s) {
   memset(s->voices, 0, sizeof(s->voices));
   memset(s->grains, 0, sizeof(s->grains));
 }
@@ -173,9 +173,9 @@ static inline float gran_env(float phase, float atk_f, float rel_f) {
   return 1.0f;
 }
 
-static void gran_render(UnitState *s, const uint8_t *p,
-                        const float *in_l, const float *in_r,
-                        float *out_l, float *out_r, uint32_t frames) {
+static void gran_render(UnitState* s, const uint8_t* p,
+                        const float* in_l, const float* in_r,
+                        float* out_l, float* out_r, uint32_t frames) {
   (void)in_l;
   (void)in_r;
   if (!s->buf_len)
@@ -197,7 +197,7 @@ static void gran_render(UnitState *s, const uint8_t *p,
   for (uint32_t f = 0; f < frames; f++) {
     // Advance voice spawn timers
     for (int i = 0; i < GRAN_POLY; i++) {
-      GranVoice *v = &s->voices[i];
+      GranVoice* v = &s->voices[i];
       if (!v->active)
         continue;
       v->next_grain -= 1.0f;
@@ -210,7 +210,7 @@ static void gran_render(UnitState *s, const uint8_t *p,
     // Render grains
     float sl = 0, sr_val = 0;
     for (int i = 0; i < MAX_GRAINS; i++) {
-      Grain *g = &s->grains[i];
+      Grain* g = &s->grains[i];
       if (!g->active)
         continue;
 

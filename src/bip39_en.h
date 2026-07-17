@@ -1,5 +1,5 @@
 #pragma once
-static const char *const bip39_en[2048] = {
+static const char* const bip39_en[2048] = {
     "abandon",
     "ability",
     "able",
@@ -2047,5 +2047,4 @@ static const char *const bip39_en[2048] = {
     "zebra",
     "zero",
     "zone",
-    "zoo"
-};
+    "zoo"};

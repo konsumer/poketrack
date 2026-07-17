@@ -40,7 +40,7 @@ int midi_out_port_count(void) {
   return (int)MIDIGetNumberOfDestinations();
 }
 
-const char *midi_out_port_name(int idx) {
+const char* midi_out_port_name(int idx) {
   static char buf[256];
   MIDIEndpointRef ep = MIDIGetDestination((ItemCount)idx);
   if (!ep) {
@@ -58,19 +58,19 @@ const char *midi_out_port_name(int idx) {
   return buf;
 }
 
-MidiOut *midi_out_open(int idx) {
+MidiOut* midi_out_open(int idx) {
   MIDIEndpointRef ep = MIDIGetDestination((ItemCount)idx);
   if (!ep || !g_client || !g_port)
     return NULL;
-  MidiOut *m = calloc(1, sizeof(*m));
+  MidiOut* m = calloc(1, sizeof(*m));
   m->dest = ep;
   m->port_idx = idx;
   return m;
 }
 
-void midi_out_close(MidiOut *m) { free(m); }
+void midi_out_close(MidiOut* m) { free(m); }
 
-void midi_out_send(MidiOut *m, const uint8_t *msg, int len) {
+void midi_out_send(MidiOut* m, const uint8_t* msg, int len) {
   if (!m || !m->dest || !g_port || len < 1 || len > 3)
     return;
   // Stack-allocated packet list (enough for one short message)
@@ -78,13 +78,13 @@ void midi_out_send(MidiOut *m, const uint8_t *msg, int len) {
     MIDIPacketList list;
     MIDIPacket pad[2];
   } buf;
-  MIDIPacket *pkt = MIDIPacketListInit(&buf.list);
+  MIDIPacket* pkt = MIDIPacketListInit(&buf.list);
   pkt = MIDIPacketListAdd(&buf.list, sizeof(buf), pkt, 0, (ByteCount)len, msg);
   if (pkt)
     MIDISend(g_port, m->dest, &buf.list);
 }
 
-int midi_out_port_idx(const MidiOut *m) { return m ? m->port_idx : -1; }
+int midi_out_port_idx(const MidiOut* m) { return m ? m->port_idx : -1; }
 
 // ============================================================
 // Linux — ALSA sequencer
@@ -93,7 +93,7 @@ int midi_out_port_idx(const MidiOut *m) { return m ? m->port_idx : -1; }
 
 #include <alsa/asoundlib.h>
 
-static snd_seq_t *g_seq = NULL;
+static snd_seq_t* g_seq = NULL;
 static int g_myport = -1;
 
 #define MAX_PORTS 64
@@ -115,8 +115,8 @@ static void refresh_ports(void) {
   g_nports = 0;
   if (!g_seq)
     return;
-  snd_seq_client_info_t *ci;
-  snd_seq_port_info_t *pi;
+  snd_seq_client_info_t* ci;
+  snd_seq_port_info_t* pi;
   snd_seq_client_info_alloca(&ci);
   snd_seq_port_info_alloca(&pi);
   snd_seq_client_info_set_client(ci, -1);
@@ -165,16 +165,16 @@ int midi_out_port_count(void) {
   refresh_ports();
   return g_nports;
 }
-const char *midi_out_port_name(int idx) {
+const char* midi_out_port_name(int idx) {
   refresh_ports();
   return (idx >= 0 && idx < g_nports) ? g_ports[idx].name : "?";
 }
 
-MidiOut *midi_out_open(int idx) {
+MidiOut* midi_out_open(int idx) {
   refresh_ports();
   if (!g_seq || idx < 0 || idx >= g_nports)
     return NULL;
-  MidiOut *m = calloc(1, sizeof(*m));
+  MidiOut* m = calloc(1, sizeof(*m));
   m->dest_client = g_ports[idx].client;
   m->dest_port = g_ports[idx].port;
   m->port_idx = idx;
@@ -182,7 +182,7 @@ MidiOut *midi_out_open(int idx) {
   return m;
 }
 
-void midi_out_close(MidiOut *m) {
+void midi_out_close(MidiOut* m) {
   if (!m)
     return;
   if (g_seq)
@@ -190,7 +190,7 @@ void midi_out_close(MidiOut *m) {
   free(m);
 }
 
-void midi_out_send(MidiOut *m, const uint8_t *msg, int len) {
+void midi_out_send(MidiOut* m, const uint8_t* msg, int len) {
   if (!m || !g_seq || len < 1)
     return;
   snd_seq_event_t ev;
@@ -208,12 +208,12 @@ void midi_out_send(MidiOut *m, const uint8_t *msg, int len) {
     snd_seq_ev_set_controller(&ev, ch, msg[1], msg[2]);
   } else {
     // raw bytes fallback
-    snd_seq_ev_set_sysex(&ev, len, (void *)msg);
+    snd_seq_ev_set_sysex(&ev, len, (void*)msg);
   }
   snd_seq_event_output_direct(g_seq, &ev);
 }
 
-int midi_out_port_idx(const MidiOut *m) { return m ? m->port_idx : -1; }
+int midi_out_port_idx(const MidiOut* m) { return m ? m->port_idx : -1; }
 
 // ============================================================
 // Windows — WinMM
@@ -221,8 +221,8 @@ int midi_out_port_idx(const MidiOut *m) { return m ? m->port_idx : -1; }
 #elif defined(_WIN32)
 
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #include <mmsystem.h>
+#include <windows.h>
 
 struct MidiOut {
   HMIDIOUT handle;
@@ -234,7 +234,7 @@ void midi_out_global_shutdown(void) {}
 
 int midi_out_port_count(void) { return (int)midiOutGetNumDevs(); }
 
-const char *midi_out_port_name(int idx) {
+const char* midi_out_port_name(int idx) {
   static char buf[MAXPNAMELEN + 4];
   MIDIOUTCAPSA caps;
   if (midiOutGetDevCapsA((UINT)idx, &caps, sizeof(caps)) == MMSYSERR_NOERROR)
@@ -244,8 +244,8 @@ const char *midi_out_port_name(int idx) {
   return buf;
 }
 
-MidiOut *midi_out_open(int idx) {
-  MidiOut *m = calloc(1, sizeof(*m));
+MidiOut* midi_out_open(int idx) {
+  MidiOut* m = calloc(1, sizeof(*m));
   if (midiOutOpen(&m->handle, (UINT)idx, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
     free(m);
     return NULL;
@@ -254,14 +254,14 @@ MidiOut *midi_out_open(int idx) {
   return m;
 }
 
-void midi_out_close(MidiOut *m) {
+void midi_out_close(MidiOut* m) {
   if (!m)
     return;
   midiOutClose(m->handle);
   free(m);
 }
 
-void midi_out_send(MidiOut *m, const uint8_t *msg, int len) {
+void midi_out_send(MidiOut* m, const uint8_t* msg, int len) {
   if (!m || len < 1 || len > 3)
     return;
   DWORD word = 0;
@@ -269,7 +269,7 @@ void midi_out_send(MidiOut *m, const uint8_t *msg, int len) {
   midiOutShortMsg(m->handle, word);
 }
 
-int midi_out_port_idx(const MidiOut *m) { return m ? m->port_idx : -1; }
+int midi_out_port_idx(const MidiOut* m) { return m ? m->port_idx : -1; }
 
 // ============================================================
 // Web — Web MIDI API outputs (JS bridge via ccall)
@@ -291,7 +291,7 @@ void midi_out_global_init(void) {}
 void midi_out_global_shutdown(void) {}
 int midi_out_port_count(void) { return g_web_out_count; }
 
-const char *midi_out_port_name(int idx) {
+const char* midi_out_port_name(int idx) {
   if (idx < 0 || idx >= g_web_out_count)
     return "?";
   return g_web_out_names[idx];
@@ -301,54 +301,69 @@ EMSCRIPTEN_KEEPALIVE void midi_out_web_set_port_count(int n) {
   g_web_out_count = n < MAX_OUT_PORTS ? n : MAX_OUT_PORTS;
 }
 
-EMSCRIPTEN_KEEPALIVE void midi_out_web_set_port_name(int idx, const char *name) {
+EMSCRIPTEN_KEEPALIVE void midi_out_web_set_port_name(int idx, const char* name) {
   if (idx < 0 || idx >= MAX_OUT_PORTS || !name)
     return;
   strncpy(g_web_out_names[idx], name, 255);
   g_web_out_names[idx][255] = '\0';
 }
 
-MidiOut *midi_out_open(int idx) {
+MidiOut* midi_out_open(int idx) {
   if (idx < 0 || idx >= g_web_out_count)
     return NULL;
-  MidiOut *m = calloc(1, sizeof(*m));
+  MidiOut* m = calloc(1, sizeof(*m));
   m->port_idx = idx;
   return m;
 }
 
-void midi_out_close(MidiOut *m) { free(m); }
+void midi_out_close(MidiOut* m) { free(m); }
 
-EM_JS(void, midi_out_web_send_js, (int idx, const uint8_t *msg, int len), {
+EM_JS(void, midi_out_web_send_js, (int idx, const uint8_t* msg, int len), {
   var outputs = window._midiOutputs;
   if (!outputs || idx < 0 || idx >= outputs.length)
     return;
   var port = outputs[idx];
-  if (port && port.state === "connected")
+  if (port&& port.state == = "connected")
     port.send(HEAPU8.subarray(msg, msg + len));
 });
 
-void midi_out_send(MidiOut *m, const uint8_t *msg, int len) {
+void midi_out_send(MidiOut* m, const uint8_t* msg, int len) {
   if (!m || len < 1)
     return;
   midi_out_web_send_js(m->port_idx, msg, len);
 }
 
-int midi_out_port_idx(const MidiOut *m) { return m ? m->port_idx : -1; }
+int midi_out_port_idx(const MidiOut* m) { return m ? m->port_idx : -1; }
 
 // ============================================================
 // Fallback — no MIDI output support
 // ============================================================
 #else
 
-struct MidiOut { int port_idx; };
+struct MidiOut {
+  int port_idx;
+};
 
 void midi_out_global_init(void) {}
 void midi_out_global_shutdown(void) {}
 int midi_out_port_count(void) { return 0; }
-const char *midi_out_port_name(int idx) { (void)idx; return "?"; }
-MidiOut *midi_out_open(int idx) { (void)idx; return NULL; }
-void midi_out_close(MidiOut *m) { (void)m; }
-void midi_out_send(MidiOut *m, const uint8_t *msg, int len) { (void)m; (void)msg; (void)len; }
-int midi_out_port_idx(const MidiOut *m) { (void)m; return -1; }
+const char* midi_out_port_name(int idx) {
+  (void)idx;
+  return "?";
+}
+MidiOut* midi_out_open(int idx) {
+  (void)idx;
+  return NULL;
+}
+void midi_out_close(MidiOut* m) { (void)m; }
+void midi_out_send(MidiOut* m, const uint8_t* msg, int len) {
+  (void)m;
+  (void)msg;
+  (void)len;
+}
+int midi_out_port_idx(const MidiOut* m) {
+  (void)m;
+  return -1;
+}
 
 #endif

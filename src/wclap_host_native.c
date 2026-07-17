@@ -2,19 +2,18 @@
 // (Wasmtime), which hands back a real clap_plugin_factory_t — so everything
 // below this point (host callbacks, event lists, process loop) is unchanged
 // from a native-dlopen CLAP host.
-#include "clap_host.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "clap/clap.h"
+#include "clap_host.h"
 #include "wclap-bridge.h"
 
 // Per-WCLAP reference count so wclap_open/wclap_close are called once per file.
 typedef struct LibEntry {
   char path[512];
-  void *wclap;  // opaque handle from wclap_open()
+  void* wclap;  // opaque handle from wclap_open()
   int ref_count;
 } LibEntry;
 
@@ -23,7 +22,7 @@ static LibEntry s_libs[MAX_LOADED_LIBS];
 static int s_num_libs = 0;
 static bool s_bridge_inited = false;
 
-static LibEntry *lib_acquire(const char *path) {
+static LibEntry* lib_acquire(const char* path) {
   if (!s_bridge_inited) {
     wclap_global_init(0);
     s_bridge_inited = true;
@@ -34,24 +33,27 @@ static LibEntry *lib_acquire(const char *path) {
       return &s_libs[i];
     }
   }
-  if (s_num_libs >= MAX_LOADED_LIBS) return NULL;
-  void *wclap = wclap_open(path);
-  if (!wclap) return NULL;
+  if (s_num_libs >= MAX_LOADED_LIBS)
+    return NULL;
+  void* wclap = wclap_open(path);
+  if (!wclap)
+    return NULL;
   char err[256];
   if (wclap_get_error(wclap, err, sizeof(err))) {
     fprintf(stderr, "wclap_host: '%s': %s\n", path, err);
     wclap_close(wclap);
     return NULL;
   }
-  LibEntry *le = &s_libs[s_num_libs++];
+  LibEntry* le = &s_libs[s_num_libs++];
   strncpy(le->path, path, sizeof(le->path) - 1);
   le->wclap = wclap;
   le->ref_count = 1;
   return le;
 }
 
-static void lib_release(LibEntry *le) {
-  if (!le || --le->ref_count > 0) return;
+static void lib_release(LibEntry* le) {
+  if (!le || --le->ref_count > 0)
+    return;
   wclap_close(le->wclap);
   int idx = (int)(le - s_libs);
   for (int i = idx; i < s_num_libs - 1; i++)
@@ -61,11 +63,11 @@ static void lib_release(LibEntry *le) {
 
 struct ClapPlugin {
   clap_host_t host;  // per-instance; host.host_data = this ClapPlugin*
-  LibEntry *lib_entry;
-  const clap_plugin_t *plugin;
-  const clap_plugin_audio_ports_t *audio_ports;
-  const clap_plugin_note_ports_t *note_ports;
-  const clap_plugin_params_t *params_ext;
+  LibEntry* lib_entry;
+  const clap_plugin_t* plugin;
+  const clap_plugin_audio_ports_t* audio_ports;
+  const clap_plugin_note_ports_t* note_ports;
+  const clap_plugin_params_t* params_ext;
 
   float sample_rate;
   uint32_t block_size;
@@ -82,13 +84,13 @@ struct ClapPlugin {
   int param_event_count;
 
   // Audio buffers
-  float *buf_out_l;
-  float *buf_out_r;
+  float* buf_out_l;
+  float* buf_out_r;
 };
 
 // --- Host callbacks required by CLAP ---
 
-static const char *host_get_name(const clap_host_t *host) {
+static const char* host_get_name(const clap_host_t* host) {
   (void)host;
   return "poketrack";
 }
@@ -96,13 +98,16 @@ static const char *host_get_name(const clap_host_t *host) {
 // CLAP_EXT_PARAMS host side — plugins call these to notify the host of param changes.
 // We don't cache param state, so rescan/clear are no-ops.
 // request_flush signals the plugin wants flush() called; we handle it inline next process().
-static void host_params_rescan(const clap_host_t *h, clap_param_rescan_flags f) {
-  (void)h; (void)f;
+static void host_params_rescan(const clap_host_t* h, clap_param_rescan_flags f) {
+  (void)h;
+  (void)f;
 }
-static void host_params_clear(const clap_host_t *h, clap_id id, clap_param_clear_flags f) {
-  (void)h; (void)id; (void)f;
+static void host_params_clear(const clap_host_t* h, clap_id id, clap_param_clear_flags f) {
+  (void)h;
+  (void)id;
+  (void)f;
 }
-static void host_params_request_flush(const clap_host_t *h) {
+static void host_params_request_flush(const clap_host_t* h) {
   (void)h;
 }
 static const clap_host_params_t s_host_params = {
@@ -112,26 +117,29 @@ static const clap_host_params_t s_host_params = {
 };
 
 // CLAP_EXT_LOG — lets plugins emit diagnostics
-static void host_log(const clap_host_t *h, clap_log_severity sev, const char *msg) {
+static void host_log(const clap_host_t* h, clap_log_severity sev, const char* msg) {
   (void)h;
-  const char *labels[] = {"DEBUG","INFO","WARNING","ERROR","FATAL","HOSTSEV4","HOSTSEV5"};
-  const char *label = (sev < 7) ? labels[sev] : "LOG";
+  const char* labels[] = {"DEBUG", "INFO", "WARNING", "ERROR", "FATAL", "HOSTSEV4", "HOSTSEV5"};
+  const char* label = (sev < 7) ? labels[sev] : "LOG";
   fprintf(stderr, "[CLAP %s] %s\n", label, msg);
 }
-static const clap_host_log_t s_host_log = { host_log };
+static const clap_host_log_t s_host_log = {host_log};
 
-static const void *host_get_extension(const clap_host_t *host, const char *ext_id) {
+static const void* host_get_extension(const clap_host_t* host, const char* ext_id) {
   (void)host;
-  if (strcmp(ext_id, CLAP_EXT_PARAMS) == 0) return &s_host_params;
-  if (strcmp(ext_id, CLAP_EXT_LOG)    == 0) return &s_host_log;
+  if (strcmp(ext_id, CLAP_EXT_PARAMS) == 0)
+    return &s_host_params;
+  if (strcmp(ext_id, CLAP_EXT_LOG) == 0)
+    return &s_host_log;
   return NULL;
 }
 
-static void host_request_restart(const clap_host_t *host) { (void)host; }
-static void host_request_process(const clap_host_t *host) { (void)host; }
-static void host_request_callback(const clap_host_t *host) {
-  ClapPlugin *cp = (ClapPlugin *)host->host_data;
-  if (cp) cp->main_thread_requested = true;
+static void host_request_restart(const clap_host_t* host) { (void)host; }
+static void host_request_process(const clap_host_t* host) { (void)host; }
+static void host_request_callback(const clap_host_t* host) {
+  ClapPlugin* cp = (ClapPlugin*)host->host_data;
+  if (cp)
+    cp->main_thread_requested = true;
 }
 
 static const clap_host_t s_host_template = {
@@ -147,15 +155,15 @@ static const clap_host_t s_host_template = {
     host_request_callback,
 };
 
-ClapPlugin *clap_host_load(const char *path, const char *plugin_id, float sample_rate, uint32_t block_size) {
-  LibEntry *le = lib_acquire(path);
+ClapPlugin* clap_host_load(const char* path, const char* plugin_id, float sample_rate, uint32_t block_size) {
+  LibEntry* le = lib_acquire(path);
   if (!le) {
     fprintf(stderr, "wclap_host: cannot load '%s'\n", path);
     return NULL;
   }
 
-  const clap_plugin_factory_t *factory =
-      (const clap_plugin_factory_t *)wclap_get_factory(le->wclap, CLAP_PLUGIN_FACTORY_ID);
+  const clap_plugin_factory_t* factory =
+      (const clap_plugin_factory_t*)wclap_get_factory(le->wclap, CLAP_PLUGIN_FACTORY_ID);
   if (!factory) {
     fprintf(stderr, "wclap_host: no plugin factory\n");
     lib_release(le);
@@ -164,9 +172,9 @@ ClapPlugin *clap_host_load(const char *path, const char *plugin_id, float sample
 
   // Find plugin by ID (or use first if id is NULL/empty)
   uint32_t count = factory->get_plugin_count(factory);
-  const clap_plugin_descriptor_t *desc = NULL;
+  const clap_plugin_descriptor_t* desc = NULL;
   for (uint32_t i = 0; i < count; i++) {
-    const clap_plugin_descriptor_t *d = factory->get_plugin_descriptor(factory, i);
+    const clap_plugin_descriptor_t* d = factory->get_plugin_descriptor(factory, i);
     if (!plugin_id || plugin_id[0] == '\0' || strcmp(d->id, plugin_id) == 0) {
       desc = d;
       break;
@@ -179,11 +187,11 @@ ClapPlugin *clap_host_load(const char *path, const char *plugin_id, float sample
     return NULL;
   }
 
-  ClapPlugin *cp = calloc(1, sizeof(ClapPlugin));
+  ClapPlugin* cp = calloc(1, sizeof(ClapPlugin));
   cp->host = s_host_template;
   cp->host.host_data = cp;
 
-  const clap_plugin_t *plugin = factory->create_plugin(factory, &cp->host, desc->id);
+  const clap_plugin_t* plugin = factory->create_plugin(factory, &cp->host, desc->id);
   if (!plugin || !plugin->init(plugin)) {
     fprintf(stderr, "wclap_host: plugin init failed\n");
     if (plugin)
@@ -200,16 +208,16 @@ ClapPlugin *clap_host_load(const char *path, const char *plugin_id, float sample
   strncpy(cp->name, desc->name, sizeof(cp->name) - 1);
 
   // Check if instrument (has MIDI input)
-  cp->note_ports = (const clap_plugin_note_ports_t *)
+  cp->note_ports = (const clap_plugin_note_ports_t*)
                        plugin->get_extension(plugin, CLAP_EXT_NOTE_PORTS);
   // Some plugin frameworks (e.g. as-clap) always expose CLAP_EXT_NOTE_PORTS
   // even for effects that don't use it — check the port count, not just
   // whether the extension pointer exists.
   cp->is_instrument = cp->note_ports && cp->note_ports->count(plugin, true) > 0;
 
-  cp->audio_ports = (const clap_plugin_audio_ports_t *)
+  cp->audio_ports = (const clap_plugin_audio_ports_t*)
                         plugin->get_extension(plugin, CLAP_EXT_AUDIO_PORTS);
-  cp->params_ext = (const clap_plugin_params_t *)
+  cp->params_ext = (const clap_plugin_params_t*)
                        plugin->get_extension(plugin, CLAP_EXT_PARAMS);
 
   if (!plugin->activate(plugin, sample_rate, 1, block_size)) {
@@ -228,13 +236,13 @@ ClapPlugin *clap_host_load(const char *path, const char *plugin_id, float sample
   return cp;
 }
 
-int clap_host_list_plugins(const char *path, char *out_ids, char *out_names, size_t id_name_sz, int max_count) {
-  LibEntry *le = lib_acquire(path);
+int clap_host_list_plugins(const char* path, char* out_ids, char* out_names, size_t id_name_sz, int max_count) {
+  LibEntry* le = lib_acquire(path);
   if (!le)
     return 0;
 
-  const clap_plugin_factory_t *factory =
-      (const clap_plugin_factory_t *)wclap_get_factory(le->wclap, CLAP_PLUGIN_FACTORY_ID);
+  const clap_plugin_factory_t* factory =
+      (const clap_plugin_factory_t*)wclap_get_factory(le->wclap, CLAP_PLUGIN_FACTORY_ID);
   if (!factory) {
     lib_release(le);
     return 0;
@@ -243,7 +251,7 @@ int clap_host_list_plugins(const char *path, char *out_ids, char *out_names, siz
   uint32_t count = factory->get_plugin_count(factory);
   int n = 0;
   for (uint32_t i = 0; i < count && n < max_count; i++) {
-    const clap_plugin_descriptor_t *d = factory->get_plugin_descriptor(factory, i);
+    const clap_plugin_descriptor_t* d = factory->get_plugin_descriptor(factory, i);
     if (!d)
       continue;
     snprintf(out_ids + n * id_name_sz, id_name_sz, "%s", d->id);
@@ -254,7 +262,7 @@ int clap_host_list_plugins(const char *path, char *out_ids, char *out_names, siz
   return n;
 }
 
-void clap_host_unload(ClapPlugin *p) {
+void clap_host_unload(ClapPlugin* p) {
   if (!p)
     return;
   p->plugin->stop_processing(p->plugin);
@@ -273,10 +281,10 @@ void clap_host_unload(ClapPlugin *p) {
   free(p);
 }
 
-void clap_host_note_on(ClapPlugin *p, uint8_t note, uint8_t velocity, uint32_t offset) {
+void clap_host_note_on(ClapPlugin* p, uint8_t note, uint8_t velocity, uint32_t offset) {
   if (!p || p->event_count >= MAX_CLAP_EVENTS)
     return;
-  clap_event_note_t *ev = &p->events[p->event_count++];
+  clap_event_note_t* ev = &p->events[p->event_count++];
   memset(ev, 0, sizeof(*ev));
   ev->header.size = sizeof(*ev);
   ev->header.time = offset;
@@ -290,10 +298,10 @@ void clap_host_note_on(ClapPlugin *p, uint8_t note, uint8_t velocity, uint32_t o
   ev->velocity = velocity / 127.0;
 }
 
-void clap_host_note_off(ClapPlugin *p, uint8_t note, uint32_t offset) {
+void clap_host_note_off(ClapPlugin* p, uint8_t note, uint32_t offset) {
   if (!p || p->event_count >= MAX_CLAP_EVENTS)
     return;
-  clap_event_note_t *ev = &p->events[p->event_count++];
+  clap_event_note_t* ev = &p->events[p->event_count++];
   memset(ev, 0, sizeof(*ev));
   ev->header.size = sizeof(*ev);
   ev->header.time = offset;
@@ -308,27 +316,27 @@ void clap_host_note_off(ClapPlugin *p, uint8_t note, uint32_t offset) {
 }
 
 // Input event list helpers — param events first (time=0), then note events
-static const clap_event_header_t *list_get(const clap_input_events_t *list, uint32_t index) {
-  ClapPlugin *p = (ClapPlugin *)list->ctx;
+static const clap_event_header_t* list_get(const clap_input_events_t* list, uint32_t index) {
+  ClapPlugin* p = (ClapPlugin*)list->ctx;
   if ((int)index < p->param_event_count)
     return &p->param_events[index].header;
   return &p->events[index - p->param_event_count].header;
 }
-static uint32_t list_size(const clap_input_events_t *list) {
-  ClapPlugin *p = (ClapPlugin *)list->ctx;
+static uint32_t list_size(const clap_input_events_t* list) {
+  ClapPlugin* p = (ClapPlugin*)list->ctx;
   return (uint32_t)(p->param_event_count + p->event_count);
 }
 
 // Output event list helpers (we discard output events for now)
-static bool out_try_push(const clap_output_events_t *list, const clap_event_header_t *ev) {
+static bool out_try_push(const clap_output_events_t* list, const clap_event_header_t* ev) {
   (void)list;
   (void)ev;
   return true;
 }
 
-void clap_host_process(ClapPlugin *p,
-                       const float *in_l, const float *in_r,
-                       float *out_l, float *out_r,
+void clap_host_process(ClapPlugin* p,
+                       const float* in_l, const float* in_r,
+                       float* out_l, float* out_r,
                        uint32_t frames) {
   if (!p)
     return;
@@ -338,11 +346,11 @@ void clap_host_process(ClapPlugin *p,
   memset(p->buf_out_r, 0, frames * sizeof(float));
 
   // Build audio buffers
-  const float *in_bufs[2] = {in_l, in_r};
-  float *out_bufs[2] = {p->buf_out_l, p->buf_out_r};
+  const float* in_bufs[2] = {in_l, in_r};
+  float* out_bufs[2] = {p->buf_out_l, p->buf_out_r};
 
   // clap_audio_buffer_t: data32, data64, channel_count, latency, constant_mask
-  clap_audio_buffer_t audio_in = {(float **)in_bufs, NULL, 2, 0, 0};
+  clap_audio_buffer_t audio_in = {(float**)in_bufs, NULL, 2, 0, 0};
   clap_audio_buffer_t audio_out = {out_bufs, NULL, 2, 0, 0};
 
   // clap_input_events_t: ctx, size, get
@@ -379,16 +387,16 @@ void clap_host_process(ClapPlugin *p,
     memcpy(out_r, p->buf_out_r, frames * sizeof(float));
 }
 
-bool clap_host_is_instrument(ClapPlugin *p) { return p && p->is_instrument; }
-const char *clap_host_name(ClapPlugin *p) { return p ? p->name : ""; }
+bool clap_host_is_instrument(ClapPlugin* p) { return p && p->is_instrument; }
+const char* clap_host_name(ClapPlugin* p) { return p ? p->name : ""; }
 
-uint32_t clap_host_param_count(ClapPlugin *p) {
+uint32_t clap_host_param_count(ClapPlugin* p) {
   if (!p || !p->params_ext)
     return 0;
   return p->params_ext->count(p->plugin);
 }
 
-bool clap_host_param_flags(ClapPlugin *p, uint32_t idx, uint32_t *out_flags) {
+bool clap_host_param_flags(ClapPlugin* p, uint32_t idx, uint32_t* out_flags) {
   if (!p || !p->params_ext)
     return false;
   clap_param_info_t info;
@@ -399,7 +407,7 @@ bool clap_host_param_flags(ClapPlugin *p, uint32_t idx, uint32_t *out_flags) {
   return true;
 }
 
-bool clap_host_param_is_stepped(ClapPlugin *p, uint32_t idx) {
+bool clap_host_param_is_stepped(ClapPlugin* p, uint32_t idx) {
   if (!p || !p->params_ext)
     return false;
   clap_param_info_t info;
@@ -408,9 +416,9 @@ bool clap_host_param_is_stepped(ClapPlugin *p, uint32_t idx) {
   return (info.flags & CLAP_PARAM_IS_STEPPED) != 0;
 }
 
-bool clap_host_param_info(ClapPlugin *p, uint32_t idx,
-                          uint32_t *out_id, char *out_name, size_t name_sz,
-                          double *out_min, double *out_max, double *out_default) {
+bool clap_host_param_info(ClapPlugin* p, uint32_t idx,
+                          uint32_t* out_id, char* out_name, size_t name_sz,
+                          double* out_min, double* out_max, double* out_default) {
   if (!p || !p->params_ext)
     return false;
   clap_param_info_t info;
@@ -429,10 +437,10 @@ bool clap_host_param_info(ClapPlugin *p, uint32_t idx,
   return true;
 }
 
-void clap_host_queue_param(ClapPlugin *p, uint32_t param_id, double value) {
+void clap_host_queue_param(ClapPlugin* p, uint32_t param_id, double value) {
   if (!p || p->param_event_count >= 16)
     return;
-  clap_event_param_value_t *ev = &p->param_events[p->param_event_count++];
+  clap_event_param_value_t* ev = &p->param_events[p->param_event_count++];
   memset(ev, 0, sizeof(*ev));
   ev->header.size = sizeof(*ev);
   ev->header.time = 0;
@@ -449,7 +457,7 @@ void clap_host_queue_param(ClapPlugin *p, uint32_t param_id, double value) {
 
 // Call this from the main thread each frame (not the audio thread).
 // Delivers any deferred on_main_thread() work the plugin requested.
-void clap_host_do_main_thread_work(ClapPlugin *p) {
+void clap_host_do_main_thread_work(ClapPlugin* p) {
   if (!p || !p->main_thread_requested)
     return;
   p->main_thread_requested = false;

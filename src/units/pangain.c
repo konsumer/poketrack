@@ -9,26 +9,15 @@ struct UnitState {
   uint8_t unused;  // stateless effect; instances only exist to satisfy the engine
 };
 
-static UnitState *pangain_create(float sr) {
+static UnitState* pangain_create(float sr) {
   (void)sr;
   return calloc(1, sizeof(UnitState));
 }
-static void pangain_destroy(UnitState *s) { free(s); }
-static void pangain_note_on(UnitState *s, uint8_t n, uint8_t v, const uint8_t *p) {
-  (void)s;
-  (void)n;
-  (void)v;
-  (void)p;
-}
-static void pangain_note_off(UnitState *s, uint8_t n) {
-  (void)s;
-  (void)n;
-}
-static void pangain_kill(UnitState *s) { (void)s; }
+static void pangain_destroy(UnitState* s) { free(s); }
 
-static void pangain_render(UnitState *s, const uint8_t *p,
-                           const float *in_l, const float *in_r,
-                           float *out_l, float *out_r, uint32_t frames) {
+static void pangain_render(UnitState* s, const uint8_t* p,
+                           const float* in_l, const float* in_r,
+                           float* out_l, float* out_r, uint32_t frames) {
   (void)s;
   if (p[0] == 0x80 && p[1] == 0x80 && out_l == in_l && out_r == in_r)
     return;  // neutral and in-place: nothing to do
@@ -57,8 +46,5 @@ const UnitDef unit_pangain = {
     .param_defaults = {0x80, 0x80},
     .create = pangain_create,
     .destroy = pangain_destroy,
-    .note_on = pangain_note_on,
-    .note_off = pangain_note_off,
-    .kill = pangain_kill,
     .render = pangain_render,
 };

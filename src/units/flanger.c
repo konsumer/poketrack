@@ -10,7 +10,6 @@
 #include "unit.h"
 
 #define FLNG_BUF 1024  // ~23ms at 44100 (power of 2)
-#define TWO_PI 6.28318530718f
 
 struct UnitState {
   float buf_l[FLNG_BUF], buf_r[FLNG_BUF];
@@ -19,38 +18,28 @@ struct UnitState {
   float sample_rate;
 };
 
-static UnitState *flanger_create(float sr) {
-  UnitState *s = calloc(1, sizeof(*s));
+static UnitState* flanger_create(float sr) {
+  UnitState* s = calloc(1, sizeof(*s));
   s->sample_rate = sr;
   s->lfo_r = 0.25f;
   return s;
 }
-static void flanger_destroy(UnitState *s) { free(s); }
-static void flanger_note_on(UnitState *s, uint8_t n, uint8_t v, const uint8_t *p) {
-  (void)s;
-  (void)n;
-  (void)v;
-  (void)p;
-}
-static void flanger_note_off(UnitState *s, uint8_t n) {
-  (void)s;
-  (void)n;
-}
-static void flanger_kill(UnitState *s) {
+static void flanger_destroy(UnitState* s) { free(s); }
+static void flanger_kill(UnitState* s) {
   memset(s->buf_l, 0, sizeof(s->buf_l));
   memset(s->buf_r, 0, sizeof(s->buf_r));
 }
 
-static float read_interp_f(float *buf, float pos) {
+static float read_interp_f(float* buf, float pos) {
   int i0 = (int)pos & (FLNG_BUF - 1);
   int i1 = (i0 + 1) & (FLNG_BUF - 1);
   float fr = pos - (int)pos;
   return buf[i0] * (1.0f - fr) + buf[i1] * fr;
 }
 
-static void flanger_render(UnitState *s, const uint8_t *p,
-                           const float *in_l, const float *in_r,
-                           float *out_l, float *out_r, uint32_t frames) {
+static void flanger_render(UnitState* s, const uint8_t* p,
+                           const float* in_l, const float* in_r,
+                           float* out_l, float* out_r, uint32_t frames) {
   if (s->sample_rate <= 0)
     return;
   float rate = p2f(p[0], 0.05f, 4.0f);
@@ -64,8 +53,8 @@ static void flanger_render(UnitState *s, const uint8_t *p,
   float lfo_inc = rate / s->sample_rate;
 
   for (uint32_t f = 0; f < frames; f++) {
-    float del_l = dmin + (sinf(s->lfo_l * TWO_PI) * 0.5f + 0.5f) * d_range;
-    float del_r = dmin + (sinf(s->lfo_r * TWO_PI) * 0.5f + 0.5f) * d_range;
+    float del_l = dmin + (unit_sin(s->lfo_l) * 0.5f + 0.5f) * d_range;
+    float del_r = dmin + (unit_sin(s->lfo_r) * 0.5f + 0.5f) * d_range;
 
     float wet_l = read_interp_f(s->buf_l, (s->write - del_l + FLNG_BUF * 2));
     float wet_r = read_interp_f(s->buf_r, (s->write - del_r + FLNG_BUF * 2));
@@ -95,8 +84,6 @@ const UnitDef unit_flanger = {
     .param_defaults = {25, 180, 100, 150},
     .create = flanger_create,
     .destroy = flanger_destroy,
-    .note_on = flanger_note_on,
-    .note_off = flanger_note_off,
     .kill = flanger_kill,
     .render = flanger_render,
 };

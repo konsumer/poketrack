@@ -14,7 +14,6 @@
 #include "unit.h"
 
 #define OSC_POLY 4
-#define TWO_PI 6.28318530718f
 
 typedef struct {
   bool active;
@@ -32,16 +31,16 @@ struct UnitState {
   float sample_rate;
 };
 
-static uint32_t lcg(uint32_t *s) {
+static uint32_t lcg(uint32_t* s) {
   *s = *s * 1664525u + 1013904223u;
   return *s;
 }
 
-static float osc_sample(OscVoice *v, int wave, float pw) {
+static float osc_sample(OscVoice* v, int wave, float pw) {
   float p = v->phase;
   switch (wave) {
     case 0:
-      return sinf(p * TWO_PI);
+      return unit_sin(p);
     case 1:
       return (p < pw) ? 1.0f : -1.0f;
     case 2:
@@ -53,7 +52,7 @@ static float osc_sample(OscVoice *v, int wave, float pw) {
   }
 }
 
-static float env_tick(OscVoice *v, float dt, float atk, float dcy, float sus, float rel) {
+static float env_tick(OscVoice* v, float dt, float atk, float dcy, float sus, float rel) {
   switch (v->env_stage) {
     case 0:
       v->env_time += dt;
@@ -90,15 +89,15 @@ static float env_tick(OscVoice *v, float dt, float atk, float dcy, float sus, fl
   return v->env_level;
 }
 
-static UnitState *osc_create(float sr) {
-  UnitState *s = calloc(1, sizeof(*s));
+static UnitState* osc_create(float sr) {
+  UnitState* s = calloc(1, sizeof(*s));
   s->sample_rate = sr;
   return s;
 }
-static void osc_destroy(UnitState *s) { free(s); }
+static void osc_destroy(UnitState* s) { free(s); }
 
-static void osc_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t *p) {
-  OscVoice *v = NULL;
+static void osc_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* p) {
+  OscVoice* v = NULL;
   for (int i = 0; i < OSC_POLY; i++)
     if (!s->voices[i].active) {
       v = &s->voices[i];
@@ -116,9 +115,9 @@ static void osc_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t *
   };
 }
 
-static void osc_note_off(UnitState *s, uint8_t note) {
+static void osc_note_off(UnitState* s, uint8_t note) {
   for (int i = 0; i < OSC_POLY; i++) {
-    OscVoice *v = &s->voices[i];
+    OscVoice* v = &s->voices[i];
     if (v->active && v->note == note && v->env_stage < 3) {
       v->env_stage = 3;
       v->env_time = 0;
@@ -126,11 +125,11 @@ static void osc_note_off(UnitState *s, uint8_t note) {
   }
 }
 
-static void osc_kill(UnitState *s) { memset(s->voices, 0, sizeof(s->voices)); }
+static void osc_kill(UnitState* s) { memset(s->voices, 0, sizeof(s->voices)); }
 
-static void osc_render(UnitState *s, const uint8_t *p,
-                       const float *in_l, const float *in_r,
-                       float *out_l, float *out_r, uint32_t frames) {
+static void osc_render(UnitState* s, const uint8_t* p,
+                       const float* in_l, const float* in_r,
+                       float* out_l, float* out_r, uint32_t frames) {
   (void)in_l;
   (void)in_r;
   if (s->sample_rate <= 0)
@@ -147,7 +146,7 @@ static void osc_render(UnitState *s, const uint8_t *p,
   for (uint32_t f = 0; f < frames; f++) {
     float mix = 0;
     for (int i = 0; i < OSC_POLY; i++) {
-      OscVoice *v = &s->voices[i];
+      OscVoice* v = &s->voices[i];
       if (!v->active)
         continue;
       float env = env_tick(v, dt, atk, dcy, sus, rel);
@@ -156,13 +155,13 @@ static void osc_render(UnitState *s, const uint8_t *p,
       if (v->phase >= 1.0f)
         v->phase -= 1.0f;
     }
-    mix = tanhf(mix * 0.7f) * vol;
+    mix = unit_softclip(mix * 0.7f) * vol;
     out_l[f] += mix;
     out_r[f] += mix;
   }
 }
 
-static const char *const osc_wave_names[] = {"SINE", "SQR", "SAW", "TRI", "NOISE"};
+static const char* const osc_wave_names[] = {"SINE", "SQR", "SAW", "TRI", "NOISE"};
 
 const UnitDef unit_osc = {
     .id = "osc",

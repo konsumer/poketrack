@@ -10,7 +10,6 @@
 #include "unit.h"
 
 #define BUF_SIZE 8192  // ~186ms at 44100 Hz (power of 2)
-#define TWO_PI 6.28318530718f
 
 struct UnitState {
   float buf_l[BUF_SIZE];
@@ -20,38 +19,28 @@ struct UnitState {
   float sample_rate;
 };
 
-static UnitState *chorus_create(float sr) {
-  UnitState *s = calloc(1, sizeof(*s));
+static UnitState* chorus_create(float sr) {
+  UnitState* s = calloc(1, sizeof(*s));
   s->sample_rate = sr;
   s->lfo_r = 0.25f;  // 90° offset
   return s;
 }
-static void chorus_destroy(UnitState *s) { free(s); }
-static void chorus_note_on(UnitState *s, uint8_t n, uint8_t v, const uint8_t *p) {
-  (void)s;
-  (void)n;
-  (void)v;
-  (void)p;
-}
-static void chorus_note_off(UnitState *s, uint8_t n) {
-  (void)s;
-  (void)n;
-}
-static void chorus_kill(UnitState *s) {
+static void chorus_destroy(UnitState* s) { free(s); }
+static void chorus_kill(UnitState* s) {
   memset(s->buf_l, 0, sizeof(s->buf_l));
   memset(s->buf_r, 0, sizeof(s->buf_r));
 }
 
-static float read_interp(float *buf, float pos) {
+static float read_interp(float* buf, float pos) {
   int i0 = (int)pos & (BUF_SIZE - 1);
   int i1 = (i0 + 1) & (BUF_SIZE - 1);
   float fr = pos - (int)pos;
   return buf[i0] * (1.0f - fr) + buf[i1] * fr;
 }
 
-static void chorus_render(UnitState *s, const uint8_t *p,
-                          const float *in_l, const float *in_r,
-                          float *out_l, float *out_r, uint32_t frames) {
+static void chorus_render(UnitState* s, const uint8_t* p,
+                          const float* in_l, const float* in_r,
+                          float* out_l, float* out_r, uint32_t frames) {
   if (s->sample_rate <= 0)
     return;
   float rate = p2f(p[0], 0.1f, 5.0f);
@@ -64,8 +53,8 @@ static void chorus_render(UnitState *s, const uint8_t *p,
     s->buf_l[s->write] = in_l[f];
     s->buf_r[s->write] = in_r[f];
 
-    float mod_l = sinf(s->lfo_l * TWO_PI) * depth;
-    float mod_r = sinf(s->lfo_r * TWO_PI) * depth;
+    float mod_l = unit_sin(s->lfo_l) * depth;
+    float mod_r = unit_sin(s->lfo_r) * depth;
     float pos_l = (s->write - delay + mod_l + BUF_SIZE * 2) - 1;
     float pos_r = (s->write - delay + mod_r + BUF_SIZE * 2) - 1;
 
@@ -94,8 +83,6 @@ const UnitDef unit_chorus = {
     .param_defaults = {30, 80, 60, 128},
     .create = chorus_create,
     .destroy = chorus_destroy,
-    .note_on = chorus_note_on,
-    .note_off = chorus_note_off,
     .kill = chorus_kill,
     .render = chorus_render,
 };

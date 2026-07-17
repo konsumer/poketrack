@@ -28,7 +28,7 @@ typedef struct {
 } ClapMapping;
 
 struct UnitState {
-  ClapPlugin *plugin;
+  ClapPlugin* plugin;
   float sample_rate;
   bool is_source;
   char resolved_path[512];
@@ -41,7 +41,7 @@ struct UnitState {
 
   // Full param list for the picker (all plugin params)
   int total_params;
-  ClapParamInfo *param_cache;  // malloc'd
+  ClapParamInfo* param_cache;  // malloc'd
 
   // Plugins available in the loaded file, for the DATA-row device picker
   // (a single .wasm can bundle more than one plugin, e.g. a gain effect
@@ -51,14 +51,14 @@ struct UnitState {
   char plugin_choice_names[MAX_CLAP_PLUGIN_CHOICES][128];
 };
 
-static UnitState *clap_unit_create(float sr) {
-  UnitState *s = calloc(1, sizeof(*s));
+static UnitState* clap_unit_create(float sr) {
+  UnitState* s = calloc(1, sizeof(*s));
   s->sample_rate = sr;
   s->active_note = -1;
   return s;
 }
 
-static void clap_unit_destroy(UnitState *s) {
+static void clap_unit_destroy(UnitState* s) {
   if (s->plugin)
     clap_host_unload(s->plugin);
   free(s->param_cache);
@@ -66,7 +66,7 @@ static void clap_unit_destroy(UnitState *s) {
 }
 
 // Look up full param info by ID into a ClapMapping slot
-static void fill_mapping_from_cache(UnitState *s, uint32_t id, ClapMapping *m) {
+static void fill_mapping_from_cache(UnitState* s, uint32_t id, ClapMapping* m) {
   m->id = id;
   m->val = 0x80;
   m->min_val = 0;
@@ -75,7 +75,7 @@ static void fill_mapping_from_cache(UnitState *s, uint32_t id, ClapMapping *m) {
   m->is_stepped = false;
   strncpy(m->name, "?", sizeof(m->name));
   for (int i = 0; i < s->total_params; i++) {
-    ClapParamInfo *c = &s->param_cache[i];
+    ClapParamInfo* c = &s->param_cache[i];
     if (c->id == id) {
       m->min_val = c->min_val;
       m->max_val = c->max_val;
@@ -95,7 +95,7 @@ static void fill_mapping_from_cache(UnitState *s, uint32_t id, ClapMapping *m) {
 
 // (Re)loads s->plugin from s->resolved_path/s->plugin_id, rebuilding the
 // param cache. Clears any existing mappings — caller restores them if needed.
-static void clap_reload_plugin(UnitState *s) {
+static void clap_reload_plugin(UnitState* s) {
   if (s->plugin) {
     clap_host_unload(s->plugin);
     s->plugin = NULL;
@@ -119,7 +119,7 @@ static void clap_reload_plugin(UnitState *s) {
   if (total > 0) {
     s->param_cache = calloc(total, sizeof(ClapParamInfo));
     for (uint32_t i = 0; i < total; i++) {
-      ClapParamInfo *c = &s->param_cache[i];
+      ClapParamInfo* c = &s->param_cache[i];
       clap_host_param_info(s->plugin, i, &c->id, c->name, sizeof(c->name),
                            &c->min_val, &c->max_val, &c->default_val);
       bool stepped = clap_host_param_is_stepped(s->plugin, i);
@@ -130,7 +130,7 @@ static void clap_reload_plugin(UnitState *s) {
 }
 
 // Selecting a different plugin id in the DATA-row picker
-static void clap_dev_picker_set(UnitState *s, int idx) {
+static void clap_dev_picker_set(UnitState* s, int idx) {
   if (idx < 0 || idx >= s->num_plugin_choices)
     return;
   strncpy(s->plugin_id, s->plugin_choice_ids[idx], sizeof(s->plugin_id) - 1);
@@ -138,15 +138,15 @@ static void clap_dev_picker_set(UnitState *s, int idx) {
   clap_reload_plugin(s);
 }
 
-static int clap_dev_picker_count(UnitState *s) { return s->num_plugin_choices; }
+static int clap_dev_picker_count(UnitState* s) { return s->num_plugin_choices; }
 
-static const char *clap_dev_picker_name(UnitState *s, int idx) {
+static const char* clap_dev_picker_name(UnitState* s, int idx) {
   if (idx < 0 || idx >= s->num_plugin_choices)
     return "";
   return s->plugin_choice_names[idx];
 }
 
-static void clap_unit_set_data(UnitState *s, const char *data, const char *base_dir) {
+static void clap_unit_set_data(UnitState* s, const char* data, const char* base_dir) {
   if (!data || !data[0])
     return;
 
@@ -154,13 +154,13 @@ static void clap_unit_set_data(UnitState *s, const char *data, const char *base_
   strncpy(buf, data, sizeof(buf) - 1);
   buf[sizeof(buf) - 1] = '\0';
 
-  char *tab1 = strchr(buf, '\t');
-  char *id_str = "";
-  const char *hex_mappings = NULL;
+  char* tab1 = strchr(buf, '\t');
+  char* id_str = "";
+  const char* hex_mappings = NULL;
   if (tab1) {
     *tab1 = '\0';
     id_str = tab1 + 1;
-    char *tab2 = strchr(id_str, '\t');
+    char* tab2 = strchr(id_str, '\t');
     if (tab2) {
       *tab2 = '\0';
       hex_mappings = tab2 + 1;
@@ -181,7 +181,7 @@ static void clap_unit_set_data(UnitState *s, const char *data, const char *base_
 
   // Restore saved mappings from hex
   if (hex_mappings) {
-    const char *h = hex_mappings;
+    const char* h = hex_mappings;
     while (h[0] && s->num_mappings < UNIT_MAX_PARAMS) {
       if (strlen(h) < 10)
         break;
@@ -189,7 +189,7 @@ static void clap_unit_set_data(UnitState *s, const char *data, const char *base_
       char val_hex[3] = {h[8], h[9], '\0'};
       uint32_t pid = (uint32_t)strtoul(id_hex, NULL, 16);
       uint8_t pv = (uint8_t)strtoul(val_hex, NULL, 16);
-      ClapMapping *m = &s->mappings[s->num_mappings++];
+      ClapMapping* m = &s->mappings[s->num_mappings++];
       fill_mapping_from_cache(s, pid, m);
       m->val = pv;
       m->last_sent = 0xFF ^ pv;
@@ -198,7 +198,7 @@ static void clap_unit_set_data(UnitState *s, const char *data, const char *base_
   }
 }
 
-static void clap_unit_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t *p) {
+static void clap_unit_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* p) {
   (void)p;
   if (!s->plugin || !s->is_source)
     return;
@@ -208,7 +208,7 @@ static void clap_unit_note_on(UnitState *s, uint8_t note, uint8_t vel, const uin
   s->active_note = note;
 }
 
-static void clap_unit_note_off(UnitState *s, uint8_t note) {
+static void clap_unit_note_off(UnitState* s, uint8_t note) {
   if (!s->plugin || !s->is_source)
     return;
   clap_host_note_off(s->plugin, note, 0);
@@ -216,38 +216,38 @@ static void clap_unit_note_off(UnitState *s, uint8_t note) {
     s->active_note = -1;
 }
 
-static void clap_unit_kill(UnitState *s) {
+static void clap_unit_kill(UnitState* s) {
   if (!s->plugin || s->active_note < 0)
     return;
   clap_host_note_off(s->plugin, (uint8_t)s->active_note, 0);
   s->active_note = -1;
 }
 
-static int clap_dyn_num_params(UnitState *s) { return s->num_mappings; }
+static int clap_dyn_num_params(UnitState* s) { return s->num_mappings; }
 
-static const char *clap_dyn_param_name(UnitState *s, int idx) {
+static const char* clap_dyn_param_name(UnitState* s, int idx) {
   if (idx < 0 || idx >= s->num_mappings)
     return "";
   return s->mappings[idx].name;
 }
 
-static uint8_t clap_get_param_val(UnitState *s, int idx) {
+static uint8_t clap_get_param_val(UnitState* s, int idx) {
   if (idx < 0 || idx >= s->num_mappings)
     return 0;
   return s->mappings[idx].val;
 }
 
-static void clap_set_param_val(UnitState *s, int idx, uint8_t val) {
+static void clap_set_param_val(UnitState* s, int idx, uint8_t val) {
   if (idx < 0 || idx >= s->num_mappings)
     return;
   s->mappings[idx].val = val;
   s->mappings[idx].last_sent = 0xFF ^ val;
 }
 
-static uint8_t clap_get_param_default(UnitState *s, int idx) {
+static uint8_t clap_get_param_default(UnitState* s, int idx) {
   if (idx < 0 || idx >= s->num_mappings)
     return 0x80;
-  ClapMapping *m = &s->mappings[idx];
+  ClapMapping* m = &s->mappings[idx];
   double range = m->max_val - m->min_val;
   if (range == 0)
     return 0;
@@ -261,10 +261,10 @@ static uint8_t clap_get_param_default(UnitState *s, int idx) {
 }
 
 static char s_fmt_buf[32];
-static const char *clap_format_param_val(UnitState *s, int idx, uint8_t val) {
+static const char* clap_format_param_val(UnitState* s, int idx, uint8_t val) {
   if (idx < 0 || idx >= s->num_mappings)
     return NULL;
-  ClapMapping *m = &s->mappings[idx];
+  ClapMapping* m = &s->mappings[idx];
   if (m->is_bool)
     return (val >= 128) ? "ON" : "OFF";
   if (m->is_stepped) {
@@ -275,11 +275,11 @@ static const char *clap_format_param_val(UnitState *s, int idx, uint8_t val) {
   return NULL;
 }
 
-static void clap_sync_to_data(UnitState *s, char *data_buf, size_t data_buf_sz) {
+static void clap_sync_to_data(UnitState* s, char* data_buf, size_t data_buf_sz) {
   // Rebuild as: path\tplugin_id\thex... — path is whatever was before the
   // first tab (set by the file browser); plugin_id/hex come from state.
   char path_buf[512];
-  char *tab1 = strchr(data_buf, '\t');
+  char* tab1 = strchr(data_buf, '\t');
   size_t path_len = tab1 ? (size_t)(tab1 - data_buf) : strlen(data_buf);
   if (path_len >= sizeof(path_buf))
     path_len = sizeof(path_buf) - 1;
@@ -296,15 +296,15 @@ static void clap_sync_to_data(UnitState *s, char *data_buf, size_t data_buf_sz) 
 }
 
 // Picker callbacks
-static int clap_picker_count(UnitState *s) { return s->total_params; }
+static int clap_picker_count(UnitState* s) { return s->total_params; }
 
-static const char *clap_picker_name(UnitState *s, int idx) {
+static const char* clap_picker_name(UnitState* s, int idx) {
   if (idx < 0 || idx >= s->total_params)
     return "";
   return s->param_cache[idx].name;
 }
 
-static void clap_picker_add(UnitState *s, int picker_idx) {
+static void clap_picker_add(UnitState* s, int picker_idx) {
   if (picker_idx < 0 || picker_idx >= s->total_params)
     return;
   if (s->num_mappings >= UNIT_MAX_PARAMS)
@@ -313,11 +313,11 @@ static void clap_picker_add(UnitState *s, int picker_idx) {
   for (int i = 0; i < s->num_mappings; i++)
     if (s->mappings[i].id == pid)
       return;
-  ClapMapping *m = &s->mappings[s->num_mappings++];
+  ClapMapping* m = &s->mappings[s->num_mappings++];
   fill_mapping_from_cache(s, pid, m);
 }
 
-static void clap_mapping_remove(UnitState *s, int map_idx) {
+static void clap_mapping_remove(UnitState* s, int map_idx) {
   if (map_idx < 0 || map_idx >= s->num_mappings)
     return;
   for (int i = map_idx; i < s->num_mappings - 1; i++)
@@ -325,19 +325,19 @@ static void clap_mapping_remove(UnitState *s, int map_idx) {
   s->num_mappings--;
 }
 
-static void clap_main_thread_work(UnitState *s) {
+static void clap_main_thread_work(UnitState* s) {
   if (s->plugin)
     clap_host_do_main_thread_work(s->plugin);
 }
 
-static void clap_unit_render(UnitState *s, const uint8_t *p,
-                             const float *in_l, const float *in_r,
-                             float *out_l, float *out_r, uint32_t frames) {
+static void clap_unit_render(UnitState* s, const uint8_t* p,
+                             const float* in_l, const float* in_r,
+                             float* out_l, float* out_r, uint32_t frames) {
   (void)p;
   if (!s->plugin)
     return;
   for (int i = 0; i < s->num_mappings; i++) {
-    ClapMapping *m = &s->mappings[i];
+    ClapMapping* m = &s->mappings[i];
     if (m->val != m->last_sent) {
       double val = m->min_val + (m->val / 255.0) * (m->max_val - m->min_val);
       clap_host_queue_param(s->plugin, m->id, val);

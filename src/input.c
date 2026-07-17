@@ -54,11 +54,11 @@ static bool curr[BTN_COUNT];
 static int hframes[BTN_COUNT];
 
 // Case-insensitive substring search (no strcasestr on MSVC).
-static bool name_has(const char *name, const char *needle) {
+static bool name_has(const char* name, const char* needle) {
   if (!name)
     return false;
   size_t nlen = strlen(needle);
-  for (const char *p = name; *p; p++) {
+  for (const char* p = name; *p; p++) {
     size_t i = 0;
     while (i < nlen && p[i] && (tolower((unsigned char)p[i]) == tolower((unsigned char)needle[i])))
       i++;
@@ -69,7 +69,7 @@ static bool name_has(const char *name, const char *needle) {
 }
 
 static bool is_nintendo_layout(int gp) {
-  const char *name = GetGamepadName(gp);
+  const char* name = GetGamepadName(gp);
   return name_has(name, "nintendo") || name_has(name, "switch") || name_has(name, "joy-con") ||
          name_has(name, "joycon");
 }
@@ -82,7 +82,7 @@ static bool raw_down(TrackerButton btn) {
   if (!IsGamepadAvailable(0))
     return false;
   if (btn >= BTN_OK && btn <= BTN_NONE) {
-    const int *face = is_nintendo_layout(0) ? GP_FACE_NINTENDO : GP_FACE_XBOX;
+    const int* face = is_nintendo_layout(0) ? GP_FACE_NINTENDO : GP_FACE_XBOX;
     return IsGamepadButtonDown(0, face[btn - BTN_OK]);
   }
   return IsGamepadButtonDown(0, GP_MAP[btn]);

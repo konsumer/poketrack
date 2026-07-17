@@ -184,7 +184,7 @@ static void chan_note_on(AudioEngine* eng, int ch, int tr, uint8_t note, uint8_t
       continue;
     ChainSlot* slot = &inst->chain[s];
     const UnitDef* def = unit_find(slot->unit_id);
-    if (def && def->is_source)
+    if (def && def->is_source && def->note_on)
       def->note_on(states[s], note, vel, slot->params);
   }
 }
@@ -200,7 +200,7 @@ static void chan_note_off(AudioEngine* eng, int ch, int tr, uint8_t note) {
       continue;
     ChainSlot* slot = &inst->chain[s];
     const UnitDef* def = unit_find(slot->unit_id);
-    if (def && def->is_source)
+    if (def && def->is_source && def->note_off)
       def->note_off(states[s], note);
   }
 }
@@ -217,7 +217,7 @@ static void chan_kill(AudioEngine* eng, int ch, int tr) {
     if (!eng->chan_states[ch][tr][s])
       continue;
     const UnitDef* def = unit_find(inst->chain[s].unit_id);
-    if (def)
+    if (def && def->kill)
       def->kill(eng->chan_states[ch][tr][s]);
   }
 }
@@ -435,6 +435,7 @@ void audio_init(AudioEngine* eng, TrackerSong* song) {
   pthread_mutexattr_destroy(&attr);
 #endif
 #endif
+  unit_dsp_init();
   eng->song = song;
   g_lfo_song = song;
   eng->samples_per_tick = calc_samples_per_tick(song->bpm);
@@ -627,7 +628,7 @@ void audio_preview_note(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
       continue;
     ChainSlot* slot = &inst->chain[s];
     const UnitDef* def = unit_find(slot->unit_id);
-    if (def && def->is_source)
+    if (def && def->is_source && def->note_on)
       def->note_on(eng->preview_states[s], note, 100, slot->params);
   }
   AUDIO_UNLOCK(eng);
@@ -644,7 +645,7 @@ void audio_preview_kill(AudioEngine* eng) {
     if (!eng->preview_states[s])
       continue;
     const UnitDef* def = unit_find(inst->chain[s].unit_id);
-    if (def)
+    if (def && def->kill)
       def->kill(eng->preview_states[s]);
   }
   AUDIO_UNLOCK(eng);
@@ -1038,8 +1039,8 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
     }
 
     for (uint32_t f = 0; f < count; f++) {
-      out[(pos + f) * 2] = tanhf(blk_l[f] * 0.7f);
-      out[(pos + f) * 2 + 1] = tanhf(blk_r[f] * 0.7f);
+      out[(pos + f) * 2] = unit_softclip(blk_l[f] * 0.7f);
+      out[(pos + f) * 2 + 1] = unit_softclip(blk_r[f] * 0.7f);
     }
 
     pos += count;
@@ -1080,21 +1081,43 @@ static unsigned char* build_wav16(const float* interleaved, uint32_t frames,
 
   // Little-endian writers
   unsigned char* p = buf;
-#define W8(v)  (*p++ = (unsigned char)(v))
-#define W16(v) do { W8((v) & 0xFF); W8(((v) >> 8) & 0xFF); } while (0)
-#define W32(v) do { W8((v) & 0xFF); W8(((v) >> 8) & 0xFF); W8(((v) >> 16) & 0xFF); W8(((v) >> 24) & 0xFF); } while (0)
-  W8('R'); W8('I'); W8('F'); W8('F');
+#define W8(v) (*p++ = (unsigned char)(v))
+#define W16(v)             \
+  do {                     \
+    W8((v) & 0xFF);        \
+    W8(((v) >> 8) & 0xFF); \
+  } while (0)
+#define W32(v)              \
+  do {                      \
+    W8((v) & 0xFF);         \
+    W8(((v) >> 8) & 0xFF);  \
+    W8(((v) >> 16) & 0xFF); \
+    W8(((v) >> 24) & 0xFF); \
+  } while (0)
+  W8('R');
+  W8('I');
+  W8('F');
+  W8('F');
   W32(36u + data_bytes);
-  W8('W'); W8('A'); W8('V'); W8('E');
-  W8('f'); W8('m'); W8('t'); W8(' ');
-  W32(16u);              // fmt chunk size
-  W16(1u);               // PCM
+  W8('W');
+  W8('A');
+  W8('V');
+  W8('E');
+  W8('f');
+  W8('m');
+  W8('t');
+  W8(' ');
+  W32(16u);  // fmt chunk size
+  W16(1u);   // PCM
   W16(channels);
   W32(sample_rate);
   W32(byte_rate);
   W16(block_align);
-  W16(16u);              // bits per sample
-  W8('d'); W8('a'); W8('t'); W8('a');
+  W16(16u);  // bits per sample
+  W8('d');
+  W8('a');
+  W8('t');
+  W8('a');
   W32(data_bytes);
 #undef W8
 #undef W16
@@ -1104,8 +1127,10 @@ static unsigned char* build_wav16(const float* interleaved, uint32_t frames,
   uint32_t n = frames * channels;
   for (uint32_t i = 0; i < n; i++) {
     float v = interleaved[i];
-    if (v > 1.0f)  v = 1.0f;
-    if (v < -1.0f) v = -1.0f;
+    if (v > 1.0f)
+      v = 1.0f;
+    if (v < -1.0f)
+      v = -1.0f;
     samples[i] = (int16_t)lrintf(v * 32767.0f);
   }
 
@@ -1163,7 +1188,10 @@ bool audio_render_wav(AudioEngine* eng, const char* path) {
     if (n_frames + BLK > cap) {
       cap *= 2;
       float* grown = (float*)realloc(data, (size_t)cap * 2u * sizeof(float));
-      if (!grown) { oom = true; break; }
+      if (!grown) {
+        oom = true;
+        break;
+      }
       data = grown;
     }
     memcpy(data + (size_t)n_frames * 2u, blk, BLK * 2u * sizeof(float));

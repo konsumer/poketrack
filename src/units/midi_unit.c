@@ -16,7 +16,7 @@
 #define MAX_CC_SLOTS 7
 
 struct UnitState {
-  MidiOut *out;
+  MidiOut* out;
   char device_name[256];
   int cc_nums[MAX_CC_SLOTS];  // CC numbers assigned to P1..Pn (-1 = empty)
   int cc_count;               // how many slots are active
@@ -26,7 +26,7 @@ struct UnitState {
 };
 
 // Standard short names for well-known CCs
-static const char *cc_short_name(int cc) {
+static const char* cc_short_name(int cc) {
   switch (cc) {
     case 1:
       return "MOD";
@@ -56,7 +56,7 @@ static const char *cc_short_name(int cc) {
 }
 
 // Longer names for picker list
-static const char *cc_long_name(int cc) {
+static const char* cc_long_name(int cc) {
   switch (cc) {
     case 0:
       return "Bank Select";
@@ -99,27 +99,27 @@ static const char *cc_long_name(int cc) {
   }
 }
 
-static UnitState *midi_create(float sr) {
+static UnitState* midi_create(float sr) {
   (void)sr;
-  UnitState *s = calloc(1, sizeof(*s));
+  UnitState* s = calloc(1, sizeof(*s));
   for (int i = 0; i < MAX_CC_SLOTS; i++) s->cc_nums[i] = -1;
   return s;
 }
 
-static void midi_destroy(UnitState *s) {
+static void midi_destroy(UnitState* s) {
   if (s->out)
     midi_out_close(s->out);
   free(s);
 }
 
-static void open_device_by_name(UnitState *s) {
+static void open_device_by_name(UnitState* s) {
   if (s->out) {
     midi_out_close(s->out);
     s->out = NULL;
   }
   int n = midi_out_port_count();
   for (int i = 0; i < n; i++) {
-    const char *name = midi_out_port_name(i);
+    const char* name = midi_out_port_name(i);
     if (name && strcmp(name, s->device_name) == 0) {
       s->out = midi_out_open(i);
       return;
@@ -127,7 +127,7 @@ static void open_device_by_name(UnitState *s) {
   }
 }
 
-static void midi_set_data(UnitState *s, const char *data, const char *base_dir) {
+static void midi_set_data(UnitState* s, const char* data, const char* base_dir) {
   (void)base_dir;
   if (!data || !data[0])
     return;
@@ -137,7 +137,7 @@ static void midi_set_data(UnitState *s, const char *data, const char *base_dir) 
   strncpy(buf, data, sizeof(buf) - 1);
   buf[sizeof(buf) - 1] = '\0';
 
-  char *tok = strtok(buf, "\t");
+  char* tok = strtok(buf, "\t");
   if (!tok)
     return;
   strncpy(s->device_name, tok, sizeof(s->device_name) - 1);
@@ -154,7 +154,7 @@ static void midi_set_data(UnitState *s, const char *data, const char *base_dir) 
   open_device_by_name(s);
 }
 
-static void midi_sync_to_data(UnitState *s, char *buf, size_t sz) {
+static void midi_sync_to_data(UnitState* s, char* buf, size_t sz) {
   int off = snprintf(buf, sz, "%s", s->device_name);
   for (int i = 0; i < s->cc_count && off < (int)sz - 5; i++)
     off += snprintf(buf + off, sz - off, "\t%d", s->cc_nums[i]);
@@ -163,7 +163,7 @@ static void midi_sync_to_data(UnitState *s, char *buf, size_t sz) {
 
 // ---- note_on / note_off / kill ----
 
-static void midi_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t *params) {
+static void midi_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* params) {
   if (!s->out)
     return;
   uint8_t ch = params[0] & 0x0F;
@@ -186,7 +186,7 @@ static void midi_note_on(UnitState *s, uint8_t note, uint8_t vel, const uint8_t 
   s->note_active = true;
 }
 
-static void midi_note_off(UnitState *s, uint8_t note) {
+static void midi_note_off(UnitState* s, uint8_t note) {
   if (!s->out || !s->note_active)
     return;
   uint8_t off[3] = {(uint8_t)(0x80 | s->last_channel), note, 0};
@@ -195,7 +195,7 @@ static void midi_note_off(UnitState *s, uint8_t note) {
     s->note_active = false;
 }
 
-static void midi_kill(UnitState *s) {
+static void midi_kill(UnitState* s) {
   if (!s->out)
     return;
   for (int ch = 0; ch < 16; ch++) {
@@ -205,9 +205,9 @@ static void midi_kill(UnitState *s) {
   s->note_active = false;
 }
 
-static void midi_render(UnitState *s, const uint8_t *params,
-                        const float *in_l, const float *in_r,
-                        float *out_l, float *out_r, uint32_t frames) {
+static void midi_render(UnitState* s, const uint8_t* params,
+                        const float* in_l, const float* in_r,
+                        float* out_l, float* out_r, uint32_t frames) {
   (void)s;
   (void)params;
   (void)in_l;
@@ -219,17 +219,17 @@ static void midi_render(UnitState *s, const uint8_t *params,
 
 // ---- Dynamic param display ----
 
-static int midi_dyn_num_params(UnitState *s) {
+static int midi_dyn_num_params(UnitState* s) {
   return 1 + s->cc_count;
 }
 
-static const char *midi_dyn_param_name(UnitState *s, int idx) {
+static const char* midi_dyn_param_name(UnitState* s, int idx) {
   if (idx == 0)
     return "CHAN";
   int cc = s->cc_nums[idx - 1];
   if (cc < 0)
     return "?";
-  const char *sn = cc_short_name(cc);
+  const char* sn = cc_short_name(cc);
   if (sn)
     return sn;
   static char buf[8];
@@ -237,7 +237,7 @@ static const char *midi_dyn_param_name(UnitState *s, int idx) {
   return buf;
 }
 
-static const char *midi_fmt_val(UnitState *s, int idx, uint8_t val) {
+static const char* midi_fmt_val(UnitState* s, int idx, uint8_t val) {
   (void)s;
   if (idx == 0)
     return NULL;  // channel uses enum display
@@ -248,15 +248,15 @@ static const char *midi_fmt_val(UnitState *s, int idx, uint8_t val) {
 
 // ---- CC picker (ADD row) ----
 
-static int midi_picker_count(UnitState *s) {
+static int midi_picker_count(UnitState* s) {
   (void)s;
   return 128;
 }
 
-static const char *midi_picker_name(UnitState *s, int i) {
+static const char* midi_picker_name(UnitState* s, int i) {
   (void)s;
   static char buf[32];
-  const char *ln = cc_long_name(i);
+  const char* ln = cc_long_name(i);
   if (ln)
     snprintf(buf, sizeof(buf), "CC%03d %s", i, ln);
   else
@@ -264,7 +264,7 @@ static const char *midi_picker_name(UnitState *s, int i) {
   return buf;
 }
 
-static void midi_picker_add(UnitState *s, int idx) {
+static void midi_picker_add(UnitState* s, int idx) {
   if (s->cc_count >= MAX_CC_SLOTS)
     return;
   // Don't add duplicates
@@ -274,7 +274,7 @@ static void midi_picker_add(UnitState *s, int idx) {
   s->cc_nums[s->cc_count++] = idx;
 }
 
-static void midi_mapping_remove(UnitState *s, int map_idx) {
+static void midi_mapping_remove(UnitState* s, int map_idx) {
   // map_idx is the param row index (0=CHAN, 1..n=CCs); remove the CC slot
   int cc_slot = map_idx - 1;
   if (cc_slot < 0 || cc_slot >= s->cc_count)
@@ -286,17 +286,17 @@ static void midi_mapping_remove(UnitState *s, int map_idx) {
 
 // ---- Device picker (DATA row) ----
 
-static int midi_dev_picker_count(UnitState *s) {
+static int midi_dev_picker_count(UnitState* s) {
   (void)s;
   return midi_out_port_count() + 1;
 }
 
-static const char *midi_dev_picker_name(UnitState *s, int i) {
+static const char* midi_dev_picker_name(UnitState* s, int i) {
   (void)s;
   return (i == 0) ? "NONE" : midi_out_port_name(i - 1);
 }
 
-static void midi_dev_picker_set(UnitState *s, int idx) {
+static void midi_dev_picker_set(UnitState* s, int idx) {
   if (s->out) {
     midi_out_close(s->out);
     s->out = NULL;
@@ -305,14 +305,14 @@ static void midi_dev_picker_set(UnitState *s, int idx) {
     s->device_name[0] = '\0';
     return;
   }
-  const char *name = midi_out_port_name(idx - 1);
+  const char* name = midi_out_port_name(idx - 1);
   strncpy(s->device_name, name ? name : "", sizeof(s->device_name) - 1);
   s->out = midi_out_open(idx - 1);
 }
 
 // ---- Channel enum ----
 
-static const char *const CH_NAMES[] = {
+static const char* const CH_NAMES[] = {
     "CH01",
     "CH02",
     "CH03",
