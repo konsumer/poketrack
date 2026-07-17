@@ -69,7 +69,9 @@ typedef struct {
 typedef struct {
   uint16_t song_len;  // active song row count (1..MAX_SONG_LEN)
   uint8_t patterns[SONG_CHANNELS][MAX_SONG_LEN];
-  Pattern pattern_data[NUM_PATTERNS];
+  // Lazily allocated (~114KB each; all 255 preallocated would be ~29MB).
+  // NULL = never touched = default empty. Access via tracker_pattern[_peek].
+  Pattern* pattern_data[NUM_PATTERNS];
   TrackerInstrument instruments[NUM_INSTRUMENTS];
   uint16_t bpm;
   uint8_t swing;
@@ -78,6 +80,16 @@ typedef struct {
   uint8_t scale_idx;   // 0=chromatic, see SCALES[]
   bool loop;           // true = restart from row 0 at song end
 } TrackerSong;
+
+// Editable pattern access — allocates on first touch (main thread only).
+// NULL only on allocation failure.
+Pattern* tracker_pattern(TrackerSong* song, uint8_t pi);
+// Read-only pattern access — never NULL (unallocated slots return a shared
+// default empty pattern; do not write through it). Never allocates, so it's
+// safe on the audio thread.
+Pattern* tracker_pattern_peek(TrackerSong* song, uint8_t pi);
+// Free all allocated patterns (before overwriting a song wholesale).
+void tracker_free_patterns(TrackerSong* song);
 
 #define NUM_SCALES 45
 
@@ -99,11 +111,6 @@ void tracker_init(TrackerSong* song);
 void tracker_clear(TrackerSong* song);
 
 void tracker_inst_set_slot(TrackerInstrument* inst, int slot, const char* unit_id, int inst_idx);
-
-// Write a param addressed by global index across an instrument's chain
-// (slot 0 owns indices 0..n0-1, slot 1 owns n0.., ...). Used by modulation
-// units (LFO, DUCKER) that target params on arbitrary instruments.
-void tracker_set_global_param(TrackerSong* song, uint8_t inst_idx, uint8_t global_param, uint8_t val);
 
 // Returns true on success
 bool tracker_save(const TrackerSong* song, const char* path);

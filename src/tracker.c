@@ -1,6 +1,7 @@
 #include "tracker.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "raylib.h"
@@ -114,23 +115,6 @@ void tracker_inst_set_slot(TrackerInstrument* inst, int slot, const char* unit_i
   }
 }
 
-void tracker_set_global_param(TrackerSong* song, uint8_t inst_idx, uint8_t global_param, uint8_t val) {
-  TrackerInstrument* inst = &song->instruments[inst_idx];
-  int remaining = global_param;
-  for (int s = 0; s < CHAIN_MAX; s++) {
-    if (!inst->chain[s].unit_id[0])
-      continue;
-    const UnitDef* def = unit_find(inst->chain[s].unit_id);
-    if (!def)
-      continue;
-    if (remaining < def->num_params) {
-      inst->chain[s].params[remaining] = val;
-      return;
-    }
-    remaining -= def->num_params;
-  }
-}
-
 // Reset a pattern to defaults: given length, all tracks empty (note 0, fx = none).
 static void pattern_reset(Pattern* p, uint16_t len) {
   p->len = len;
@@ -147,12 +131,38 @@ static void pattern_reset(Pattern* p, uint16_t len) {
     }
 }
 
+// Shared default pattern returned by tracker_pattern_peek for unallocated
+// slots. Reset in tracker_init; read-only everywhere else.
+static Pattern g_empty_pattern;
+
+Pattern* tracker_pattern_peek(TrackerSong* song, uint8_t pi) {
+  return song->pattern_data[pi] ? song->pattern_data[pi] : &g_empty_pattern;
+}
+
+Pattern* tracker_pattern(TrackerSong* song, uint8_t pi) {
+  if (!song->pattern_data[pi]) {
+    Pattern* p = malloc(sizeof(Pattern));
+    if (!p)
+      return NULL;
+    pattern_reset(p, DEFAULT_PATTERN_STEPS);
+    song->pattern_data[pi] = p;
+  }
+  return song->pattern_data[pi];
+}
+
+void tracker_free_patterns(TrackerSong* song) {
+  for (int pi = 0; pi < NUM_PATTERNS; pi++) {
+    free(song->pattern_data[pi]);
+    song->pattern_data[pi] = NULL;
+  }
+}
+
 void tracker_init(TrackerSong* song) {
+  tracker_free_patterns(song);  // callers zero-init their TrackerSong, so this is safe on first use
   memset(song, 0, sizeof(TrackerSong));
   song->song_len = DEFAULT_SONG_LEN;
   memset(song->patterns, TRACKER_EMPTY, sizeof(song->patterns));
-  for (int pi = 0; pi < NUM_PATTERNS; pi++)
-    pattern_reset(&song->pattern_data[pi], DEFAULT_PATTERN_STEPS);
+  pattern_reset(&g_empty_pattern, DEFAULT_PATTERN_STEPS);
   for (int i = 0; i < NUM_INSTRUMENTS; i++) {
     snprintf(song->instruments[i].name, 16, "INST%02X", i);
     for (int s = 0; s < CHAIN_MAX; s++)
@@ -172,8 +182,6 @@ void tracker_clear(TrackerSong* song) {
   song->bpm = bpm;
   strncpy(song->name, name, 32);
 }
-
-#include <stdlib.h>
 
 // ---- path utilities --------------------------------------------------------
 
@@ -443,8 +451,8 @@ bool tracker_save(const TrackerSong* song, const char* path) {
     wb_u16(&b, 0);
     uint16_t cnt = 0;
     for (int pi = 0; pi < NUM_PATTERNS; pi++) {
-      const Pattern* p = &song->pattern_data[pi];
-      if (!pattern_has_data(p) && p->len == DEFAULT_PATTERN_STEPS)
+      const Pattern* p = song->pattern_data[pi];
+      if (!p || (!pattern_has_data(p) && p->len == DEFAULT_PATTERN_STEPS))
         continue;
       wb_u8(&b, (uint8_t)pi);
       wb_u16(&b, p->len);
@@ -589,7 +597,9 @@ bool tracker_load(TrackerSong* song, const char* path) {
         if (plen > MAX_PATTERN_STEPS)
           plen = MAX_PATTERN_STEPS;
         uint8_t ntracks = rb_u8(&c);
-        Pattern* p = &song->pattern_data[pidx];
+        Pattern* p = tracker_pattern(song, pidx);
+        if (!p)
+          p = &g_empty_pattern;  // OOM: still consume the stream, then discard
         pattern_reset(p, plen);
         for (int t = 0; t < ntracks; t++)
           for (int s = 0; s < plen; s++) {

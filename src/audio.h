@@ -55,7 +55,6 @@ typedef struct {
   bool pattern_loop;           // true = loop one pattern instead of full song
   uint8_t loop_pattern_idx;    // pattern index to loop (when pattern_loop)
   uint32_t loop_channel_mask;  // bitmask: channels that use loop_pattern_idx
-  int song_last_row;           // last song row with any non-empty pattern (computed at play)
   ChannelCursor cursors[SONG_CHANNELS];
   uint64_t tick_counter;
   uint32_t samples_per_tick;
@@ -140,8 +139,6 @@ void audio_set_dyn_param(AudioEngine* eng, uint8_t inst_idx, int slot_idx, int p
 
 // Per-instrument RMS level for sidechain ducking (indexed by instrument index 0-255)
 extern float g_sidechain_rms[NUM_INSTRUMENTS];
-// Global song pointer for LFO param modulation
-extern TrackerSong* g_lfo_song;
 // When true, audio_preview_note() is a no-op (--no-preview CLI flag) — for
 // editing sequences live without every cursor move re-triggering a note.
 extern bool g_preview_disabled;

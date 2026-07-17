@@ -13,11 +13,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../tracker.h"
 #include "unit.h"
 
 extern float g_sidechain_rms[256];
-extern TrackerSong* g_lfo_song;
 
 struct UnitState {
   float env;  // current envelope (0=silent, 1=loud)
@@ -59,7 +57,7 @@ static void ducker_render(UnitState* s, const uint8_t* p,
     s->env = target + (s->env - target) * decay;
   }
 
-  if (!p[8] || !p[3] || !g_lfo_song)  // ON; AMNT=0 also means "don't touch the target"
+  if (!p[8] || !p[3])  // ON; AMNT=0 also means "don't touch the target"
     return;
 
   float env_eff = p[5] ? (1.0f - s->env) : s->env;  // INV
@@ -67,7 +65,7 @@ static void ducker_render(UnitState* s, const uint8_t* p,
   float raw = (float)p[4] * (1.0f - amount * env_eff);  // CNTR pulled down
   uint8_t val = raw < 0.0f ? 0 : raw > 255.0f ? 255
                                               : (uint8_t)raw;
-  tracker_set_global_param(g_lfo_song, p[6], p[7], val);  // INST, PARAM
+  audio_mod_set_param(p[6], p[7], val);  // INST, PARAM
 }
 
 static void ducker_init_params(uint8_t* params, int inst_idx) {

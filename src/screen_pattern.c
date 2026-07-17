@@ -58,7 +58,9 @@ static void preview(UIState* ui, uint8_t note) {
   audio_preview_kill(ui->engine);
   if (note == NOTE_EMPTY || note == NOTE_OFF)
     return;
-  Pattern* pat = &ui->song->pattern_data[ui->ctx_pattern];
+  Pattern* pat = tracker_pattern(ui->song, ui->ctx_pattern);
+  if (!pat)
+    return;
   uint8_t inst = pat->steps[ui->pattern_track][ui->pattern_row].instrument;
   audio_preview_note(ui->engine, inst, note);
 }
@@ -75,7 +77,9 @@ static void ensure_track_visible(UIState* ui) {
 }
 
 void screen_pattern_update(UIState* ui) {
-  Pattern* pat = &ui->song->pattern_data[ui->ctx_pattern];
+  Pattern* pat = tracker_pattern(ui->song, ui->ctx_pattern);
+  if (!pat)
+    return;
   bool edit = input_held(BTN_OK);
 
   if (input_released(BTN_OK))
@@ -108,7 +112,9 @@ void screen_pattern_update(UIState* ui) {
     bool switched = false;
     if (ui_repeat(BTN_NEXT) && ui->ctx_pattern < NUM_PATTERNS - 1) {
       ui->ctx_pattern++;
-      pat = &ui->song->pattern_data[ui->ctx_pattern];
+      pat = tracker_pattern(ui->song, ui->ctx_pattern);
+      if (!pat)
+        return;
       if (ui->pattern_row > (int)pat->len)
         ui->pattern_row = pat->len;
       in_footer = (ui->pattern_row == (int)pat->len);
@@ -116,7 +122,9 @@ void screen_pattern_update(UIState* ui) {
     }
     if (ui_repeat(BTN_PREV) && ui->ctx_pattern > 0) {
       ui->ctx_pattern--;
-      pat = &ui->song->pattern_data[ui->ctx_pattern];
+      pat = tracker_pattern(ui->song, ui->ctx_pattern);
+      if (!pat)
+        return;
       if (ui->pattern_row > (int)pat->len)
         ui->pattern_row = pat->len;
       in_footer = (ui->pattern_row == (int)pat->len);
@@ -130,6 +138,10 @@ void screen_pattern_update(UIState* ui) {
 
   // Handle footer before edit check — cols: 0=+ 1=- 2=SAVE 3=LOAD
   if (in_footer) {
+    // The grid has more sub-columns than the footer's 4 cells; arriving from
+    // one of them would leave the cursor on a nonexistent cell — land on LOAD.
+    if (ui->pattern_col > 3)
+      ui->pattern_col = 3;
     if (ui_repeat(BTN_UP)) {
       ui->pattern_row = pat->len > 0 ? (int)pat->len - 1 : 0;
       return;
@@ -490,7 +502,9 @@ static void draw_track_cells(int tx, int y, PatternStep* s, int cur_col) {
 }
 
 void screen_pattern_draw(UIState* ui) {
-  Pattern* pat = &ui->song->pattern_data[ui->ctx_pattern];
+  Pattern* pat = tracker_pattern(ui->song, ui->ctx_pattern);
+  if (!pat)
+    return;
   bool in_footer = (ui->pattern_row == (int)pat->len);
   int vt = visible_tracks();
 

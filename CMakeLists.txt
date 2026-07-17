@@ -199,7 +199,7 @@ if(EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".mjs")
     target_link_options(${PROJECT_NAME} PRIVATE
         -sUSE_GLFW=3
-        -sINITIAL_MEMORY=134217728  # 128MB: multi-track patterns enlarge TrackerSong (~29MB)
+        -sINITIAL_MEMORY=134217728  # 128MB headroom: patterns are lazily allocated (~114KB each), samples/soundfonts dominate
         -sALLOW_MEMORY_GROWTH=1
         -sFORCE_FILESYSTEM=1
         -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','FS']
@@ -242,5 +242,38 @@ else()
             MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
             MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/Info.plist.in"
         )
+    endif()
+
+    # Quick sanity tests (native only, not built by default): `make test`
+    set(TEST_SOURCES ${SOURCES})
+    list(REMOVE_ITEM TEST_SOURCES src/main.c)
+    add_executable(poketrack_tests EXCLUDE_FROM_ALL ${TEST_SOURCES} tests/test_main.c)
+    target_include_directories(poketrack_tests PRIVATE
+        ${raylib_SOURCE_DIR}/src
+        ${TSF_INCLUDE_DIR}
+        ${MINIZ_INCLUDE_DIR}
+        ${TFD_DIR}
+        src
+        ${clap_SOURCE_DIR}/include
+        ${wclap-bridge_SOURCE_DIR}/include
+    )
+    set_target_properties(poketrack_tests PROPERTIES LINKER_LANGUAGE CXX)
+    target_link_libraries(poketrack_tests PRIVATE raylib wclap-bridge)
+    if(NOT WIN32)
+        target_link_libraries(poketrack_tests PRIVATE m)
+    endif()
+    if(UNIX AND NOT APPLE AND ALSA_FOUND)
+        target_compile_definitions(poketrack_tests PRIVATE HAVE_ALSA)
+        target_include_directories(poketrack_tests PRIVATE ${ALSA_INCLUDE_DIRS})
+        target_link_libraries(poketrack_tests PRIVATE ${ALSA_LIBRARIES})
+    endif()
+    if(WIN32)
+        target_link_libraries(poketrack_tests PRIVATE winmm)
+        target_compile_definitions(poketrack_tests PRIVATE _USE_MATH_DEFINES WIN32_LEAN_AND_MEAN NOGDI NOUSER strcasecmp=_stricmp)
+        target_include_directories(poketrack_tests PRIVATE ${DIRENT_INCLUDE_DIR})
+    endif()
+    if(APPLE)
+        target_sources(poketrack_tests PRIVATE src/macos_dialog.m)
+        target_link_libraries(poketrack_tests PRIVATE "-framework Cocoa" "-framework AppKit" "-framework CoreMIDI" "-framework CoreFoundation")
     endif()
 endif()

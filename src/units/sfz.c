@@ -1,7 +1,7 @@
 // SFZ soundfont player unit
 // data field = path to .sfz file
 // P0 VOL:  00=silent  FF=full
-// P1 PAN:  00=L  7F=center  FF=R
+// P1 PAN:  00=L  80=center  FF=R
 // P2 TRAN: 00=-24st  80=0  FF=+24st (translate incoming note → selects region/key)
 // P3 TUNE: 00=-100c  80=0  FF=+100c (cents fine tune, resamples pitch)
 #include <ctype.h>
@@ -846,7 +846,7 @@ static void sfz_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* 
   // region/key is selected (e.g. retarget a drum pattern onto a kit mapped an
   // octave lower), rather than resampling the pitch like TUNE does. The original
   // note is kept for note_off matching (note_off isn't passed params).
-  int trans = (int)lroundf(p2f(p[2], -24.0f, 24.0f));
+  int trans = (int)lroundf(p2f_center(p[2], -24.0f, 24.0f));
   int tnote = (int)note + trans;
   if (tnote < 0)
     tnote = 0;
@@ -923,9 +923,9 @@ static void sfz_render(UnitState* s, const uint8_t* p,
     return;
 
   float vol = p2f(p[0], 0.0f, 1.0f);
-  float pan = p2f(p[1], -1.0f, 1.0f);
+  float pan = p2f_center(p[1], -1.0f, 1.0f);
   // P2 TRAN is applied at note-on (translates note → region select), not here.
-  float tune = p2f(p[3], -100.0f, 100.0f) / 100.0f;  // semitones
+  float tune = p2f_center(p[3], -100.0f, 100.0f) / 100.0f;  // semitones
 
   float pan_l = (pan <= 0.0f) ? 1.0f : 1.0f - pan;
   float pan_r = (pan >= 0.0f) ? 1.0f : 1.0f + pan;

@@ -98,7 +98,7 @@ static void sampler_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8
   if (!s->samples || s->num_samples == 0)
     return;
 
-  float tune_semi = p2f(p[3], -12.0f, 12.0f);
+  float tune_semi = p2f_center(p[3], -12.0f, 12.0f);
   float pitch_ratio = powf(2.0f, (note + tune_semi - 60.0f) / 12.0f);
   s->rate = pitch_ratio * ((float)s->wav_sr / s->engine_sr);
   s->phase = (p[4] / 255.0f) * (float)(s->num_samples - 1);

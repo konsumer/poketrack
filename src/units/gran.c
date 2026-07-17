@@ -125,7 +125,7 @@ static void spawn_grain(UnitState* s, GranVoice* v, const uint8_t* p) {
   if (src_pos >= s->buf_len)
     src_pos = (float)(s->buf_len - 1);
 
-  float det = p2f(p[3], -12.0f, 12.0f);
+  float det = p2f_center(p[3], -12.0f, 12.0f);
   float note_pitch = powf(2.0f, (v->note - 60 + det) / 12.0f);
 
   float grain_ms = p2f(p[0], 5.0f, 500.0f);

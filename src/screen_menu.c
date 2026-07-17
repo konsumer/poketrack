@@ -147,12 +147,15 @@ void screen_menu_update(UIState* ui) {
     if (g_fb_mode == MENU_FB_LOAD) {
       g_fb_mode = MENU_FB_NONE;
       audio_stop(ui->engine);
-      TrackerSong* tmp = malloc(sizeof(TrackerSong));
+      TrackerSong* tmp = calloc(1, sizeof(TrackerSong));  // zeroed: tracker_load inits it
       if (tmp && tracker_load(tmp, fb_path)) {
-        *ui->song = *tmp;
+        tracker_free_patterns(ui->song);  // release the old song's patterns
+        *ui->song = *tmp;                 // takes ownership of tmp's patterns
         audio_set_save_dir(ui->engine, fb_path);
         snprintf(status_msg, sizeof(status_msg), "LOADED");
       } else {
+        if (tmp)
+          tracker_free_patterns(tmp);
         snprintf(status_msg, sizeof(status_msg), "LOAD FAILED");
       }
       free(tmp);

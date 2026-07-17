@@ -1,6 +1,6 @@
 # I use this as a wrapper around common taks.
 
-.PHONY: help build build-web clean serve format
+.PHONY: help build build-web clean serve format format-check test run
 .DEFAULT_GOAL := help
 
 help: ## Show this help
@@ -22,6 +22,11 @@ run: build ## Build & run native build
 
 serve: build-web ## Build & run watching web build
 	npx -y live-server webroot --mount=/poketrack.mjs:./build-web/poketrack.mjs
+
+test: ## Build & run quick sanity tests
+	cmake -B build -DCMAKE_BUILD_TYPE=Release
+	cmake --build build --parallel --target poketrack_tests
+	cd build && ./poketrack_tests
 
 format: ## Format all C/H source files with clang-format
 	find src -name "*.c" -o -name "*.h" | xargs clang-format -i

@@ -110,12 +110,27 @@ static inline float p2f(uint8_t p, float lo, float hi) {
   return lo + (p / 255.0f) * (hi - lo);
 }
 
+// Map 00-FF param to a bipolar range with 0x80 landing EXACTLY on the
+// midpoint (plain p2f puts 0x80 slightly above it: 128/255 != 1/2).
+// Use for pan/detune/transpose-style params whose default is "no change".
+static inline float p2f_center(uint8_t p, float lo, float hi) {
+  float half = 0.5f * (hi - lo);
+  float mid = lo + half;
+  return p <= 128 ? mid - (128 - p) * (half / 128.0f)
+                  : mid + (p - 128) * (half / 127.0f);
+}
+
 // ---- shared DSP helpers (audio-thread hot paths) ----------------------------
 
 // Sine lookup table, filled by unit_dsp_init() (called once from audio_init).
 #define UNIT_SIN_N 2048
 extern float g_unit_sin_lut[UNIT_SIN_N + 1];
 void unit_dsp_init(void);
+
+// Implemented by the audio engine (audio.c): write a param addressed by
+// global index across an instrument's chain, resolving dynamic params
+// (CLAP mappings, MIDI CC slots) — for modulation units' render callbacks.
+void audio_mod_set_param(uint8_t inst_idx, uint8_t global_param, uint8_t val);
 
 // sin(2*pi*phase) for any phase (wraps, handles negatives). LUT + linear
 // interpolation, error < -100dB — replaces per-sample sinf in render loops.

@@ -105,7 +105,7 @@ static void osc_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* 
     }
   if (!v)
     v = &s->voices[0];  // steal
-  float det = p2f(p[5], -12.0f, 12.0f);
+  float det = p2f_center(p[5], -12.0f, 12.0f);
   *v = (OscVoice){
       .active = true,
       .note = note,

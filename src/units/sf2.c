@@ -3,7 +3,7 @@
 // P0 PRESET: 00-FF (GM preset 0-127)
 // P1 BANK:   00-FF
 // P2 VOL:    00=silent  FF=full
-// P3 PAN:    00=L  7F=center  FF=R
+// P3 PAN:    00=L  80=center  FF=R
 // P4 TRANS:  00=-24st  80=0  FF=+24st (translate incoming note → selects key/sample)
 // P5 TUNE:   00=-100c  80=0  FF=+100c (cents fine tune, resamples pitch)
 #define TSF_IMPLEMENTATION
@@ -130,7 +130,7 @@ static void sf2_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* 
   // P4 TRANS: integer semitone translation of the incoming note (selects a
   // different key/sample, like a drum kit mapped an octave lower). Remember the
   // translated key so note_off (not passed params) can match it in TSF.
-  int trans = (int)lroundf(p2f(p[4], -24.0f, 24.0f));
+  int trans = (int)lroundf(p2f_center(p[4], -24.0f, 24.0f));
   int tnote = (int)note + trans;
   if (tnote < 0)
     tnote = 0;
@@ -159,9 +159,9 @@ static void sf2_render(UnitState* s, const uint8_t* p,
     return;
 
   float vol = p2f(p[2], 0.0f, 1.0f);
-  float pan = p2f(p[3], -1.0f, 1.0f);  // -1=L, 0=center, +1=R
+  float pan = p2f_center(p[3], -1.0f, 1.0f);  // -1=L, 0=center, +1=R
   // P4 TRANS is applied at note-on (translates note → key select), not here.
-  float tune = p2f(p[5], -100.0f, 100.0f);  // cents
+  float tune = p2f_center(p[5], -100.0f, 100.0f);  // cents
 
   tsf_channel_set_pitchwheel(s->sf, 0, 8192);       // center
   tsf_channel_set_tuning(s->sf, 0, tune / 100.0f);  // cents → semitones

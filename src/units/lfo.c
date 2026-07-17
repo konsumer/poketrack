@@ -10,10 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../tracker.h"
 #include "unit.h"
-
-extern TrackerSong* g_lfo_song;
 
 struct UnitState {
   float phase;
@@ -36,7 +33,7 @@ static void lfo_render(UnitState* s, const uint8_t* p,
   if (in_r && out_r != in_r)
     memcpy(out_r, in_r, frames * sizeof(float));
 
-  if (!g_lfo_song || !p[6])
+  if (!p[6])
     return;
 
   float rate = p2f(p[0], 0.1f, 20.0f);
@@ -56,7 +53,7 @@ static void lfo_render(UnitState* s, const uint8_t* p,
   float raw = cntr + unit_lfo_wave(shape, phase) * depth;
   uint8_t val = raw < 0.0f ? 0 : raw > 255.0f ? 255
                                               : (uint8_t)raw;
-  tracker_set_global_param(g_lfo_song, inst, prm, val);
+  audio_mod_set_param(inst, prm, val);
 
   // Advance phase over full block
   s->phase += phase_inc * frames;
