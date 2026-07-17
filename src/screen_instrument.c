@@ -328,6 +328,29 @@ void screen_instrument_update(UIState* ui) {
       ui->clap_picker_row = 0;
     }
 
+    // A tap on a 2-state param (ON/OFF, or any 2-value enum like NORM/INV)
+    // toggles it directly, same as the Menu screen's LOOP/PREVIEW rows —
+    // no need to hold+arrow just to flip a switch.
+    if (!on_data && !on_add && !ui->inst_param_cc_col && param >= 0 && param < nparams &&
+        input_pressed(BTN_OK)) {
+      bool use_dyn = def->get_param_val && def->set_param_val && state;
+      uint8_t cur_v = use_dyn ? def->get_param_val(state, param)
+                              : (param < UNIT_MAX_PARAMS ? sl->params[param] : 0);
+      const char* fmt_cur = (def->format_param_val && state) ? def->format_param_val(state, param, cur_v) : NULL;
+      bool is_bool_fmt = fmt_cur && (strcmp(fmt_cur, "ON") == 0 || strcmp(fmt_cur, "OFF") == 0);
+      bool is_bin_enum = !use_dyn && param < UNIT_MAX_PARAMS && def->param_enum_count[param] == 2 && def->param_enums[param];
+      if (is_bool_fmt || is_bin_enum) {
+        uint8_t new_v = is_bool_fmt ? (cur_v >= 128 ? 0 : 255) : (cur_v ? 0 : 1);
+        if (use_dyn) {
+          audio_set_dyn_param(ui->engine, (uint8_t)ui->ctx_instrument, slot, param, new_v);
+          if (def->sync_to_data)
+            def->sync_to_data(state, sl->data, sizeof(sl->data));
+        } else if (param < UNIT_MAX_PARAMS) {
+          sl->params[param] = new_v;
+        }
+      }
+    }
+
     bool on_cc_col = ui->inst_param_cc_col && !on_data && !on_add && param >= 0 && param < nparams && param < UNIT_MAX_PARAMS;
 
     if (!edit) {
