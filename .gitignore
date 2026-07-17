@@ -4,6 +4,6 @@ build-*/
 .claude
 ports/poketrack
 __pycache__
-*.rpt
-*.rpti
-*.rptp
+/*.rpt
+/*.rpti
+/*.rptp

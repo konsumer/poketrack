@@ -105,12 +105,14 @@ void screen_pattern_update(UIState* ui) {
 
   // L/R shoulder: cycle patterns (not while editing)
   if (!edit) {
+    bool switched = false;
     if (ui_repeat(BTN_NEXT) && ui->ctx_pattern < NUM_PATTERNS - 1) {
       ui->ctx_pattern++;
       pat = &ui->song->pattern_data[ui->ctx_pattern];
       if (ui->pattern_row > (int)pat->len)
         ui->pattern_row = pat->len;
       in_footer = (ui->pattern_row == (int)pat->len);
+      switched = true;
     }
     if (ui_repeat(BTN_PREV) && ui->ctx_pattern > 0) {
       ui->ctx_pattern--;
@@ -118,7 +120,12 @@ void screen_pattern_update(UIState* ui) {
       if (ui->pattern_row > (int)pat->len)
         ui->pattern_row = pat->len;
       in_footer = (ui->pattern_row == (int)pat->len);
+      switched = true;
     }
+    // If a pattern is currently looping (PLAY on this screen), follow along
+    // to the newly-selected pattern instead of continuing to loop the old one.
+    if (switched && audio_is_playing(ui->engine) && ui->engine->pattern_loop)
+      audio_play_pattern(ui->engine, (uint8_t)ui->ctx_pattern);
   }
 
   // Handle footer before edit check — cols: 0=+ 1=- 2=SAVE 3=LOAD
@@ -275,6 +282,10 @@ void screen_pattern_update(UIState* ui) {
           step->instrument++;
         if (ui_repeat(BTN_DOWN) && step->instrument > 0)
           step->instrument--;
+        if (ui_repeat(BTN_RIGHT))
+          step->instrument = clamp8((int)step->instrument + 16);
+        if (ui_repeat(BTN_LEFT))
+          step->instrument = clamp8((int)step->instrument - 16);
         if (input_pressed(BTN_NO))
           step->instrument = 0;
         ui->ctx_instrument = step->instrument;
@@ -295,9 +306,9 @@ void screen_pattern_update(UIState* ui) {
       }
       case 4:
         if (ui_repeat(BTN_UP))
-          step->fxv[0]++;
+          step->fxv[0] = clamp8(step->fxv[0] + 1);
         if (ui_repeat(BTN_DOWN))
-          step->fxv[0]--;
+          step->fxv[0] = clamp8((int)step->fxv[0] - 1);
         if (ui_repeat(BTN_RIGHT))
           step->fxv[0] = clamp8(step->fxv[0] + 16);
         if (ui_repeat(BTN_LEFT))
@@ -321,9 +332,9 @@ void screen_pattern_update(UIState* ui) {
       }
       case 6:
         if (ui_repeat(BTN_UP))
-          step->fxv[1]++;
+          step->fxv[1] = clamp8(step->fxv[1] + 1);
         if (ui_repeat(BTN_DOWN))
-          step->fxv[1]--;
+          step->fxv[1] = clamp8((int)step->fxv[1] - 1);
         if (ui_repeat(BTN_RIGHT))
           step->fxv[1] = clamp8(step->fxv[1] + 16);
         if (ui_repeat(BTN_LEFT))

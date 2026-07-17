@@ -189,26 +189,26 @@ static void draw_status(UIState* ui) {
   if (edit) {
     switch (ui->screen) {
       case SCREEN_SONG:
-        hint = "{OK}+{UP}/{DOWN}: set pattern#  {OK}+{NO}: clear cell";
+        hint = "{OK}+{UP}/{DOWN}: pattern# +-1  {OK}+{LEFT}/{RIGHT}: +-16  {OK}+{NO}: clear cell";
         break;
       case SCREEN_PATTERN:
         switch (ui->pattern_col) {
           case 0:
-            hint = "{OK}+{UP}/{DOWN}: note semitone  {OK}+{PREV}/{NEXT}: octave  {OK}+{NO}: note-off  {OK}+{SCREEN}+{NO}: clear";
+            hint = "{OK}+{UP}/{DOWN}: note semitone  {OK}+{LEFT}/{RIGHT}: octave  {OK}+{NO}: note-off  {OK}+{SCREEN}+{NO}: clear";
             break;
           case 1:
-            hint = "{OK}+{UP}/{DOWN}: velocity +-1   {OK}+{PREV}/{NEXT}: +-16";
+            hint = "{OK}+{UP}/{DOWN}: velocity +-1   {OK}+{LEFT}/{RIGHT}: +-16";
             break;
           case 2:
-            hint = "{OK}+{UP}/{DOWN}: instrument#   {NO}: reset to 0";
+            hint = "{OK}+{UP}/{DOWN}: instrument# +-1   {OK}+{LEFT}/{RIGHT}: +-16   {NO}: reset to 0";
             break;
           default:
-            hint = "{OK}+{UP}/{DOWN}: fx value  {OK}+{PREV}/{NEXT}: coarse";
+            hint = "{OK}+{UP}/{DOWN}: fx value  {OK}+{LEFT}/{RIGHT}: coarse";
             break;
         }
         break;
       case SCREEN_INSTRUMENT:
-        hint = "{OK}+{UP}/{DOWN}: value +-fine   {OK}+{PREV}/{NEXT}: coarse";
+        hint = "{OK}+{UP}/{DOWN}: value +-fine   {OK}+{LEFT}/{RIGHT}: coarse";
         break;
       case SCREEN_MENU:
         hint = "{OK}+{UP}/{DOWN}: change value";

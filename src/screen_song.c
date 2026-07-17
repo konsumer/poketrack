@@ -101,7 +101,30 @@ void screen_song_update(UIState *ui) {
       else if (*cell > 0) (*cell)--;
       ui->last_pattern = *cell;
     }
+    if (ui_repeat(BTN_RIGHT)) {
+      if (*cell == TRACKER_EMPTY) *cell = ui->last_pattern;
+      else if (*cell + 16 > NUM_PATTERNS - 1) *cell = NUM_PATTERNS - 1;
+      else *cell += 16;
+      ui->last_pattern = *cell;
+    }
+    if (ui_repeat(BTN_LEFT)) {
+      if (*cell == TRACKER_EMPTY) *cell = ui->last_pattern;
+      else if (*cell < 16) *cell = 0;
+      else *cell -= 16;
+      ui->last_pattern = *cell;
+    }
     if (input_pressed(BTN_NO)) *cell = TRACKER_EMPTY;
+  }
+
+  // X = fill current column (channel) down the song with current row's pattern#; Y = clear it.
+  if (input_pressed(BTN_ALL)) {
+    uint8_t pi = song->patterns[ui->song_col][ui->song_row];
+    for (int r = 0; r < (int)song->song_len; r++)
+      song->patterns[ui->song_col][r] = pi;
+  }
+  if (input_pressed(BTN_NONE)) {
+    for (int r = 0; r < (int)song->song_len; r++)
+      song->patterns[ui->song_col][r] = TRACKER_EMPTY;
   }
 
   if (ui->song_row > (int)song->song_len) ui->song_row = song->song_len;

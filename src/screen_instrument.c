@@ -388,7 +388,7 @@ void screen_instrument_update(UIState* ui) {
         }
       }
     } else if (on_cc_col) {
-      // A held + up/down: cycle CC value -- → 00 → ... → 7F → -- (loops)
+      // A held + up/down: cycle CC value -- → 00 → ... → 7F → -- (loops); left/right jump by 16
       uint8_t cc = sl->cc_map[param];
       bool changed = false;
       if (ui_repeat(BTN_UP)) {
@@ -397,6 +397,14 @@ void screen_instrument_update(UIState* ui) {
       }
       if (ui_repeat(BTN_DOWN)) {
         cc = (cc == 0xFF) ? 0x7F : (cc == 0x00 ? 0xFF : cc - 1);
+        changed = true;
+      }
+      if (ui_repeat(BTN_RIGHT)) {
+        cc = (cc == 0xFF) ? 0x00 : (cc + 16 > 0x7F ? 0xFF : cc + 16);
+        changed = true;
+      }
+      if (ui_repeat(BTN_LEFT)) {
+        cc = (cc == 0xFF) ? 0x7F : (cc < 16 ? 0xFF : cc - 16);
         changed = true;
       }
       if (changed)
@@ -427,11 +435,11 @@ void screen_instrument_update(UIState* ui) {
           }
         } else {
           if (ui_repeat(BTN_UP)) {
-            cur_v++;
+            cur_v = (uint8_t)(cur_v >= 255 ? 255 : cur_v + 1);
             changed = true;
           }
           if (ui_repeat(BTN_DOWN)) {
-            cur_v--;
+            cur_v = (uint8_t)(cur_v == 0 ? 0 : cur_v - 1);
             changed = true;
           }
           if (ui_repeat(BTN_RIGHT)) {
