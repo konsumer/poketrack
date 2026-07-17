@@ -49,8 +49,8 @@ Pos       | DRUMS | BASS | SYNTH | TEXTURE | Structural Section & Arrangement St
 23        |  --   |  --  |  --   |   30    | Final Ambient Fade (Texture ring out)
 
 
-Often it helps to work out the basic structure in some notes liek this, and then you can tweak it a bit, once you ghet in there. Without knowing ecactly  what would go in each patter I mapped out the vibe first, then setup some rudimentary instruments (using built-ins) and hammered it all out. After that, I completely chnaged the instruments (maintaining the purpose, but the sound was totally different.)
+Often it helps to work out the basic structure in some notes like  this, and then you can tweak it a bit, once you get it layed down. Without knowing exactly what would go in each part, I mapped out the vibe first, then setup some rudimentary instruments (using built-ins) and hammered it all out. After that, I completely changed the instruments (maintaining the original purpose, but the sound was totally different.)
 
-Obviously, everyone's process is differnt, but this generally how I make songs.
+Obviously, everyone's process is different, but this generally how I make songs.
 
 - konsumer
