@@ -33,8 +33,7 @@ Essentially, this is a popular joystick-driven chooser for retro-games. poketrac
 ## [EmulationStation Installer (Save As)](https://raw.githubusercontent.com/konsumer/poketrack/main/ports/Update%20PokeTrack.sh)
 
 - Add files in [ports/](./ports/) to your roms dir.
-- Add soundfonts/samples/[beats](https://github.com/konsumer/poketrack/tree/main/examples) to `poketrack/` in your roms dir.
 - Restart EmulationStation
-- Run `Update PokeTrack` to get latest version
+- Run `Update PokeTrack` to get latest version — it'll also offer to download the [example](https://github.com/konsumer/poketrack/tree/main/examples) songs/soundfonts/samples/plugins into your working dir
 - Restart EmulationStation
 - Run `PokeTrack` in ports

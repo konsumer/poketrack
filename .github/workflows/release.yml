@@ -96,3 +96,26 @@ jobs:
         with:
           name: ${{ matrix.name }}
           path: ${{ matrix.name }}.zip
+
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Zip examples
+        run: cd examples && zip -r ../examples.zip .
+        # examples/plugins/*.wclap.wasm is checked in (built via `make plugins`),
+        # so this is a plain zip — no build toolchain needed here.
+
+      - name: Upload to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: examples.zip
+
+      - name: Upload artifact
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v7
+        with:
+          name: examples
+          path: examples.zip

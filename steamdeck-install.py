@@ -11,7 +11,6 @@ import shutil
 import struct
 import subprocess
 import sys
-import tarfile
 import tempfile
 import urllib.error
 import urllib.request
@@ -244,18 +243,18 @@ def add_steam_shortcut(exe_path, start_dir):
 
 def download_examples(dest, release):
     tag = release["tag_name"]
+    asset_url = next((a["browser_download_url"] for a in release["assets"]
+                       if a["name"] == "examples.zip"), None)
+    if not asset_url:
+        die(f"Could not find examples.zip in release {tag}")
     with tempfile.TemporaryDirectory() as tmp:
-        tar_path = Path(tmp) / "src.tar.gz"
-        url = f"https://github.com/{REPO}/archive/refs/tags/{tag}.tar.gz"
-        download_with_progress(url, tar_path, "Downloading examples...")
+        zip_path = Path(tmp) / "examples.zip"
+        download_with_progress(asset_url, zip_path, "Downloading examples...")
         try:
-            with tarfile.open(tar_path) as t:
-                members = [m for m in t.getmembers() if "/examples/" in m.name]
-                t.extractall(tmp, members=members)
-            src = next(Path(tmp).glob("*/examples"))
-        except (tarfile.TarError, StopIteration) as e:
-            die(f"Could not find examples/ in the {tag} source archive: {e}")
-        shutil.copytree(src, dest, dirs_exist_ok=True)
+            with zipfile.ZipFile(zip_path) as z:
+                z.extractall(dest)
+        except zipfile.BadZipFile as e:
+            die(f"Downloaded examples.zip isn't a valid zip: {e}")
 
 
 def main():

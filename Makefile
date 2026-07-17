@@ -1,6 +1,6 @@
 # I use this as a wrapper around common taks.
 
-.PHONY: help build build-web clean serve format format-check test run
+.PHONY: help build build-web clean serve format format-check test run plugins
 .DEFAULT_GOAL := help
 
 help: ## Show this help
@@ -33,3 +33,9 @@ format: ## Format all C/H source files with clang-format
 
 format-check: ## Fail if any source file is not clang-format clean (for CI)
 	find src -name "*.c" -o -name "*.h" | xargs clang-format --dry-run --Werror
+
+plugins: ## Build bundled example WCLAP plugins into examples/plugins/
+	cd test_clap_plugin/karplus && [ -d node_modules ] || npm install
+	cd test_clap_plugin/karplus && npm run asbuild:release
+	mkdir -p examples/plugins
+	cp test_clap_plugin/karplus/build/release.wasm examples/plugins/karp.wclap.wasm

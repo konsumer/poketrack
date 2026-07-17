@@ -105,6 +105,8 @@ Native `.clap` plugins (the traditional OS-loaded kind) aren't supported — onl
 
 All fetched/packaged as WCLAP by [WebCLAP/examples](https://github.com/WebCLAP/examples).
 
+`test_clap_plugin/karplus/` is a from-scratch example built for this project: a Karplus-Strong plucked string instrument, written against [as-clap](https://github.com/WebCLAP/as-clap). It's a full buildable AssemblyScript project (see its own README) — a template for writing new WCLAP instruments/effects that go beyond what the built-in units can do.
+
 ## samples & key-mapping
 
 Samples & instruments are intentionally simple. The idea is that you can be more "in the moment" and not uncomfortably tweaking samples & key/velocity maps with a small screen & limited controls. You can do your setup offline, and save it as a SFZ (or zip of SFZ.) I also made [this editor](https://konsumer.js.org/sfzmaker/) to facilitate that. It can do cool stuff with breakbeats, lots of samples, different velocity-zones, etc.

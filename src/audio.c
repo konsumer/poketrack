@@ -389,9 +389,15 @@ static void set_global_param(AudioEngine* eng, uint8_t inst_idx, uint8_t global_
                         : NULL;
     int nparams = (def->dyn_num_params && st) ? def->dyn_num_params(st) : def->num_params;
     if (remaining < nparams) {
-      if (def->set_param_val && st)
+      if (def->set_param_val && st) {
         def->set_param_val(st, remaining, val);
-      else if (remaining < UNIT_MAX_PARAMS)
+        // find_inst_state() prefers the shared/playing instance over the
+        // instrument screen's own preview instance, so mirror the write
+        // there too — otherwise the screen shows a stale value while the
+        // modulation is audibly changing a different (live) instance.
+        if (eng->preview_inst == inst_idx && eng->preview_states[s] && eng->preview_states[s] != st)
+          def->set_param_val(eng->preview_states[s], remaining, val);
+      } else if (remaining < UNIT_MAX_PARAMS)
         inst->chain[s].params[remaining] = val;
       return;
     }

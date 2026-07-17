@@ -7,3 +7,4 @@ __pycache__
 /*.rpt
 /*.rpti
 /*.rptp
+node_modules/
