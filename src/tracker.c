@@ -291,6 +291,10 @@ static void wb_chunk_end(WBuf* b, size_t off) {
   b->data[off + 3] = (sz >> 24) & 0xFF;
 }
 
+// UNIT_MAX_PARAMS was 8 before RPT2 v3 / RPTI v2 — files written by older
+// versions store this many per-slot param/cc_map bytes, not the current width.
+#define UNIT_MAX_PARAMS_V1 8
+
 // ---- read buffer -----------------------------------------------------------
 
 typedef struct {
@@ -331,6 +335,20 @@ static void rb_strn(RBuf* r, char* dst, int n) {
   dst[n - 1] = '\0';
 }
 
+// Read a chain slot's params/cc_map, handling the narrower width written by
+// old files. sl->unit_id must already be populated. Params beyond what the
+// old file stored are filled from the unit's own defaults (cc_map: unmapped).
+static void rb_chain_params(RBuf* r, ChainSlot* sl, bool narrow) {
+  int n = narrow ? UNIT_MAX_PARAMS_V1 : UNIT_MAX_PARAMS;
+  const UnitDef* def = sl->unit_id[0] ? unit_find(sl->unit_id) : NULL;
+  rb_raw(r, sl->params, n);
+  rb_raw(r, sl->cc_map, n);
+  for (int i = n; i < UNIT_MAX_PARAMS; i++) {
+    sl->params[i] = def ? def->param_defaults[i] : 0;
+    sl->cc_map[i] = 0xFF;
+  }
+}
+
 // ---- pattern helpers -------------------------------------------------------
 
 static bool pattern_has_data(const Pattern* p) {
@@ -366,7 +384,7 @@ bool tracker_save(const TrackerSong* song, const char* path) {
   WBuf b = {0};
   // Header: magic + version + num_sections placeholder
   wb_raw(&b, "RPT2", 4);
-  wb_u16(&b, 2);  // version 2: multi-track patterns
+  wb_u16(&b, 3);  // version 3: UNIT_MAX_PARAMS widened 8->16
   size_t ns_off = b.len;
   wb_u16(&b, 0);  // num_sections — filled in at end
 
@@ -500,7 +518,7 @@ bool tracker_load(TrackerSong* song, const char* path) {
   }
 
   uint16_t version = rb_u16(&hdr);
-  (void)version;
+  bool narrow_params = version < 3;
   uint16_t num_sects = rb_u16(&hdr);
 
   tracker_init(song);
@@ -583,8 +601,7 @@ bool tracker_load(TrackerSong* song, const char* path) {
           ChainSlot* sl = &inst->chain[s];
           rb_strn(&c, sl->unit_id, UNIT_ID_LEN);
           sl->enabled = rb_u8(&c) != 0;
-          rb_raw(&c, sl->params, UNIT_MAX_PARAMS);
-          rb_raw(&c, sl->cc_map, UNIT_MAX_PARAMS);
+          rb_chain_params(&c, sl, narrow_params);
           uint16_t dl = rb_u16(&c);
           if (dl >= sizeof(sl->data))
             dl = (uint16_t)(sizeof(sl->data) - 1);
@@ -613,7 +630,7 @@ bool tracker_save_instrument(const TrackerInstrument* inst, const char* path, co
 
   WBuf b = {0};
   wb_raw(&b, "RPTI", 4);
-  wb_u16(&b, 1);  // version
+  wb_u16(&b, 2);  // version 2: UNIT_MAX_PARAMS widened 8->16
   wb_strn(&b, inst->name, 16);
   wb_strn(&b, inst->midi_in_device, 128);
   wb_u8(&b, inst->midi_in_channel);
@@ -659,7 +676,7 @@ bool tracker_load_instrument(TrackerInstrument* inst, const char* path) {
     return false;
   }
   uint16_t version = rb_u16(&r);
-  (void)version;
+  bool narrow_params = version < 2;
 
   memset(inst, 0, sizeof(*inst));
   rb_strn(&r, inst->name, 16);
@@ -669,8 +686,7 @@ bool tracker_load_instrument(TrackerInstrument* inst, const char* path) {
     ChainSlot* sl = &inst->chain[s];
     rb_strn(&r, sl->unit_id, UNIT_ID_LEN);
     sl->enabled = rb_u8(&r) != 0;
-    rb_raw(&r, sl->params, UNIT_MAX_PARAMS);
-    rb_raw(&r, sl->cc_map, UNIT_MAX_PARAMS);
+    rb_chain_params(&r, sl, narrow_params);
     uint16_t dl = rb_u16(&r);
     if (dl >= sizeof(sl->data))
       dl = (uint16_t)(sizeof(sl->data) - 1);

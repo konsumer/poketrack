@@ -1,14 +1,23 @@
-// Sidechain volume ducker effect unit
-// P0 AMNT: 00=no duck  FF=full duck
-// P1 SRC:  instrument index 00-FF
-// P2 REL:  00=10ms  FF=500ms
-// P3 INV:  0=duck when src plays  1=duck when src silent
+// Sidechain ducker — modulates a param on any instrument each render block,
+// pulling it down from CNTR while the SRC instrument is sounding.
+// P0 AMNT:   00=no duck  FF=full duck (down to 0 at CNTR)
+// P1 SRC:    sidechain source instrument 00-FF
+// P2 REL:    00=10ms  FF=500ms
+// P3 INV:    0=duck when src plays  1=duck when src silent
+// P4 INST:   target instrument 0-FF (defaults to self)
+// P5 PARAM:  target param (global index across chain slots, 0-FF)
+// P6 CNTR:   center/unduck value for the target param (default 0x80)
+// P7 ON:     0=off 1=on
+// P8 THRESH: sidechain level below which SRC is ignored (00=any sound  FF=0.5 RMS)
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
+#include "../tracker.h"
 #include "unit.h"
 
 extern float g_sidechain_rms[256];
+extern TrackerSong *g_lfo_song;
 
 struct UnitState {
   float env;  // current envelope (0=silent, 1=loud)
@@ -34,57 +43,88 @@ static void ducker_note_off(UnitState *s, uint8_t n) {
 }
 static void ducker_kill(UnitState *s) { s->env = 0.0f; }
 
+// Resolve global param index to (slot, local_param) and write val
+static void ducker_write_param(TrackerSong *song, int inst_idx, int global_param, uint8_t val) {
+  TrackerInstrument *inst = &song->instruments[inst_idx];
+  int remaining = global_param;
+  for (int sl = 0; sl < CHAIN_MAX; sl++) {
+    if (!inst->chain[sl].unit_id[0])
+      continue;
+    extern const UnitDef *unit_find(const char *id);
+    const UnitDef *def = unit_find(inst->chain[sl].unit_id);
+    if (!def)
+      continue;
+    int cnt = def->num_params;
+    if (remaining < cnt) {
+      inst->chain[sl].params[remaining] = val;
+      return;
+    }
+    remaining -= cnt;
+  }
+}
+
 static void ducker_render(UnitState *s, const uint8_t *p,
                           const float *in_l, const float *in_r,
                           float *out_l, float *out_r, uint32_t frames) {
+  // Pass audio through unchanged — ducking happens by writing to a target param.
+  if (in_l) memcpy(out_l, in_l, frames * sizeof(float));
+  if (in_r) memcpy(out_r, in_r, frames * sizeof(float));
+
   float amount = p[0] / 255.0f;
-  int src_inst = p[1];  // instrument index 0-255
+  int src_inst = p[1];
   float rel_ms = p2f(p[2], 10.0f, 500.0f);
   int invert = p[3] ? 1 : 0;
+  int inst = p[4];
+  int prm = p[5];
+  float cntr = (float)p[6];
+  int on = p[7];
 
   float sr = s->sample_rate;
   float rel_coef = expf(-1.0f / (sr * rel_ms * 0.001f));
 
-  // Get sidechain level
+  // Continuous level, not a hard gate — ramps from THRESH up to "fully
+  // ducked" over a small window, so a tuned threshold catches only the
+  // loud attack (e.g. a kick) and ignores its own quieter decay tail.
+  float thresh = p2f(p[8], 0.0f, 0.5f);
   float sc_rms = g_sidechain_rms[src_inst];
-
-  // Target env: 1 when sidechain is active, 0 when silent
-  float target = (sc_rms > 0.001f) ? 1.0f : 0.0f;
+  float target = (sc_rms - thresh) / 0.05f;
+  target = target < 0.0f ? 0.0f : target > 1.0f ? 1.0f : target;
 
   float env = s->env;
-
   for (uint32_t f = 0; f < frames; f++) {
-    // Smooth envelope with release (fast attack implicit via no attack coeff)
     if (target > env)
       env = target;  // instant attack
     else
       env = rel_coef * env + (1.0f - rel_coef) * target;
-
-    // duck_amount: when env=1 and invert=0, gain = 1-amount; when invert=1, reversed
-    float duck;
-    if (!invert)
-      duck = 1.0f - amount * env;  // duck when src plays
-    else
-      duck = 1.0f - amount * (1.0f - env);  // duck when src is silent
-
-    out_l[f] = in_l[f] * duck;
-    out_r[f] = in_r[f] * duck;
   }
-
   s->env = env;
+
+  if (!on || amount <= 0.0f || !g_lfo_song)
+    return;
+
+  float env_eff = invert ? (1.0f - env) : env;
+  float raw = cntr * (1.0f - amount * env_eff);
+  uint8_t val = raw < 0.0f ? 0 : raw > 255.0f ? 255 : (uint8_t)raw;
+  ducker_write_param(g_lfo_song, inst, prm, val);
+}
+
+static void ducker_init_params(uint8_t *params, int inst_idx) {
+  params[4] = (uint8_t)(inst_idx & 0xFF);
 }
 
 static const char *const ducker_inv_names[] = {"NORM", "INV"};
+static const char *const ducker_on_names[] = {"OFF", "ON"};
 
 const UnitDef unit_ducker = {
     .id = "ducker",
     .name = "DUCKER",
     .is_source = false,
-    .num_params = 4,
-    .param_names = {"AMNT", "SRC", "REL", "INV"},
-    .param_defaults = {0xC0, 0, 0x40, 0},
-    .param_enums = {NULL, NULL, NULL, ducker_inv_names},
-    .param_enum_count = {0, 0, 0, 2},
+    .num_params = 9,
+    .param_names = {"AMNT", "SRC", "REL", "INV", "INST", "PARAM", "CNTR", "ON", "THRESH"},
+    .param_defaults = {0xC0, 0, 0x40, 0, 0, 0, 0x80, 0, 0},
+    .param_enums = {NULL, NULL, NULL, ducker_inv_names, NULL, NULL, NULL, ducker_on_names, NULL},
+    .param_enum_count = {0, 0, 0, 2, 0, 0, 0, 2, 0},
+    .init_params = ducker_init_params,
     .create = ducker_create,
     .destroy = ducker_destroy,
     .note_on = ducker_note_on,

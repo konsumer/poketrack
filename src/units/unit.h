@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define UNIT_MAX_PARAMS 8
+#define UNIT_MAX_PARAMS 16
 #define UNIT_ID_LEN 8
 
 // Opaque per-instance runtime state

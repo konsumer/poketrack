@@ -106,7 +106,7 @@ to 8 unit slots (sources first, then effects). Written by
 Offset  Size   Field              Notes
 ──────  ────   ─────              ─────
 0       4      magic              "RPTI"
-4       2      version            u16; currently 1
+4       2      version            u16; currently 2 (v1 = UNIT_MAX_PARAMS 8, v2 = 16)
 6       16     name               str[16]
 22      128    midi_in_device     str[128]; "" = no MIDI input
 150     1      midi_in_channel    u8; 0 = all channels, 1..16 = specific
@@ -114,8 +114,8 @@ Offset  Size   Field              Notes
 Per chain slot (8 slots, fixed; each slot = variable size):
   unit_id       str[8]    "" = empty slot; e.g. "drum", "sampler", "sf2"
   enabled       u8        0 / 1
-  params[8]     u8 × 8    unit param values (UNIT_MAX_PARAMS = 8)
-  cc_map[8]     u8 × 8    MIDI CC per param; 0xFF = unmapped
+  params[N]     u8 × N    unit param values (N = UNIT_MAX_PARAMS; 8 in v1, 16 in v2)
+  cc_map[N]     u8 × N    MIDI CC per param; 0xFF = unmapped
   data_len      u16       byte length of data string that follows
   data          bytes     data_len bytes; extra data (e.g. SF2/sample path), no NUL
 ```
@@ -123,8 +123,12 @@ Per chain slot (8 slots, fixed; each slot = variable size):
 Absolute `data` paths are rewritten relative to the file's directory on save
 and resolved back on load.
 
+v1 files (`params`/`cc_map` at width 8) still load: params beyond index 7 are
+filled from the unit's own defaults, cc_map beyond 7 from unmapped (`0xFF`).
+Reader implementation: `rb_chain_params` in `src/tracker.c`.
+
 **Fixed header size before chain:** 151 bytes. Each chain slot occupies
-`8 + 1 + 8 + 8 + 2 + data_len` bytes.
+`8 + 1 + N + N + 2 + data_len` bytes (N = 16 for current-version writes).
 
 Available `unit_id` values (from `src/units/`):
 
@@ -144,7 +148,7 @@ using the length field. Written by `tracker_save`.
 Offset  Size  Field          Notes
 ──────  ────  ─────          ─────
 0       4     magic          "RPT2"
-4       2     version        u16; currently 2 (v1 = single-track patterns)
+4       2     version        u16; currently 3 (v1 = single-track patterns, v3 = UNIT_MAX_PARAMS 16)
 6       2     num_sections   u16; number of chunks that follow
 
 Repeated num_sections times:
@@ -231,7 +235,9 @@ Per pattern (count times):
 ### INST chunk
 
 Only non-default instruments are stored. Per-instrument layout matches the
-`.rpti` body (no `RPTI`/version header), prefixed by its slot index.
+`.rpti` body (no `RPTI`/version header), prefixed by its slot index. `N` =
+`UNIT_MAX_PARAMS` for the RPT2 version in the file header (8 for v1/v2, 16
+for v3+) — see the same v1-compat note under the `.rpti` format above.
 
 ```
 Offset  Size  Field    Notes
@@ -246,8 +252,8 @@ Per instrument (count times):
   chain[8]:
     unit_id         str[8]
     enabled         u8
-    params[8]       u8 × 8
-    cc_map[8]       u8 × 8
+    params[N]       u8 × N
+    cc_map[N]       u8 × N
     data_len        u16
     data            data_len bytes
 ```

@@ -20,6 +20,7 @@ extern const UnitDef unit_filter;
 extern const UnitDef unit_sampler;
 extern const UnitDef unit_bitcrush;
 extern const UnitDef unit_tremolo;
+extern const UnitDef unit_pangain;
 extern const UnitDef unit_compressor;
 extern const UnitDef unit_ducker;
 extern const UnitDef unit_midi;

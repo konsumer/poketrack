@@ -221,6 +221,15 @@ Amplitude modulation (tremolo) or auto-pan.
 | SHAPE | Sine / Square / Saw / Tri | LFO waveform |
 | MODE | Trem / Pan / Both | Tremolo, auto-pan, or both |
 
+### PAN/GAIN
+
+Simple stereo pan and gain trim. 0x80 is "no change" on both params.
+
+| Param | Range | Notes |
+|-------|-------|-------|
+| PAN | L–80(center)–R | Stereo pan |
+| GAIN | mute–80(unity)–+6dB | Volume trim |
+
 ### COMPRESSOR
 
 RMS compressor with makeup gain.
@@ -235,14 +244,23 @@ RMS compressor with makeup gain.
 
 ### DUCKER
 
-Sidechain volume ducker. Reduces the volume of this chain when another instrument plays.
+Sidechain envelope modulator. Watches the level of a source instrument and writes a ducked value into any param on any instrument every render block — same targeting model as LFO. Passes its own chain's audio through unchanged.
+
+To reproduce the classic "duck this chain's volume" behavior, pair it with [PAN/GAIN](#pangain): point DUCKER's INST/PARAM at that unit's GAIN param (CNTR=80 for unity) so it pulls GAIN down while the source plays. Since it can target *any* param, it can just as easily drive a filter cutoff, a delay mix, or anything else in a chain from the sound of an instrument.
+
+ON defaults to Off, same as LFO — leave it off while you set INST/PARAM/AMNT so browsing candidate targets doesn't stomp on unrelated params, then switch it on once configured.
 
 | Param | Range | Notes |
 |-------|-------|-------|
-| AMNT | 0–full | Duck depth |
+| AMNT | 0–full | Duck depth (fraction pulled down from CNTR) |
 | SRC | 00–FF | Source instrument index to sidechain from |
 | REL | 10ms–500ms | Release time |
 | INV | 0 / 1 | Invert: duck when source is *silent* instead |
+| INST | 00–FF | Target instrument index (defaults to current) |
+| PARAM | 00–FF | Target param (global index across chain slots) |
+| CNTR | 00–FF | Center/unduck value for the target param (default 80) |
+| ON | Off / On | Enable/disable |
+| THRESH | 00–FF (0–0.5 RMS) | Sidechain level below which SRC is ignored — tune above a hit's decay tail so only its attack triggers the duck |
 
 ### LFO
 

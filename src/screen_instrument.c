@@ -219,7 +219,7 @@ void screen_instrument_update(UIState* ui) {
 
     audio_ensure_preview(ui->engine, (uint8_t)ui->ctx_instrument);
     UnitState* state = ui->engine->preview_states[slot];
-    if (ui->engine->chan_states[0][0][slot])
+    if (ui->engine->active_inst[0][0] == ui->ctx_instrument && ui->engine->chan_states[0][0][slot])
       state = ui->engine->chan_states[0][0][slot];
     int nparams = (def->dyn_num_params && state) ? def->dyn_num_params(state) : def->num_params;
     bool has_picker = def->picker_count && def->picker_add && state;
@@ -576,7 +576,7 @@ void screen_instrument_draw(UIState* ui) {
     int bar_x = PANEL_W + 94;
     int bar_w = WIN_W - bar_x - 26;  // shrunk to fit CC field at right
     UnitState* cur_state = ui->engine->preview_states[cur_slot];
-    if (ui->engine->chan_states[0][0][cur_slot])
+    if (ui->engine->active_inst[0][0] == ui->ctx_instrument && ui->engine->chan_states[0][0][cur_slot])
       cur_state = ui->engine->chan_states[0][0][cur_slot];
     int nparams = (def->dyn_num_params && cur_state) ? def->dyn_num_params(cur_state) : def->num_params;
     bool has_picker_draw = def->picker_count && def->picker_add && cur_state;

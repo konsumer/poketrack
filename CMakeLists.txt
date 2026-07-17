@@ -147,6 +147,7 @@ set(SOURCES
     src/units/sampler.c
     src/units/bitcrush.c
     src/units/tremolo.c
+    src/units/pangain.c
     src/units/compressor.c
     src/units/ducker.c
     src/units/lfo.c
