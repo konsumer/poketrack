@@ -17,6 +17,10 @@ EMSCRIPTEN_KEEPALIVE void c_file_browser_ready(const char* path) {
   g_ready = 1;
 }
 
+// EM_JS bodies are JavaScript; C formatting corrupts JS-only tokens
+// (=== becomes "== =") and only the web build catches it.
+// The directive below must be the comment's exact text to take effect.
+// clang-format off
 EM_JS(void, js_file_open, (const char* filter_c), {
   var filterStr = UTF8ToString(filter_c);
   var accept = filterStr.split(' ').map(function(p) {
@@ -72,6 +76,7 @@ EM_JS(void, js_file_download, (const char* fs_path_c, const char* name_c), {
     console.error('download:', err);
   }
 });
+// clang-format on
 
 void file_browser_open(const char* title, const char* filter) {
   (void)title;

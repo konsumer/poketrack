@@ -318,14 +318,17 @@ MidiOut* midi_out_open(int idx) {
 
 void midi_out_close(MidiOut* m) { free(m); }
 
+// EM_JS bodies are JavaScript; C formatting corrupts JS-only tokens
+// (=== becomes "== =") and only the web build catches it.
+// The directive below must be the comment's exact text to take effect.
+// clang-format off
 EM_JS(void, midi_out_web_send_js, (int idx, const uint8_t* msg, int len), {
   var outputs = window._midiOutputs;
-  if (!outputs || idx < 0 || idx >= outputs.length)
-    return;
+  if (!outputs || idx < 0 || idx >= outputs.length) return;
   var port = outputs[idx];
-  if (port&& port.state == = "connected")
-    port.send(HEAPU8.subarray(msg, msg + len));
+  if (port && port.state === "connected") port.send(HEAPU8.subarray(msg, msg + len));
 });
+// clang-format on
 
 void midi_out_send(MidiOut* m, const uint8_t* msg, int len) {
   if (!m || len < 1)

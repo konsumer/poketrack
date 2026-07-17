@@ -201,6 +201,11 @@ if(EMSCRIPTEN)
         -sUSE_GLFW=3
         -sINITIAL_MEMORY=134217728  # 128MB headroom: patterns are lazily allocated (~114KB each), samples/soundfonts dominate
         -sALLOW_MEMORY_GROWTH=1
+        # Emscripten 6.x flipped GROWABLE_ARRAYBUFFERS on by default, exposing the
+        # heap as a resizable ArrayBuffer — WebGL rejects views of those
+        # ("texImage2D: ... must not be resizable"). Pin the old replace-on-grow
+        # behavior until emscripten's GL bindings handle resizable buffers.
+        -sGROWABLE_ARRAYBUFFERS=0
         -sFORCE_FILESYSTEM=1
         -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','FS']
         "-sEXPORTED_FUNCTIONS=['_main','_midi_in_web_set_port_count','_midi_in_web_set_port_name','_midi_in_web_push','_midi_out_web_set_port_count','_midi_out_web_set_port_name']"
@@ -210,7 +215,6 @@ if(EMSCRIPTEN)
         -sNO_EXIT_RUNTIME=1
         -sASSERTIONS=0
         -sWASM=1
-        --no-heap-copy
         --js-library "${CMAKE_SOURCE_DIR}/src/wclap_host_web.lib.js"
     )
     target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
