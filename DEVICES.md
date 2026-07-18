@@ -24,6 +24,7 @@ Notes for dArkOS / Rockchip BSP kernel (4.4.x):
 - Use the `poketrack-linux-arm64-sdl` build — the DRM build does not work due to EGL incompatibility with the 4.4 kernel
 - WiFi: built-in WiFi may not work; a **Realtek RTL8188EU** USB adapter (via OTG) works reliably. You can often find these for like $1-$2, and are great to have in your toolbox.
 - Button mapping: if face buttons are swapped, edit `SDL_GAMECONTROLLERCONFIG` in `PokeTrack.sh` — swap `a`/`b` and `x`/`y` values to match your device's physical layout
+- You can use `--height` and `--width` to change size. for example make it square (720x720) for R36Max
 - SSH: default credentials are `ark` / `ark`. You can use [this script](https://gist.github.com/konsumer/880f6dfedb058763207053211fca858e) to enable SSH (put it on rom SD, in ports/ or tools/)
 
 ### EmulationStation
