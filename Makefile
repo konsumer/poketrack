@@ -1,5 +1,13 @@
 # I use this as a wrapper around common taks.
 
+# Force every recipe line through a real shell. Without this, GNU Make's
+# no-shell-needed fast path execve()s the first PATH match itself and,
+# unlike bash, doesn't skip past a non-executable/directory match -- and
+# emsdk's PATH entries include upstream/emscripten/cmake, a *directory*
+# (CMake toolchain modules) that shadows the real `cmake` binary and
+# breaks `cmake --build` in CI with a bogus "Permission denied".
+SHELL := /bin/bash
+
 .PHONY: help build build-web clean serve format format-check test run plugins
 .DEFAULT_GOAL := help
 
