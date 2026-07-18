@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "audio.h"
@@ -16,6 +17,9 @@
 #if defined(PLATFORM_WEB)
 #include <emscripten/emscripten.h>
 #endif
+
+int WIN_W = 480;
+int WIN_H = 320;
 
 static AudioEngine g_engine;
 static UIState g_ui;
@@ -61,6 +65,10 @@ int main(int argc, char** argv) {
       theme_load(argv[++i]);
     else if (strcmp(argv[i], "--no-preview") == 0)
       g_preview_disabled = true;
+    else if (strcmp(argv[i], "--width") == 0 && i + 1 < argc)
+      WIN_W = atoi(argv[++i]);
+    else if (strcmp(argv[i], "--height") == 0 && i + 1 < argc)
+      WIN_H = atoi(argv[++i]);
   }
 #else
   (void)argc;

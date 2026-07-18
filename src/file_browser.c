@@ -110,8 +110,10 @@ bool file_browser_active(void) { return false; }
 #include "raylib.h"
 #include "theme.h"
 
-#define FB_W 480
-#define FB_H 320
+extern int WIN_W;
+extern int WIN_H;
+#define FB_W WIN_W
+#define FB_H WIN_H
 #define FB_FS 10
 #define FB_RH 14
 

@@ -85,6 +85,8 @@ The UI is themable at launch: `poketrack --theme ~/cyber.ptt`. See [THEMES](./TH
 | `-f`, `--fullscreen` | Start in fullscreen |
 | `--theme <file.ptt>` | Load a theme at launch |
 | `--no-preview` | Disable the note preview that normally fires as the cursor moves over pattern cells — useful when editing sequences live (e.g. against an external clock/sequencer) where you don't want every cursor move to also trigger a note |
+| `--width <px>` | Window width (default 480) |
+| `--height <px>` | Window height (default 320) |
 
 
 ### plugins

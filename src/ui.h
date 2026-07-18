@@ -5,8 +5,8 @@
 #include "theme.h"
 #include "tracker.h"
 
-#define WIN_W 480
-#define WIN_H 320
+extern int WIN_W;
+extern int WIN_H;
 
 // visible arrangement lanes at once in the song screen (all of them, capped at 8)
 #define SONG_VIEW_COLS (SONG_CHANNELS < 8 ? SONG_CHANNELS : 8)
