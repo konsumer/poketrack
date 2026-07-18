@@ -8,3 +8,5 @@ __pycache__
 /*.rpti
 /*.rptp
 node_modules/
+target/
+test_*

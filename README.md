@@ -105,9 +105,11 @@ Native `.clap` plugins (the traditional OS-loaded kind) aren't supported — onl
 
 All fetched/packaged as WCLAP by [WebCLAP/examples](https://github.com/WebCLAP/examples).
 
-`test_clap_plugin/karplus/` is a from-scratch example built for this project: a Karplus-Strong plucked string instrument, written against [as-clap](https://github.com/WebCLAP/as-clap). It's a full buildable AssemblyScript project (see its own README) — a template for writing new WCLAP instruments/effects that go beyond what the built-in units can do.
+`test_clap_plugin/karplus/` and `test_clap_plugin/robotalk/` are from-scratch examples built for this project — full buildable projects (see their own READMEs), templates for writing new WCLAP instruments/effects that go beyond what the built-in units can do:
+- **karplus** — a Karplus-Strong plucked string, written against [as-clap](https://github.com/WebCLAP/as-clap) (AssemblyScript).
+- **robotalk** — a playable text-to-speech instrument (37 phonemes: vowels, diphthongs, liquids, nasals, fricatives, stops), written against [clack](https://github.com/prokopyl/clack) (Rust). Pairs with [`text2phonemes.py`](./text2phonemes.py) + [`phonemes2rptp.py`](./phonemes2rptp.py) at the repo root — text to phonemes and phonemes to a poketrack pattern are deliberately separate scripts, independent of the instrument itself.
 
-`make plugins` builds it into `examples/plugins/`, alongside the other [example](https://github.com/konsumer/poketrack/tree/main/examples) songs/soundfonts/samples users get.
+`make plugins` builds both into `examples/plugins/`, alongside the other [example](https://github.com/konsumer/poketrack/tree/main/examples) songs/soundfonts/samples users get.
 
 ## samples & key-mapping
 
