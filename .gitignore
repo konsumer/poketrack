@@ -9,3 +9,6 @@ __pycache__
 /*.rptp
 node_modules/
 target/
+/webroot/tts/robotalk.js
+/webroot/tts/robotalk_bg.wasm
+/webroot/poketrack.mjs

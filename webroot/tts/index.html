@@ -1,0 +1,175 @@
+<html>
+  <head>
+    <title>ROBOTALK text to pattern — poketrack</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/png" href="../favicon-32x32.png" sizes="32x32" />
+    <link rel="shortcut icon" href="../favicon.ico" />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        background: #0a0a0a;
+        color: #ddd;
+        font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        min-height: 100%;
+      }
+      body { padding: 24px 16px 60px; }
+      main { max-width: 640px; margin: 0 auto; }
+
+      h1 { font-size: 18px; color: #fff; margin-bottom: 4px; }
+      .sub { color: #888; margin-bottom: 24px; }
+      .sub a { color: #6cf; }
+
+      label { display: block; margin: 16px 0 4px; color: #aaa; }
+      textarea, input[type="text"], input[type="number"] {
+        width: 100%;
+        background: #161616;
+        border: 1px solid #333;
+        color: #eee;
+        font: inherit;
+        padding: 8px;
+        border-radius: 4px;
+      }
+      textarea { resize: vertical; min-height: 64px; }
+
+      .row { display: flex; gap: 16px; flex-wrap: wrap; }
+      .row > div { flex: 1; min-width: 120px; }
+      .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 16px 0 4px; }
+      .checkbox-row input { width: auto; }
+      .checkbox-row label { margin: 0; color: #ddd; }
+
+      .actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+      button {
+        font: inherit;
+        background: #1a3a1a;
+        color: #9f9;
+        border: 1px solid #2a5a2a;
+        border-radius: 4px;
+        padding: 8px 16px;
+        cursor: pointer;
+      }
+      button:hover:not(:disabled) { background: #204a20; }
+      button:disabled { opacity: 0.4; cursor: default; }
+      button.secondary { background: #1a1a2a; color: #9cf; border-color: #2a2a5a; }
+      button.secondary:hover:not(:disabled) { background: #20204a; }
+
+      pre {
+        margin-top: 16px;
+        background: #111;
+        border: 1px solid #292929;
+        border-radius: 4px;
+        padding: 10px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        min-height: 40px;
+        color: #bbb;
+      }
+      .status { margin-top: 10px; color: #888; }
+      .status.error { color: #f88; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>ROBOTALK: text → pattern</h1>
+      <p class="sub">
+        Types English text into a <code>.rptp</code> pattern that speaks it on a
+        ROBOTALK instrument. Runs entirely in your browser — nothing is
+        uploaded. See <a href="../">poketrack</a>.
+      </p>
+
+      <label for="text">Text (or a space-separated phoneme list, with "raw phonemes" below)</label>
+      <textarea id="text" placeholder="hello world">hello world</textarea>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="raw" />
+        <label for="raw">Treat text as a raw ARPABET phoneme list (e.g. "HH AH L OW")</label>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="instrument">Instrument</label>
+          <input type="number" id="instrument" value="0" min="0" max="255" />
+        </div>
+        <div>
+          <label for="stepsPerPhoneme">Steps per phoneme</label>
+          <input type="number" id="stepsPerPhoneme" value="4" min="1" max="64" />
+        </div>
+        <div>
+          <label for="gapSteps">Gap steps (between words)</label>
+          <input type="number" id="gapSteps" value="4" min="0" max="64" />
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="previewBtn" disabled>Preview phonemes</button>
+        <button id="downloadBtn" disabled>Download .rptp</button>
+      </div>
+
+      <div id="status" class="status">Loading engine…</div>
+      <pre id="output"></pre>
+    </main>
+
+    <script type="module">
+      import init, { phonemes, pattern } from './robotalk.js'
+
+      const $ = (id) => document.getElementById(id)
+      const statusEl = $('status')
+      const outputEl = $('output')
+      const previewBtn = $('previewBtn')
+      const downloadBtn = $('downloadBtn')
+
+      function setStatus (msg, isError = false) {
+        statusEl.textContent = msg
+        statusEl.classList.toggle('error', isError)
+      }
+
+      function readOptions () {
+        return {
+          text: $('text').value,
+          raw: $('raw').checked,
+          instrument: Math.max(0, Math.min(255, parseInt($('instrument').value, 10) || 0)),
+          stepsPerPhoneme: Math.max(1, parseInt($('stepsPerPhoneme').value, 10) || 4),
+          gapSteps: Math.max(0, parseInt($('gapSteps').value, 10) || 0),
+        }
+      }
+
+      previewBtn.addEventListener('click', () => {
+        const { text, raw } = readOptions()
+        try {
+          outputEl.textContent = raw
+            ? text.trim().split(/\s+/).join(' ')
+            : (phonemes(text) || '(no phonemes produced)')
+          setStatus('Preview updated.')
+        } catch (e) {
+          setStatus(String(e), true)
+        }
+      })
+
+      downloadBtn.addEventListener('click', () => {
+        const { text, raw, instrument, stepsPerPhoneme, gapSteps } = readOptions()
+        try {
+          const bytes = pattern(text, raw, instrument, stepsPerPhoneme, gapSteps)
+          const blob = new Blob([bytes], { type: 'application/octet-stream' })
+          const url = URL.createObjectURL(blob)
+          const name = (text.trim().split(/\s+/)[0] || 'text').replace(/[^a-z0-9_-]/gi, '_')
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `${name}.rptp`
+          a.click()
+          URL.revokeObjectURL(url)
+          setStatus(`Downloaded ${name}.rptp`)
+        } catch (e) {
+          setStatus(String(e), true)
+        }
+      })
+
+      try {
+        await init()
+        previewBtn.disabled = false
+        downloadBtn.disabled = false
+        setStatus('Ready.')
+      } catch (e) {
+        setStatus(`Failed to load engine: ${e}`, true)
+      }
+    </script>
+  </body>
+</html>

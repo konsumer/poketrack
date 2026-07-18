@@ -5,6 +5,9 @@ using [clack](https://github.com/prokopyl/clack) — 37 phonemes covering
 enough of English (vowels, diphthongs, liquids, nasals, fricatives, and
 stops) to speak recognizable words, not just vowels.
 
+If you want to generate a poketrack pattern that says text, visit the [phoneme pattern exporter](https://konsumer.js.org/poketrack/tts/)
+
+
 **Each note selects a phoneme, not a pitch.** Notes 36-72 (C2-C5) step
 through 37 ARPABET-style phonemes, in five contiguous blocks, wrapping
 every 37 notes so transposing never goes silent:
@@ -118,3 +121,32 @@ load as a WCLAP plugin at all, beyond what `cargo build` does by default:
 
 `make plugins` (from the repo root) runs all of this and copies the result
 into `examples/plugins/`, alongside the other example plugins.
+
+## Building the browser tool
+
+The text -> phonemes -> pattern pipeline (g2p.rs + pattern.rs) is also
+built as a wasm-bindgen module for `webroot/tts/`, a standalone page that
+lets anyone build a `.rptp` pattern in the browser without installing the
+CLI:
+
+```sh
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.100 --locked
+cargo build --target wasm32-unknown-unknown --release --lib
+wasm-bindgen target/wasm32-unknown-unknown/release/robotalk.wasm \
+  --out-dir ../../webroot/tts --out-name robotalk --target web --no-typescript
+```
+
+`make build-web` (from the repo root) runs all of this alongside the
+Emscripten build. The `wasm-bindgen` crate version in `Cargo.toml` is
+pinned exactly, since the CLI and crate versions must match.
+
+Every consumer of this crate compiles a different subset via `#[cfg]` in
+`lib.rs`: `plugin.rs` (+ `params.rs`/`voice.rs`, which only exist to serve
+it) is wasm32-wasip1-only, since clack has no reason to link into the
+CLI or browser build; `g2p.rs`/`pattern.rs`/`web.rs` are excluded from the
+wasi build for the opposite reason -- the plugin has no use for
+misaki-rs's ~30MB embedded English lexicon. That lexicon is also why the
+generated `robotalk_bg.wasm` is large (~35MB, ~8MB gzipped) -- expected,
+not a bug, and the same trade-off the native CLI already makes for a
+runtime-data-free binary.

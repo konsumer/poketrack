@@ -25,22 +25,13 @@ jobs:
         with:
           version: 4.0.14
 
-      - name: Configure (web)
-        run: emcmake cmake -B build-web -DCMAKE_BUILD_TYPE=Release -DPLATFORM=Web
-
       - name: Build
-        run: cmake --build build-web --parallel
-
-      - name: Collect output
-        run: |
-          mkdir -p dist
-          cp build-web/poketrack.mjs dist/
-          cp webroot/* dist/
+        run: make build-web
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: dist/
+          path: webroot/
 
   deploy:
     needs: build

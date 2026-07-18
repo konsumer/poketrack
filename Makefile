@@ -10,9 +10,15 @@ build: ## Build native release
 	cmake -B build -DCMAKE_BUILD_TYPE=Release
 	cmake --build build --parallel
 
-build-web: ## Build web (Emscripten) release
+build-web: ## Build web (Emscripten) release, plus the ROBOTALK text-to-pattern tool in webroot/tts/
 	emcmake cmake -B build-web -DCMAKE_BUILD_TYPE=Release -DPLATFORM=Web
 	cmake --build build-web --parallel
+	cp build-web/poketrack.mjs webroot/poketrack.mjs
+	rustup target add wasm32-unknown-unknown
+	command -v wasm-bindgen >/dev/null || cargo install wasm-bindgen-cli --version 0.2.100 --locked
+	cd clap_examples/robotalk && cargo build --target wasm32-unknown-unknown --release --lib
+	mkdir -p webroot/tts
+	wasm-bindgen clap_examples/robotalk/target/wasm32-unknown-unknown/release/robotalk.wasm --out-dir webroot/tts --out-name robotalk --target web --no-typescript
 
 clean: ## Delete built files
 	rm -rf build-web build
@@ -21,7 +27,7 @@ run: build ## Build & run native build
 	./build/poketrack || ./build/poketrack.app/Contents/MacOS/poketrack
 
 serve: build-web ## Build & run watching web build
-	npx -y live-server webroot --mount=/poketrack.mjs:./build-web/poketrack.mjs
+	npx -y live-server webroot
 
 test: ## Build & run quick sanity tests
 	cmake -B build -DCMAKE_BUILD_TYPE=Release
