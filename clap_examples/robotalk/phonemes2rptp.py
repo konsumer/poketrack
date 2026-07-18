@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Turn a phoneme sequence into a poketrack pattern (.rptp) for the
-ROBOTALK CLAP instrument (test_clap_plugin/robotalk/).
+ROBOTALK CLAP instrument (this directory).
 
 This is the "play phonemes" half of speaking text -- deliberately
 separate from text2phonemes.py's "text to phonemes" half, so you can feed
@@ -30,7 +30,7 @@ FX_EMPTY = 0xFF
 PATTERN_TRACKS = 16
 MAX_PATTERN_STEPS = 1024
 
-# Note -> phoneme layout, matching test_clap_plugin/robotalk/src/phonemes.rs
+# Note -> phoneme layout, matching src/phonemes.rs
 # exactly (same order, same base note) -- no separate translation table.
 BASE_NOTE = 36
 PHONEME_ORDER = [

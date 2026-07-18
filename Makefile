@@ -35,10 +35,10 @@ format-check: ## Fail if any source file is not clang-format clean (for CI)
 	find src -name "*.c" -o -name "*.h" | xargs clang-format --dry-run --Werror
 
 plugins: ## Build bundled example WCLAP plugins into examples/plugins/
-	cd test_clap_plugin/karplus && [ -d node_modules ] || npm install
-	cd test_clap_plugin/karplus && npm run asbuild:release
+	cd clap_examples/karplus && [ -d node_modules ] || npm install
+	cd clap_examples/karplus && npm run asbuild:release
 	rustup target add wasm32-wasip1
-	cd test_clap_plugin/robotalk && cargo build --target wasm32-wasip1 --release
+	cd clap_examples/robotalk && cargo build --target wasm32-wasip1 --release
 	mkdir -p examples/plugins
-	cp test_clap_plugin/karplus/build/release.wasm examples/plugins/karp.wclap.wasm
-	cp test_clap_plugin/robotalk/target/wasm32-wasip1/release/robotalk.wasm examples/plugins/robotalk.wclap.wasm
+	cp clap_examples/karplus/build/release.wasm examples/plugins/karp.wclap.wasm
+	cp clap_examples/robotalk/target/wasm32-wasip1/release/robotalk.wasm examples/plugins/robotalk.wclap.wasm

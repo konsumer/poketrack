@@ -2,7 +2,7 @@
 """Convert English text into ARPABET-style phonemes.
 
 This is deliberately just the "text to phonemes" half of speaking text
-with the ROBOTALK CLAP instrument (test_clap_plugin/robotalk/) -- it knows
+with the ROBOTALK CLAP instrument (this directory) -- it knows
 nothing about note numbers, tempo, or .rptp files. See phonemes2rptp.py
 for turning a phoneme sequence into a poketrack pattern; that's a
 separate, composable step, so you can also feed it phonemes from
@@ -19,7 +19,7 @@ itself, or "robotalk".
 The 37 phoneme symbols produced here (IY, IH, EH, AE, AA, AH, ER, AO, UH,
 UW, EY, AY, AW, OY, OW, L, R, W, Y, M, N, NG, S, Z, SH, ZH, F, V, TH, DH,
 HH, P, T, K, B, D, G) match exactly what
-test_clap_plugin/robotalk/src/phonemes.rs maps to notes -- no translation
+src/phonemes.rs maps to notes -- no translation
 table needed. CMUdict also has CH and JH (affricates), which robotalk
 doesn't model as their own phoneme; both are real stop+fricative
 combinations acoustically, so they're expanded into two symbols instead

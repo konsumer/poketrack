@@ -9,4 +9,3 @@ __pycache__
 /*.rptp
 node_modules/
 target/
-test_*

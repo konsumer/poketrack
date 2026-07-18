@@ -74,6 +74,21 @@ It may seem a bit inscrutable at first, but input is meant to be consistent and 
 
 There are some built-in units (effects/sound-generators) that are documented [here](./src//units/README.md).
 
+
+### plugins
+
+Read more about how to make your own custom plugins [here](clap_examples/).
+
+
+## samples & key-mapping
+
+Samples & instruments are intentionally simple. The idea is that you can be more "in the moment" and not uncomfortably tweaking samples & key/velocity maps with a small screen & limited controls. You can do your setup offline, and save it as a SFZ (or zip of SFZ.) I also made [this editor](https://konsumer.js.org/sfzmaker/) to facilitate that. It can do cool stuff with breakbeats, lots of samples, different velocity-zones, etc.
+
+
+### what about my handheld?
+
+Read about [specific devices](DEVICES.md).
+
 ### themes
 
 The UI is themable at launch: `poketrack --theme ~/cyber.ptt`. See [THEMES](./THEMES.md) for the file format and how to convert LGPT themes.
@@ -87,40 +102,6 @@ The UI is themable at launch: `poketrack --theme ~/cyber.ptt`. See [THEMES](./TH
 | `--no-preview` | Disable the note preview that normally fires as the cursor moves over pattern cells — useful when editing sequences live (e.g. against an external clock/sequencer) where you don't want every cursor move to also trigger a note |
 | `--width <px>` | Window width (default 480) |
 | `--height <px>` | Window height (default 320) |
-
-
-### plugins
-
-You can also use [CLAP](https://github.com/free-audio/clap) plugins for sound-generation and effects — specifically [WCLAP](https://github.com/WebCLAP) (CLAP compiled to wasm32), which runs sandboxed on every target (desktop and web) from a single `.wasm` file, and can be bundled alongside a song using a relative path. Point the unit at a `.wasm` file; if it bundles more than one plugin, a picker lets you choose which one.
-
-These plugins can be written in any language that can compile to wasm (C, rust, assemblyscript, nelua, etc) and work on any client (web, native linux/mac/windows.)
-
-There's no GUI support (CLAP plugin UIs aren't hosted), so you map plugin params to tracker-controllable slots via the ADD row instead — same workflow as any other unit.
-
-Native `.clap` plugins (the traditional OS-loaded kind) aren't supported — only WCLAP `.wasm` files.
-
-`test_clap_plugin/` has a few real WCLAP plugins used for testing:
-- [as-clap](https://github.com/WebCLAP/as-clap) — WCLAP written in AssemblyScript (gain + synth example)
-- [clack](https://github.com/prokopyl/clack) — Rust CLAP host/plugin library (gain + polysynth examples)
-- [Signalsmith Basics](https://github.com/Signalsmith-Audio/basics) — MIT-licensed effects collection (chorus, crunch, freq-shifter, limiter, reverb, analyser)
-- [signalsmith-clap-cpp](https://github.com/geraintluff/signalsmith-clap-cpp) — Signalsmith's C++ CLAP examples, built via WASI-SDK
-
-All fetched/packaged as WCLAP by [WebCLAP/examples](https://github.com/WebCLAP/examples).
-
-`test_clap_plugin/karplus/` and `test_clap_plugin/robotalk/` are from-scratch examples built for this project — full buildable projects (see their own READMEs), templates for writing new WCLAP instruments/effects that go beyond what the built-in units can do:
-- **karplus** — a Karplus-Strong plucked string, written against [as-clap](https://github.com/WebCLAP/as-clap) (AssemblyScript).
-- **robotalk** — a playable text-to-speech instrument (37 phonemes: vowels, diphthongs, liquids, nasals, fricatives, stops), written against [clack](https://github.com/prokopyl/clack) (Rust). Pairs with [`text2phonemes.py`](./text2phonemes.py) + [`phonemes2rptp.py`](./phonemes2rptp.py) at the repo root — text to phonemes and phonemes to a poketrack pattern are deliberately separate scripts, independent of the instrument itself.
-
-`make plugins` builds both into `examples/plugins/`, alongside the other [example](https://github.com/konsumer/poketrack/tree/main/examples) songs/soundfonts/samples users get.
-
-## samples & key-mapping
-
-Samples & instruments are intentionally simple. The idea is that you can be more "in the moment" and not uncomfortably tweaking samples & key/velocity maps with a small screen & limited controls. You can do your setup offline, and save it as a SFZ (or zip of SFZ.) I also made [this editor](https://konsumer.js.org/sfzmaker/) to facilitate that. It can do cool stuff with breakbeats, lots of samples, different velocity-zones, etc.
-
-
-### what about my handheld?
-
-Read about [specific devices](DEVICES.md).
 
 
 ### videos

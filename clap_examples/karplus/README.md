@@ -31,5 +31,7 @@ on the npm registry — if git dependencies are disabled in your environment,
 clone [WebCLAP/as-clap](https://github.com/WebCLAP/as-clap) and copy it into
 `node_modules/as-clap` by hand instead.
 
-`npm run build` compiles `assembly/index.ts` to `build/release.wasm` and
-copies it to `../karplus.wclap.wasm`, alongside the other test plugins.
+`npm run build` compiles `assembly/index.ts` to `build/release.wasm`.
+
+`make plugins` (from the repo root) runs all of this and copies the result
+into `examples/plugins/`, alongside the other example plugins.
