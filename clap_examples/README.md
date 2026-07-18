@@ -18,7 +18,7 @@ Here are soem examples hoste elsewhere:
 
 Keep in mind that the standard is not 100% solid, so you may find plugins that won't work. They need to be without threading, and use wasm32 (not wasm64.)
 
-I made some complete example:
+I made some complete examples:
 
 - **[karplus](karplus)** — a Karplus-Strong plucked string, written against [as-clap](https://github.com/WebCLAP/as-clap) (AssemblyScript).
 - **[robotalk](robotalk)** — a playable text-to-speech instrument (37 phonemes: vowels, diphthongs, liquids, nasals, fricatives, stops), written against [clack](https://github.com/prokopyl/clack) (Rust).
