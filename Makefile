@@ -38,7 +38,7 @@ plugins: ## Build bundled example WCLAP plugins into examples/plugins/
 	cd clap_examples/karplus && [ -d node_modules ] || npm install
 	cd clap_examples/karplus && npm run asbuild:release
 	rustup target add wasm32-wasip1
-	cd clap_examples/robotalk && cargo build --target wasm32-wasip1 --release
+	cd clap_examples/robotalk && cargo build --target wasm32-wasip1 --release --lib
 	mkdir -p examples/plugins
 	cp clap_examples/karplus/build/release.wasm examples/plugins/karp.wclap.wasm
 	cp clap_examples/robotalk/target/wasm32-wasip1/release/robotalk.wasm examples/plugins/robotalk.wclap.wasm

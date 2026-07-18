@@ -1,10 +1,10 @@
 //! robotalk: a playable text-to-speech instrument. Each note selects a
-//! phoneme (see phonemes.rs) rather than a pitch -- pair with
-//! text2phonemes.py at the repo root to turn English text into a
+//! phoneme (see phonemes.rs) rather than a pitch -- pair with the
+//! `robotalk` CLI binary (src/main.rs) to turn English text into a
 //! sequence of notes.
 
 mod params;
-mod phonemes;
+pub mod phonemes;
 mod voice;
 
 use clack_extensions::audio_ports::*;

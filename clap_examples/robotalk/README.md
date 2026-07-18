@@ -17,24 +17,36 @@ every 37 notes so transposing never goes silent:
 | 58-66 | Fricatives | S Z SH ZH F V TH DH HH |
 | 67-72 | Stops | P T K B D G |
 
-This exact table (symbols, order, base note) is shared with
-[`phonemes2rptp.py`](./phonemes2rptp.py), so no translation is needed
-between the script and the plugin.
+This exact table (symbols, order, base note) is shared with the `robotalk`
+CLI below via `src/phonemes.rs` directly, so there's no separate
+translation table to keep in sync.
 
-## Text-to-speech helper scripts
+## `robotalk` CLI
 
-Two self-contained Python scripts live alongside the plugin source:
-- [`text2phonemes.py`](./text2phonemes.py) — English text to ARPABET
-  phonemes, using a bundled copy of the CMU Pronouncing Dictionary
-  (`data/cmudict.dict.gz`, BSD-licensed — see `data/CMUDICT_LICENSE.txt`),
-  with a clean-room letter-to-sound fallback for unknown words.
-- [`phonemes2rptp.py`](./phonemes2rptp.py) — a phoneme sequence (or raw
-  text, via `text2phonemes.py`) to a poketrack `.rptp` pattern that plays
-  it on a ROBOTALK instrument.
+A companion binary, built from the same `Cargo.toml` as the plugin
+(`cargo build --release` produces both), turns English text into ARPABET
+phonemes or a full poketrack pattern:
 
 ```sh
-python3 phonemes2rptp.py "hello world" --out hello.rptp
+cargo build --release --bin robotalk
+
+# preview the phonemes for some text, without writing a file
+./target/release/robotalk phonemes "hello world"
+
+# write a .rptp pattern that speaks it on a ROBOTALK instrument
+./target/release/robotalk pattern "hello world" --out hello.rptp --instrument 0
+
+# or feed it an already-tokenized phoneme list directly
+./target/release/robotalk pattern --phonemes "HH AH L OW" --out hello.rptp
 ```
+
+Text-to-phoneme is via [misaki-rs](https://crates.io/crates/misaki-rs) with
+`default-features = false` — its lexicon/tagger data is embedded into the
+binary at compile time (no runtime data directory, no espeak/C-toolchain
+dependency). Out-of-vocabulary words (including "robotalk" itself) get
+spelled out letter by letter rather than phonetically guessed — this is
+accepted as-is, not a bug; type a phonetic-ish spelling instead if a
+specific word's pronunciation matters (e.g. "poke e track").
 
 ## How it makes each sound
 
@@ -82,12 +94,16 @@ still worked.
 | Decay | 0–1 | How long sustained phonemes ring before self-terminating, 150ms–3s |
 | Volume | 0–1 | Output level |
 
-## Building
+## Building the plugin
 
 ```sh
 rustup target add wasm32-wasip1
-cargo build --target wasm32-wasip1 --release
+cargo build --target wasm32-wasip1 --release --lib
 ```
+
+`--lib` restricts the wasm build to the plugin's `cdylib` target — the
+`robotalk` CLI binary (and its `misaki-rs`/`clap` dependencies) is a
+native-only tool and never needs to cross-compile for wasm32-wasip1.
 
 Two linker flags in `.cargo/config.toml` are required for the result to
 load as a WCLAP plugin at all, beyond what `cargo build` does by default:

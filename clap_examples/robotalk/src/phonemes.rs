@@ -1,6 +1,7 @@
 //! The phoneme inventory: 37 ARPABET-style symbols (matching CMUdict, so
-//! the companion text2phonemes.py script needs no translation table),
-//! laid out as contiguous MIDI-note blocks starting at `BASE_NOTE`.
+//! the companion `robotalk` CLI binary needs no separate translation
+//! table -- it reuses `PHONEMES` directly), laid out as contiguous
+//! MIDI-note blocks starting at `BASE_NOTE`.
 //!
 //! Frequency data is drawn from real published acoustic-phonetics
 //! measurements, not invented: Peterson & Barney (1952) for vowel
