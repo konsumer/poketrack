@@ -2,7 +2,7 @@
 // data field = path to .sfz file
 // P0 VOL:  00=silent  FF=full
 // P1 PAN:  00=L  80=center  FF=R
-// P2 TRAN: 00=-24st  80=0  FF=+24st (translate incoming note → selects region/key)
+// P2 TRAN: 00=-128st  80=0  FF=+127st (translate incoming note → selects region/key)
 // P3 TUNE: 00=-100c  80=0  FF=+100c (cents fine tune, resamples pitch)
 #include <ctype.h>
 #include <dirent.h>
@@ -846,7 +846,8 @@ static void sfz_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* 
   // region/key is selected (e.g. retarget a drum pattern onto a kit mapped an
   // octave lower), rather than resampling the pitch like TUNE does. The original
   // note is kept for note_off matching (note_off isn't passed params).
-  int trans = (int)lroundf(p2f_center(p[2], -24.0f, 24.0f));
+  // 1 LSB = 1 semitone, 0x80 = center (0x00=-128 .. 0xFF=+127).
+  int trans = (int)p[2] - 128;
   int tnote = (int)note + trans;
   if (tnote < 0)
     tnote = 0;

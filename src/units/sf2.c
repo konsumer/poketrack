@@ -4,7 +4,7 @@
 // P1 BANK:   00-FF
 // P2 VOL:    00=silent  FF=full
 // P3 PAN:    00=L  80=center  FF=R
-// P4 TRANS:  00=-24st  80=0  FF=+24st (translate incoming note → selects key/sample)
+// P4 TRANS:  00=-128st  80=0  FF=+127st (translate incoming note → selects key/sample)
 // P5 TUNE:   00=-100c  80=0  FF=+100c (cents fine tune, resamples pitch)
 #define TSF_IMPLEMENTATION
 #include <math.h>
@@ -130,7 +130,8 @@ static void sf2_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* 
   // P4 TRANS: integer semitone translation of the incoming note (selects a
   // different key/sample, like a drum kit mapped an octave lower). Remember the
   // translated key so note_off (not passed params) can match it in TSF.
-  int trans = (int)lroundf(p2f_center(p[4], -24.0f, 24.0f));
+  // 1 LSB = 1 semitone, 0x80 = center (0x00=-128 .. 0xFF=+127).
+  int trans = (int)p[4] - 128;
   int tnote = (int)note + trans;
   if (tnote < 0)
     tnote = 0;
