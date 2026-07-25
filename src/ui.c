@@ -1,8 +1,11 @@
 #include "ui.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
+#include "bip39_en.h"
 #include "file_browser.h"
 #include "icons.h"
 
@@ -234,17 +237,38 @@ static const char* KBM_CHARS[KBM_CHAR_ROWS] = {
 };
 static const int KBM_CHAR_COLS[KBM_CHAR_ROWS] = {10, 10, 10, 9};
 
-static int kbm_max_col(int row) {
-  return (row < KBM_CHAR_ROWS) ? KBM_CHAR_COLS[row] : KBM_SPECIAL_COLS;
+// Special row layout: SHIFT(0) SPACE(1) DEL(2) [SUGGEST(3)] OK(last)
+static int kbm_ok_col(const KBModal* kb) {
+  return kb->suggest_words > 0 ? 4 : 3;
 }
 
-void kb_modal_open(KBModal* kb, char* buf, int buf_sz) {
+static int kbm_max_col(const KBModal* kb, int row) {
+  return (row < KBM_CHAR_ROWS) ? KBM_CHAR_COLS[row] : kbm_ok_col(kb) + 1;
+}
+
+static void kbm_suggest(KBModal* kb) {
+  static bool seeded = false;
+  if (!seeded) {
+    srand((unsigned int)time(NULL));
+    seeded = true;
+  }
+  kb->buf[0] = '\0';
+  for (int i = 0; i < kb->suggest_words; i++) {
+    if (i)
+      strncat(kb->buf, "-", kb->buf_sz - strlen(kb->buf) - 1);
+    strncat(kb->buf, bip39_en[rand() % 2048], kb->buf_sz - strlen(kb->buf) - 1);
+  }
+}
+
+void kb_modal_open(KBModal* kb, char* buf, int buf_sz, int suggest_words) {
   kb->buf = buf;
   kb->buf_sz = buf_sz;
+  kb->suggest_words = suggest_words;
   kb->row = KBM_SPECIAL_ROW;
-  kb->col = 3;  // OK preselected
+  kb->col = suggest_words > 0 ? 3 : kbm_ok_col(kb);  // SUGGEST (if any) else OK preselected
   kb->shift = false;
   kb->active = true;
+  kb->confirmed = false;
   while (GetCharPressed() > 0) {
   }
 }
@@ -256,26 +280,26 @@ bool kb_modal_update(KBModal* kb) {
   if (ui_repeat(BTN_LEFT)) {
     kb->col--;
     if (kb->col < 0)
-      kb->col = kbm_max_col(kb->row) - 1;
+      kb->col = kbm_max_col(kb, kb->row) - 1;
   }
   if (ui_repeat(BTN_RIGHT)) {
     kb->col++;
-    if (kb->col >= kbm_max_col(kb->row))
+    if (kb->col >= kbm_max_col(kb, kb->row))
       kb->col = 0;
   }
   if (ui_repeat(BTN_UP)) {
     kb->row--;
     if (kb->row < 0)
       kb->row = KBM_TOTAL_ROWS - 1;
-    if (kb->col >= kbm_max_col(kb->row))
-      kb->col = kbm_max_col(kb->row) - 1;
+    if (kb->col >= kbm_max_col(kb, kb->row))
+      kb->col = kbm_max_col(kb, kb->row) - 1;
   }
   if (ui_repeat(BTN_DOWN)) {
     kb->row++;
     if (kb->row >= KBM_TOTAL_ROWS)
       kb->row = 0;
-    if (kb->col >= kbm_max_col(kb->row))
-      kb->col = kbm_max_col(kb->row) - 1;
+    if (kb->col >= kbm_max_col(kb, kb->row))
+      kb->col = kbm_max_col(kb, kb->row) - 1;
   }
 
   if (input_pressed(BTN_OK)) {
@@ -283,36 +307,31 @@ bool kb_modal_update(KBModal* kb) {
     }
     if (kb->row < KBM_CHAR_ROWS) {
       char c = KBM_CHARS[kb->row][kb->col];
-      if (!kb->shift)
-        c = (char)(c | 0x20);
+      if (!kb->shift && c >= 'A' && c <= 'Z')
+        c = (char)(c + 32);
       size_t l = strlen(kb->buf);
       if (l < (size_t)(kb->buf_sz - 2)) {
         kb->buf[l] = c;
         kb->buf[l + 1] = '\0';
       }
-    } else {
-      switch (kb->col) {
-        case 0:
-          kb->shift = !kb->shift;
-          break;
-        case 1: {
-          size_t l = strlen(kb->buf);
-          if (l < (size_t)(kb->buf_sz - 2)) {
-            kb->buf[l] = ' ';
-            kb->buf[l + 1] = '\0';
-          }
-          break;
-        }
-        case 2: {
-          size_t l = strlen(kb->buf);
-          if (l)
-            kb->buf[l - 1] = '\0';
-          break;
-        }
-        case 3:  // OK
-          kb->active = false;
-          return true;
+    } else if (kb->col == 0) {
+      kb->shift = !kb->shift;
+    } else if (kb->col == 1) {
+      size_t l = strlen(kb->buf);
+      if (l < (size_t)(kb->buf_sz - 2)) {
+        kb->buf[l] = ' ';
+        kb->buf[l + 1] = '\0';
       }
+    } else if (kb->col == 2) {
+      size_t l = strlen(kb->buf);
+      if (l)
+        kb->buf[l - 1] = '\0';
+    } else if (kb->suggest_words > 0 && kb->col == 3) {
+      kbm_suggest(kb);
+    } else if (kb->col == kbm_ok_col(kb)) {
+      kb->active = false;
+      kb->confirmed = true;
+      return true;
     }
   } else {
     int ch;
@@ -332,12 +351,14 @@ bool kb_modal_update(KBModal* kb) {
     }
     if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
       kb->active = false;
+      kb->confirmed = true;
       return true;
     }
   }
 
   if (input_pressed(BTN_NO)) {
     kb->active = false;
+    kb->confirmed = false;
     return true;
   }
   return false;
@@ -382,28 +403,34 @@ void kb_modal_draw(KBModal* kb, const char* label) {
       bool cur = (kb->row == r && kb->col == c);
       DrawRectangle(x, y, KBM_KEY_W, KBM_KEY_H, cur ? key_cur : key_bg);
       char raw = KBM_CHARS[r][c];
-      char lbl[2] = {kb->shift ? raw : (char)(raw | 0x20), 0};
+      bool is_letter = raw >= 'A' && raw <= 'Z';
+      char lbl[2] = {(!kb->shift && is_letter) ? (char)(raw + 32) : raw, 0};
       int tw = MeasureText(lbl, FONT_S);
       DrawText(lbl, x + (KBM_KEY_W - tw) / 2, y + (KBM_KEY_H - FONT_S) / 2, FONT_S,
                cur ? C_TITLE : C_TEXT);
     }
   }
 
+  bool has_suggest = kb->suggest_words > 0;
   int sy = y0 + KBM_CHAR_ROWS * (KBM_KEY_H + KBM_GAP);
   int sh_x = 8, sh_w = 56;
   int sp_x = sh_x + sh_w + 2, sp_w = 88;
   int del_x = sp_x + sp_w + 2, del_w = 56;
-  int ok_x = del_x + del_w + 2, ok_w = WIN_W - ok_x - 8;
+  int sug_x = del_x + del_w + 2, sug_w = has_suggest ? 108 : 0;
+  int ok_x = sug_x + sug_w + (has_suggest ? 2 : 0), ok_w = WIN_W - ok_x - 8;
 
   bool sh_cur = (kb->row == KBM_SPECIAL_ROW && kb->col == 0);
   bool sp_cur = (kb->row == KBM_SPECIAL_ROW && kb->col == 1);
   bool del_cur = (kb->row == KBM_SPECIAL_ROW && kb->col == 2);
-  bool ok_cur = (kb->row == KBM_SPECIAL_ROW && kb->col == 3);
+  bool sug_cur = has_suggest && (kb->row == KBM_SPECIAL_ROW && kb->col == 3);
+  bool ok_cur = (kb->row == KBM_SPECIAL_ROW && kb->col == kbm_ok_col(kb));
 
   Color sh_bg = kb->shift ? (Color){0x60, 0x40, 0x00, 0xFF} : key_bg;
   DrawRectangle(sh_x, sy, sh_w, KBM_KEY_H, sh_cur ? key_cur : sh_bg);
   DrawRectangle(sp_x, sy, sp_w, KBM_KEY_H, sp_cur ? key_cur : key_bg);
   DrawRectangle(del_x, sy, del_w, KBM_KEY_H, del_cur ? key_cur : key_bg);
+  if (has_suggest)
+    DrawRectangle(sug_x, sy, sug_w, KBM_KEY_H, sug_cur ? key_cur : (Color){0x00, 0x28, 0x40, 0xFF});
   DrawRectangle(ok_x, sy, ok_w, KBM_KEY_H, ok_cur ? key_cur : key_bg);
 
   Color sh_txt = sh_cur ? C_TITLE : (kb->shift ? (Color){0xFF, 0xC0, 0x00, 0xFF} : C_TEXT);
@@ -413,6 +440,9 @@ void kb_modal_draw(KBModal* kb, const char* label) {
            sy + (KBM_KEY_H - FONT_S) / 2, FONT_S, sp_cur ? C_TITLE : C_TEXT);
   DrawText("DEL", del_x + (del_w - MeasureText("DEL", FONT_S)) / 2,
            sy + (KBM_KEY_H - FONT_S) / 2, FONT_S, del_cur ? C_NOTE_OFF : C_TEXT);
+  if (has_suggest)
+    DrawText("SUGGEST", sug_x + (sug_w - MeasureText("SUGGEST", FONT_S)) / 2,
+             sy + (KBM_KEY_H - FONT_S) / 2, FONT_S, sug_cur ? C_TITLE : (Color){0x40, 0xC0, 0xFF, 0xFF});
   DrawText("OK", ok_x + (ok_w - MeasureText("OK", FONT_S)) / 2,
            sy + (KBM_KEY_H - FONT_S) / 2, FONT_S, ok_cur ? C_PLAY : C_TEXT);
 }

@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 static char g_result[512] = {0};
 static int g_ready = 0;
@@ -105,10 +104,10 @@ bool file_browser_active(void) { return false; }
 #include <dirent.h>
 #include <sys/stat.h>
 
-#include "bip39_en.h"
 #include "input.h"
 #include "raylib.h"
 #include "theme.h"
+#include "ui.h"
 
 extern int WIN_W;
 extern int WIN_H;
@@ -118,7 +117,7 @@ extern int WIN_H;
 #define FB_RH 14
 
 // Aliases onto the shared theme globals (see theme.h) so the file browser
-// stays in sync with `--theme`. C_HDR/C_DIM/C_INP have no equivalent in the
+// stays in sync with `--theme`. C_HDR/C_DIM have no equivalent in the
 // main palette, so they get their own themeable fields (C_FB_*).
 #define C_HDR C_FB_HEADER
 #define C_ROW0 C_BG
@@ -129,7 +128,6 @@ extern int WIN_H;
 #define C_DIR C_INST
 #define C_FILE C_NOTE
 #define C_WHT C_TITLE
-#define C_INP C_FB_INPUT_BG
 
 #define MAX_ENT 1024
 #define MAX_PATH 512
@@ -152,47 +150,12 @@ static int g_cur = 0;
 static int g_scr = 0;
 static char g_fname[256] = {0};
 static bool g_fname_ed = false;
-
-// On-screen keyboard for filename entry
-#define FB_KB_KEY_W 42
-#define FB_KB_KEY_H 22
-#define FB_KB_GAP 2
-#define FB_KB_CHAR_ROWS 4
-static const char* FB_KB_CHARS[FB_KB_CHAR_ROWS] = {
-    "1234567890",
-    "QWERTYUIOP",
-    "ASDFGHJKL-",
-    "ZXCVBNM._",
-};
-static const int FB_KB_CHAR_COLS[FB_KB_CHAR_ROWS] = {10, 10, 10, 9};
-#define FB_KB_SPECIAL 4
-#define FB_KB_ROWS 5
-// Special row cols: 0=SHIFT 1=SPACE 2=DEL 3=SUGGEST 4=OK
-#define FB_KB_SPECIAL_COLS 5
-static int g_kb_row = FB_KB_SPECIAL;
-static int g_kb_col = 3;
-static bool g_kb_shift = false;
-
-static int fb_kb_max_col(int row) {
-  return (row < FB_KB_CHAR_ROWS) ? FB_KB_CHAR_COLS[row] : FB_KB_SPECIAL_COLS;
-}
+static KBModal g_kb;
 
 static void fb_strip_ext(char* name) {
   size_t l = strlen(name), el = strlen(g_ext);
   if (el && l > el + 1 && name[l - el - 1] == '.' && strcasecmp(name + l - el, g_ext) == 0)
     name[l - el - 1] = '\0';
-}
-static void fb_fname_append(char c) {
-  size_t l = strlen(g_fname);
-  if (l < sizeof(g_fname) - 2) {
-    g_fname[l] = c;
-    g_fname[l + 1] = '\0';
-  }
-}
-static void fb_fname_backspace(void) {
-  size_t l = strlen(g_fname);
-  if (l)
-    g_fname[l - 1] = '\0';
 }
 static void fb_fname_confirm(void) {
   if (!g_fname[0])
@@ -202,19 +165,9 @@ static void fb_fname_confirm(void) {
   g_mode = FB_NONE;
   g_fname_ed = false;
 }
-static void fb_suggest(void) {
-  static bool seeded = false;
-  if (!seeded) {
-    srand((unsigned int)time(NULL));
-    seeded = true;
-  }
-  int a = rand() % 2048, b = rand() % 2048, c = rand() % 2048;
-  snprintf(g_fname, sizeof(g_fname), "%s-%s-%s", bip39_en[a], bip39_en[b], bip39_en[c]);
-}
 static void fb_enter_kb(void) {
   g_fname_ed = true;
-  g_kb_row = FB_KB_SPECIAL;
-  g_kb_col = 3;  // SUGGEST preselected
+  kb_modal_open(&g_kb, g_fname, sizeof(g_fname), 3);
 }
 
 bool file_browser_active(void) { return g_mode != FB_NONE; }
@@ -296,8 +249,7 @@ static void go_up(void) {
 }
 
 static int vis_rows(void) {
-  int bot_h = (g_mode == FB_SAVE) ? 48 : 20;
-  return (FB_H - 22 - bot_h) / FB_RH;
+  return (FB_H - 22 - 20) / FB_RH;
 }
 
 static bool fb_rep(TrackerButton b) {
@@ -353,117 +305,66 @@ void file_browser_tick(void) {
   }
 
   if (g_fname_ed) {
-    while (GetCharPressed() > 0) {
-    }  // drain queue — on-screen keyboard handles input
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
-      fb_fname_confirm();
-      return;
-    }
-
-    // On-screen keyboard navigation
-    if (fb_rep(BTN_LEFT)) {
-      if (--g_kb_col < 0)
-        g_kb_col = fb_kb_max_col(g_kb_row) - 1;
-    }
-    if (fb_rep(BTN_RIGHT)) {
-      if (++g_kb_col >= fb_kb_max_col(g_kb_row))
-        g_kb_col = 0;
-    }
-    if (fb_rep(BTN_UP)) {
-      if (--g_kb_row < 0)
-        g_kb_row = FB_KB_ROWS - 1;
-      if (g_kb_col >= fb_kb_max_col(g_kb_row))
-        g_kb_col = fb_kb_max_col(g_kb_row) - 1;
-    }
-    if (fb_rep(BTN_DOWN)) {
-      if (++g_kb_row >= FB_KB_ROWS)
-        g_kb_row = 0;
-      if (g_kb_col >= fb_kb_max_col(g_kb_row))
-        g_kb_col = fb_kb_max_col(g_kb_row) - 1;
-    }
-
-    if (input_pressed(BTN_OK)) {
-      if (g_kb_row < FB_KB_CHAR_ROWS) {
-        char c = FB_KB_CHARS[g_kb_row][g_kb_col];
-        fb_fname_append(g_kb_shift ? (c >= 'A' && c <= 'Z' ? c + 32 : c) : c);
-      } else {
-        switch (g_kb_col) {
-          case 0:
-            g_kb_shift = !g_kb_shift;
-            break;
-          case 1:
-            fb_fname_append(' ');
-            break;
-          case 2:
-            fb_fname_backspace();
-            break;
-          case 3:
-            fb_suggest();
-            break;
-          case 4:
-            fb_fname_confirm();
-            break;
-        }
-      }
-    }
-    if (input_pressed(BTN_NO))
+    if (kb_modal_update(&g_kb)) {
       g_fname_ed = false;
+      if (g_kb.confirmed)
+        fb_fname_confirm();
+    }
     return;
   }
+
+  // In save mode, a synthetic "[ SAVE HERE ]" row sits at display index 0,
+  // ahead of the real entries (which then sit at g_cur - save_off).
+  int save_off = (g_mode == FB_SAVE) ? 1 : 0;
+  int total = g_cnt + save_off;
 
   if (fb_rep(BTN_UP) && g_cur > 0) {
     g_cur--;
     if (g_cur < g_scr)
       g_scr = g_cur;
   }
-  if (fb_rep(BTN_DOWN) && g_cur < g_cnt - 1) {
+  if (fb_rep(BTN_DOWN) && g_cur < total - 1) {
     g_cur++;
     if (g_cur >= g_scr + vis)
       g_scr = g_cur - vis + 1;
   }
 
   if (input_pressed(BTN_OK)) {
-    if (g_cnt == 0) {
-      if (g_mode == FB_SAVE)
-        fb_fname_confirm();
-      return;
-    }
-    Ent* e = &g_ents[g_cur];
-    if (e->is_dir) {
-      if (!strcmp(e->name, "..")) {
-        go_up();
+    if (g_mode == FB_SAVE && g_cur == 0) {
+      fb_enter_kb();
+    } else if (total > 0) {
+      Ent* e = &g_ents[g_cur - save_off];
+      if (e->is_dir) {
+        if (!strcmp(e->name, "..")) {
+          go_up();
+        } else {
+          char np[MAX_PATH];
+          snprintf(np, sizeof(np), "%s/%s", g_dir, e->name);
+          strncpy(g_dir, np, MAX_PATH - 1);
+          scan();
+        }
       } else {
-        char np[MAX_PATH];
-        snprintf(np, sizeof(np), "%s/%s", g_dir, e->name);
-        strncpy(g_dir, np, MAX_PATH - 1);
-        scan();
+        // Both open and save: selecting an existing file sets result directly
+        snprintf(g_result, sizeof(g_result), "%s/%s", g_dir, e->name);
+        g_ready = 1;
+        g_mode = FB_NONE;
       }
-    } else {
-      // Both open and save: selecting existing file sets result directly
-      snprintf(g_result, sizeof(g_result), "%s/%s", g_dir, e->name);
-      g_ready = 1;
-      g_mode = FB_NONE;
     }
   }
 
   if (input_pressed(BTN_NO))
     go_up();
-
-  if (g_mode == FB_SAVE) {
-    if (input_pressed(BTN_NONE))
-      fb_enter_kb();
-    if (input_pressed(BTN_PLAY)) {
-      if (g_fname[0])
-        fb_fname_confirm();
-      else
-        fb_enter_kb();
-    }
-  }
 }
 
 void file_browser_draw(void) {
   if (g_mode == FB_NONE)
     return;
+
+  // On-screen keyboard mode: shared modal, drawn full-screen in place of the browser
+  if (g_fname_ed) {
+    kb_modal_draw(&g_kb, "NAME:");
+    return;
+  }
 
   int title_h = 22;
   DrawRectangle(0, 0, FB_W, FB_H, C_ROW0);
@@ -481,94 +382,25 @@ void file_browser_draw(void) {
   DrawText(hdr, 4, (title_h - FB_FS) / 2, FB_FS, C_WHT);
   DrawLine(0, title_h, FB_W, title_h, C_SEP);
 
-  // On-screen keyboard mode
-  if (g_fname_ed) {
-    // Name field
-    int fn_y = title_h + 2, fn_h = FB_RH + 2;
-    DrawRectangle(0, fn_y, FB_W, fn_h, C_HDR);
-    DrawText("NAME", 4, fn_y + (fn_h - FB_FS) / 2, FB_FS, C_DIM);
-    int ix = 44, iw = FB_W - ix - 4;
-    DrawRectangle(ix, fn_y + 1, iw, fn_h - 2, C_SEL);
-    DrawText(g_fname, ix + 3, fn_y + (fn_h - FB_FS) / 2, FB_FS, C_WHT);
-    double t = GetTime();
-    if ((t - (int)t) < 0.5) {
-      int cx = ix + 3 + MeasureText(g_fname, FB_FS);
-      DrawRectangle(cx, fn_y + 2, 1, FB_FS + 1, C_WHT);
-    }
-    DrawLine(0, fn_y + fn_h, FB_W, fn_y + fn_h, C_SEP);
-
-    // Keyboard grid
-    int kb_y = fn_y + fn_h + 6;
-    Color kb_key = {0x28, 0x28, 0x50, 0xFF};
-    Color kb_cur = {0x20, 0x60, 0xC0, 0xFF};
-
-    for (int r = 0; r < FB_KB_CHAR_ROWS; r++) {
-      int ncols = FB_KB_CHAR_COLS[r];
-      int total_w = ncols * FB_KB_KEY_W + (ncols - 1) * FB_KB_GAP;
-      int sx = (FB_W - total_w) / 2;
-      int y = kb_y + r * (FB_KB_KEY_H + FB_KB_GAP);
-      for (int c = 0; c < ncols; c++) {
-        int x = sx + c * (FB_KB_KEY_W + FB_KB_GAP);
-        bool cur = (g_kb_row == r && g_kb_col == c);
-        DrawRectangle(x, y, FB_KB_KEY_W, FB_KB_KEY_H, cur ? kb_cur : kb_key);
-        char raw = FB_KB_CHARS[r][c];
-        char label[2] = {(g_kb_shift && raw >= 'A' && raw <= 'Z') ? raw + 32 : raw, 0};
-        int tw = MeasureText(label, FB_FS);
-        DrawText(label, x + (FB_KB_KEY_W - tw) / 2, y + (FB_KB_KEY_H - FB_FS) / 2,
-                 FB_FS, cur ? C_WHT : C_TXT);
-      }
-    }
-
-    // Special row: SHIFT | SPACE | DEL | SUGGEST | OK
-    int sy = kb_y + FB_KB_CHAR_ROWS * (FB_KB_KEY_H + FB_KB_GAP);
-    int sh_x = 8, sh_w = 72;
-    int sp_x = sh_x + sh_w + 3, sp_w = 100;
-    int del_x = sp_x + sp_w + 3, del_w = 66;
-    int sug_x = del_x + del_w + 3, sug_w = 112;
-    int ok_x = sug_x + sug_w + 3, ok_w = FB_W - ok_x - 8;
-
-    bool sh_cur = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 0);
-    bool sp_cur = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 1);
-    bool del_cur = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 2);
-    bool sug_cur = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 3);
-    bool ok_cur = (g_kb_row == FB_KB_SPECIAL && g_kb_col == 4);
-
-    Color sh_bg = g_kb_shift ? (Color){0x60, 0x40, 0x00, 0xFF} : kb_key;
-    DrawRectangle(sh_x, sy, sh_w, FB_KB_KEY_H, sh_cur ? kb_cur : sh_bg);
-    DrawRectangle(sp_x, sy, sp_w, FB_KB_KEY_H, sp_cur ? kb_cur : kb_key);
-    DrawRectangle(del_x, sy, del_w, FB_KB_KEY_H, del_cur ? kb_cur : kb_key);
-    DrawRectangle(sug_x, sy, sug_w, FB_KB_KEY_H, sug_cur ? kb_cur : (Color){0x00, 0x28, 0x40, 0xFF});
-    DrawRectangle(ok_x, sy, ok_w, FB_KB_KEY_H, ok_cur ? kb_cur : kb_key);
-
-    DrawText("SHIFT", sh_x + (sh_w - MeasureText("SHIFT", FB_FS)) / 2,
-             sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, sh_cur ? C_WHT : (g_kb_shift ? (Color){0xFF, 0xC0, 0x00, 0xFF} : C_TXT));
-    DrawText("SPACE", sp_x + (sp_w - MeasureText("SPACE", FB_FS)) / 2,
-             sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, sp_cur ? C_WHT : C_TXT);
-    DrawText("DEL", del_x + (del_w - MeasureText("DEL", FB_FS)) / 2,
-             sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, del_cur ? C_WHT : (Color){0xFF, 0x50, 0x50, 0xFF});
-    DrawText("SUGGEST", sug_x + (sug_w - MeasureText("SUGGEST", FB_FS)) / 2,
-             sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, sug_cur ? C_WHT : (Color){0x40, 0xC0, 0xFF, 0xFF});
-    DrawText("OK", ok_x + (ok_w - MeasureText("OK", FB_FS)) / 2,
-             sy + (FB_KB_KEY_H - FB_FS) / 2, FB_FS, ok_cur ? C_WHT : (Color){0x00, 0xFF, 0x60, 0xFF});
-
-    DrawText("DPAD=navigate   A=type   B=back to list   Enter=save",
-             4, FB_H - FB_FS - 4, FB_FS - 1, C_DIM);
-    return;
-  }
-
-  // File list
-  int bot_h = (g_mode == FB_SAVE) ? 48 : 20;
+  // File list — save mode prepends a synthetic "[ SAVE HERE ]" row at index 0
+  int save_off = (g_mode == FB_SAVE) ? 1 : 0;
+  int total = g_cnt + save_off;
+  int bot_h = 20;
   int list_y = title_h;
   int bot_y = FB_H - bot_h;
   int list_h = bot_y - list_y;
   int vis = list_h / FB_RH;
 
-  for (int i = 0; i < vis && (g_scr + i) < g_cnt; i++) {
+  for (int i = 0; i < vis && (g_scr + i) < total; i++) {
     int idx = g_scr + i;
     int y = list_y + i * FB_RH;
     bool cur = (idx == g_cur);
     DrawRectangle(0, y, FB_W, FB_RH, cur ? C_SEL : (i % 2 == 0 ? C_ROW1 : C_ROW0));
-    Ent* e = &g_ents[idx];
+    if (g_mode == FB_SAVE && idx == 0) {
+      DrawText("[ SAVE HERE ]", 6, y + (FB_RH - FB_FS) / 2, FB_FS, cur ? C_WHT : C_FILE);
+      continue;
+    }
+    Ent* e = &g_ents[idx - save_off];
     char label[260];
     if (!strcmp(e->name, ".."))
       snprintf(label, sizeof(label), "[ .. ]");
@@ -580,10 +412,10 @@ void file_browser_draw(void) {
   }
 
   // Scrollbar
-  if (g_cnt > vis && vis > 0) {
-    int sx = FB_W - 5, sh = list_h, denom = g_cnt - vis;
+  if (total > vis && vis > 0) {
+    int sx = FB_W - 5, sh = list_h, denom = total - vis;
     DrawRectangle(sx, list_y, 5, sh, C_DIM);
-    int th = (vis * sh) / g_cnt;
+    int th = (vis * sh) / total;
     if (th < 6)
       th = 6;
     int ty = list_y + (denom > 0 ? (g_scr * (sh - th)) / denom : 0);
@@ -593,19 +425,9 @@ void file_browser_draw(void) {
   // Bottom bar
   DrawLine(0, bot_y, FB_W, bot_y, C_SEP);
   DrawRectangle(0, bot_y, FB_W, bot_h, C_HDR);
-
-  if (g_mode == FB_SAVE) {
-    int fn_y = bot_y + 4, fn_h = FB_RH;
-    DrawText("NAME", 4, fn_y + (fn_h - FB_FS) / 2, FB_FS, C_DIM);
-    int ix = 44, iw = FB_W - ix - 4;
-    DrawRectangle(ix, fn_y, iw, fn_h, C_INP);
-    DrawText(g_fname, ix + 3, fn_y + (fn_h - FB_FS) / 2, FB_FS, C_TXT);
-    DrawText("A=pick/enter   B=up   Y=edit name   START=save here   SEL+B=cancel",
-             4, fn_y + fn_h + 6, FB_FS - 1, C_DIM);
-  } else {
-    DrawText("A=open/enter dir   B=up   SELECT+B=cancel",
-             4, bot_y + (bot_h - (FB_FS - 1)) / 2, FB_FS - 1, C_DIM);
-  }
+  DrawText(g_mode == FB_SAVE ? "A=select   B=up   SELECT+B=cancel"
+                              : "A=open/enter dir   B=up   SELECT+B=cancel",
+           4, bot_y + (bot_h - (FB_FS - 1)) / 2, FB_FS - 1, C_DIM);
 }
 
 #endif  // __EMSCRIPTEN__

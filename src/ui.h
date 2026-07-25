@@ -70,26 +70,28 @@ void ui_draw(UIState* ui);
 
 bool ui_repeat(TrackerButton btn);
 
-// Shared on-screen keyboard modal (SHIFT SPACE DEL OK, no suggest)
+// Shared on-screen keyboard modal (SHIFT SPACE DEL [SUGGEST] OK).
+// Used by any screen that needs joystick-driven text entry.
 #define KBM_KEY_W 44
 #define KBM_KEY_H 18
 #define KBM_GAP 2
 #define KBM_CHAR_ROWS 4
 #define KBM_SPECIAL_ROW 4
 #define KBM_TOTAL_ROWS 5
-// Special cols: 0=SHIFT 1=SPACE 2=DEL 3=OK
-#define KBM_SPECIAL_COLS 4
 
 typedef struct {
   bool active;
-  char* buf;   // pointer to target string (edited in place)
-  int buf_sz;  // sizeof(buf)
+  bool confirmed;  // true if closed via OK/Enter, false if closed via cancel
+  char* buf;       // pointer to target string (edited in place)
+  int buf_sz;      // sizeof(buf)
   int row, col;
   bool shift;
+  int suggest_words;  // >0 shows a SUGGEST key that fills buf with N random bip39 words
 } KBModal;
 
-void kb_modal_open(KBModal* kb, char* buf, int buf_sz);
-// Returns true when modal closes (OK or BTN_NO). Caller checks buf for result.
+// suggest_words: 0 to disable the SUGGEST key, or a word count (e.g. 2) to enable it
+void kb_modal_open(KBModal* kb, char* buf, int buf_sz, int suggest_words);
+// Returns true when modal closes (OK/Enter or cancel) — check kb->confirmed for which.
 bool kb_modal_update(KBModal* kb);
 void kb_modal_draw(KBModal* kb, const char* label);
 const char* note_str(uint8_t note);
