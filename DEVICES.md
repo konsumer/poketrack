@@ -8,7 +8,7 @@ The basic idea is you need a Linux-based device. It will work on windows/mac, bu
 
 This is a x86-64 device, running SteamOS (Arch-based linux.) Setup is fairly straightforward. I made a script to make it a bit easier. In desktop mode:
 
-## [Steamdeck Installer (Save As)](https://raw.githubusercontent.com/konsumer/poketrack/main/steamdeck-install.py)
+## [Steamdeck Installer (Save As)](https://raw.githubusercontent.com/konsumer/poketrack/main/scripts/steamdeck-install.py)
 
 This is a GUI installer script. Save it, and in your Downloads folder right-click the file, check "is executable" under Permissions, and double-click to run. It'll let you pick an install-location, optionally grab the example songs/instruments, and optionally add PokeTrack as a non-Steam game (with `--fullscreen` launch option already set). Restart Steam afterwards to see it in your library.
 
@@ -31,9 +31,9 @@ Notes for dArkOS / Rockchip BSP kernel (4.4.x):
 
 Essentially, this is a popular joystick-driven chooser for retro-games. poketrack is a "port".
 
-## [EmulationStation Installer (Save As)](https://raw.githubusercontent.com/konsumer/poketrack/main/ports/Update%20PokeTrack.sh)
+## [EmulationStation Installer (Save As)](https://raw.githubusercontent.com/konsumer/poketrack/main/scripts/ports/Update%20PokeTrack.sh)
 
-- Add files in [ports/](./ports/) to your roms dir.
+- Add files in [scripts/ports/](./scripts/ports/) to your roms `ports/` dir.
 - Restart EmulationStation
 - Run `Update PokeTrack` to get latest version — it'll also offer to download the [example](https://github.com/konsumer/poketrack/tree/main/examples) songs/soundfonts/samples/plugins into your working dir
 - Restart EmulationStation

@@ -12,7 +12,7 @@ You can find device-specific instructions in [DEVICES](./DEVICES.md).
 
 You should be able to track quickly with a joystick, or keys:
 
-![keys](./keys.png)
+![keys](./art/keys.png)
 
 It may seem a bit inscrutable at first, but input is meant to be consistent and fast with a joystick, so once you get the hang of it, it should work well. A is "edit/change value", B is "delete/reset/cancel", X is "fill column", Y is "clear column", SELECT + arrow is "change screen", and START is "play song/pattern".
 
@@ -77,7 +77,7 @@ There are some built-in units (effects/sound-generators) that are documented [he
 
 ### plugins
 
-Read more about how to make your own custom plugins [here](clap_examples/).
+Read more about how to make your own custom plugins [here](plugins/).
 
 
 ## samples & key-mapping

@@ -61,7 +61,7 @@ main() {
   notify "Updating port scripts..."
   for SCRIPT in "PokeTrack.sh" "Update PokeTrack.sh"; do
     ENCODED="$(echo "$SCRIPT" | sed 's/ /%20/g')"
-    curl -sf "$RAW/$TAG/ports/$ENCODED" -o "$SCRIPT_DIR/$SCRIPT" 2>>"$LOG" \
+    curl -sf "$RAW/$TAG/scripts/ports/$ENCODED" -o "$SCRIPT_DIR/$SCRIPT" 2>>"$LOG" \
       && log "  updated: $SCRIPT" || log "  warning: could not update $SCRIPT"
     chmod +x "$SCRIPT_DIR/$SCRIPT" 2>/dev/null
   done

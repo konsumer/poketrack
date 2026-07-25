@@ -24,9 +24,9 @@ build-web: ## Build web (Emscripten) release, plus the ROBOTALK text-to-pattern 
 	cp build-web/poketrack.mjs webroot/poketrack.mjs
 	rustup target add wasm32-unknown-unknown
 	command -v wasm-bindgen >/dev/null || cargo install wasm-bindgen-cli --version 0.2.100 --locked
-	cd clap_examples/robotalk && cargo build --target wasm32-unknown-unknown --release --lib
+	cd plugins/robotalk && cargo build --target wasm32-unknown-unknown --release --lib
 	mkdir -p webroot/tts
-	wasm-bindgen clap_examples/robotalk/target/wasm32-unknown-unknown/release/robotalk.wasm --out-dir webroot/tts --out-name robotalk --target web --no-typescript
+	wasm-bindgen plugins/robotalk/target/wasm32-unknown-unknown/release/robotalk.wasm --out-dir webroot/tts --out-name robotalk --target web --no-typescript
 
 clean: ## Delete built files
 	rm -rf build-web build
@@ -49,10 +49,10 @@ format-check: ## Fail if any source file is not clang-format clean (for CI)
 	find src -name "*.c" -o -name "*.h" | xargs clang-format --dry-run --Werror
 
 plugins: ## Build bundled example WCLAP plugins into examples/plugins/
-	cd clap_examples/karplus && [ -d node_modules ] || npm install
-	cd clap_examples/karplus && npm run asbuild:release
+	cd plugins/karplus && [ -d node_modules ] || npm install
+	cd plugins/karplus && npm run asbuild:release
 	rustup target add wasm32-wasip1
-	cd clap_examples/robotalk && cargo build --target wasm32-wasip1 --release --lib
+	cd plugins/robotalk && cargo build --target wasm32-wasip1 --release --lib
 	mkdir -p examples/plugins
-	cp clap_examples/karplus/build/release.wasm examples/plugins/karp.wclap.wasm
-	cp clap_examples/robotalk/target/wasm32-wasip1/release/robotalk.wasm examples/plugins/robotalk.wclap.wasm
+	cp plugins/karplus/build/release.wasm examples/plugins/karp.wclap.wasm
+	cp plugins/robotalk/target/wasm32-wasip1/release/robotalk.wasm examples/plugins/robotalk.wclap.wasm

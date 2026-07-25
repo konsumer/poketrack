@@ -71,7 +71,7 @@ poketrack --theme examples/themes/cyber.ptt
 ```
 
 Every theme in the gallery except `cyber.ptt` was generated with
-`lgpt_theme.py` from the example palettes at
+`scripts/lgpt_theme.py` from the example palettes at
 [sixey.es/sounds/piggythemes](https://sixey.es/sounds/piggythemes/) — see
 below for how to convert your own.
 
@@ -121,11 +121,11 @@ hide_help=1
 
 [LGPT (Little GPTracker)](https://sixey.es/sounds/piggythemes/) themes are a
 `CONFIG.xml` with 4 colors (`BACKGROUND`, `FOREGROUND`, `HICOLOR1`,
-`HICOLOR2`). `lgpt_theme.py` converts one into a `.ptt`, deriving the extra
+`HICOLOR2`). `scripts/lgpt_theme.py` converts one into a `.ptt`, deriving the extra
 fields by blending between those 4 anchors:
 
 ```
-./lgpt_theme.py CONFIG.xml mytheme.ptt
+./scripts/lgpt_theme.py CONFIG.xml mytheme.ptt
 poketrack --theme mytheme.ptt
 ```
 
