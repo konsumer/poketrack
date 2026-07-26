@@ -312,6 +312,10 @@ static void wb_chunk_end(WBuf* b, size_t off) {
 // versions store this many per-slot param/cc_map bytes, not the current width.
 #define UNIT_MAX_PARAMS_V1 8
 
+// CHAIN_MAX was 8 before RPT2 v4 / RPTI v3 — files written by older versions
+// store this many chain slots per instrument, not the current count.
+#define CHAIN_MAX_V1 8
+
 // ---- read buffer -----------------------------------------------------------
 
 typedef struct {
@@ -401,7 +405,7 @@ bool tracker_save(const TrackerSong* song, const char* path) {
   WBuf b = {0};
   // Header: magic + version + num_sections placeholder
   wb_raw(&b, "RPT2", 4);
-  wb_u16(&b, 3);  // version 3: UNIT_MAX_PARAMS widened 8->16
+  wb_u16(&b, 4);  // version 4: CHAIN_MAX widened 8->16 (version 3: UNIT_MAX_PARAMS 8->16)
   size_t ns_off = b.len;
   wb_u16(&b, 0);  // num_sections — filled in at end
 
@@ -536,6 +540,7 @@ bool tracker_load(TrackerSong* song, const char* path) {
 
   uint16_t version = rb_u16(&hdr);
   bool narrow_params = version < 3;
+  bool narrow_chain = version < 4;
   uint16_t num_sects = rb_u16(&hdr);
 
   tracker_init(song);
@@ -616,7 +621,8 @@ bool tracker_load(TrackerSong* song, const char* path) {
         rb_strn(&c, inst->name, 16);
         rb_strn(&c, inst->midi_in_device, 128);
         inst->midi_in_channel = rb_u8(&c);
-        for (int s = 0; s < CHAIN_MAX; s++) {
+        int nslots = narrow_chain ? CHAIN_MAX_V1 : CHAIN_MAX;
+        for (int s = 0; s < nslots; s++) {
           ChainSlot* sl = &inst->chain[s];
           rb_strn(&c, sl->unit_id, UNIT_ID_LEN);
           sl->enabled = rb_u8(&c) != 0;
@@ -649,7 +655,7 @@ bool tracker_save_instrument(const TrackerInstrument* inst, const char* path, co
 
   WBuf b = {0};
   wb_raw(&b, "RPTI", 4);
-  wb_u16(&b, 2);  // version 2: UNIT_MAX_PARAMS widened 8->16
+  wb_u16(&b, 3);  // version 3: CHAIN_MAX widened 8->16 (version 2: UNIT_MAX_PARAMS 8->16)
   wb_strn(&b, inst->name, 16);
   wb_strn(&b, inst->midi_in_device, 128);
   wb_u8(&b, inst->midi_in_channel);
@@ -696,12 +702,14 @@ bool tracker_load_instrument(TrackerInstrument* inst, const char* path) {
   }
   uint16_t version = rb_u16(&r);
   bool narrow_params = version < 2;
+  bool narrow_chain = version < 3;
 
   memset(inst, 0, sizeof(*inst));
   rb_strn(&r, inst->name, 16);
   rb_strn(&r, inst->midi_in_device, 128);
   inst->midi_in_channel = rb_u8(&r);
-  for (int s = 0; s < CHAIN_MAX; s++) {
+  int nslots = narrow_chain ? CHAIN_MAX_V1 : CHAIN_MAX;
+  for (int s = 0; s < nslots; s++) {
     ChainSlot* sl = &inst->chain[s];
     rb_strn(&r, sl->unit_id, UNIT_ID_LEN);
     sl->enabled = rb_u8(&r) != 0;

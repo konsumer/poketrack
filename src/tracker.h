@@ -46,8 +46,8 @@ typedef struct {
   PatternStep steps[PATTERN_TRACKS][MAX_PATTERN_STEPS];
 } Pattern;
 
-// One slot in an instrument's unit chain
-#define CHAIN_MAX 8
+// One slot in an instrument's unit chain (0-F)
+#define CHAIN_MAX 16
 
 typedef struct {
   char unit_id[UNIT_ID_LEN];  // "" = empty/unused

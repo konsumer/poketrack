@@ -195,7 +195,7 @@ void screen_instrument_update(UIState* ui) {
 
     if (!edit) {
       if (ui_repeat(BTN_UP))
-        ui->inst_row--;  // DEV → slot 7, CHN → DEV
+        ui->inst_row--;  // DEV → last slot, CHN → DEV
       if (ui->inst_row == INST_MIDI_DEV_ROW && ui_repeat(BTN_DOWN))
         ui->inst_row = INST_MIDI_CH_ROW;
       if (ui->inst_row == INST_MIDI_CH_ROW && ui_repeat(BTN_DOWN))
@@ -532,7 +532,7 @@ void screen_instrument_draw(UIState* ui) {
     bool sel = (s == cur_slot);
     Color bg = cur ? C_CURSOR : (sel ? C_BG_ALT : (s % 2 == 0 ? C_BG_ALT : C_BG));
     DrawRectangle(0, y, PANEL_W - 1, CH_H, bg);
-    DrawText(TextFormat("%d", s), 2, y + (CH_H - FONT_S) / 2, FONT_S, C_HEADER);
+    DrawText(TextFormat("%X", s), 2, y + (CH_H - FONT_S) / 2, FONT_S, C_HEADER);
 
     ChainSlot* sl = &inst->chain[s];
     const UnitDef* def = slot_def(inst, s);
