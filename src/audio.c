@@ -5,22 +5,13 @@
 #include <string.h>
 
 #include "midi_in.h"
+#include "paths.h"
 #include "raylib.h"
 
 // Single lock around all engine state touched by both the audio callback
-// thread and the main thread. Emscripten builds are single-threaded (the
-// stream callback runs on the same thread as everything else), so it's a
-// no-op there.
-#ifdef __EMSCRIPTEN__
-#define AUDIO_LOCK(eng) ((void)0)
-#define AUDIO_UNLOCK(eng) ((void)0)
-#elif defined(_WIN32)
-#define AUDIO_LOCK(eng) EnterCriticalSection(&(eng)->lock)
-#define AUDIO_UNLOCK(eng) LeaveCriticalSection(&(eng)->lock)
-#else
-#define AUDIO_LOCK(eng) pthread_mutex_lock(&(eng)->lock)
-#define AUDIO_UNLOCK(eng) pthread_mutex_unlock(&(eng)->lock)
-#endif
+// thread and the main thread (see lock.h).
+#define AUDIO_LOCK(eng) lock_acquire(&(eng)->lock)
+#define AUDIO_UNLOCK(eng) lock_release(&(eng)->lock)
 
 // Per-instrument RMS for sidechain ducking (NUM_INSTRUMENTS=16)
 float g_sidechain_rms[NUM_INSTRUMENTS] = {0};
@@ -453,20 +444,7 @@ static void fire_step(AudioEngine* eng, int ch, int tr, PatternStep* step) {
 
 void audio_init(AudioEngine* eng, TrackerSong* song) {
   memset(eng, 0, sizeof(AudioEngine));
-#ifndef __EMSCRIPTEN__
-  // Recursive: several main-thread entry points call each other
-  // (e.g. audio_play_pattern -> audio_stop -> audio_midi_kill_all) and all
-  // need to hold the lock across the whole call chain.
-#ifdef _WIN32
-  InitializeCriticalSection(&eng->lock);  // CRITICAL_SECTION is recursive by default
-#else
-  pthread_mutexattr_t attr;
-  pthread_mutexattr_init(&attr);
-  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-  pthread_mutex_init(&eng->lock, &attr);
-  pthread_mutexattr_destroy(&attr);
-#endif
-#endif
+  lock_init(&eng->lock);
   unit_dsp_init();
   eng->song = song;
   g_mod_engine = eng;
@@ -495,22 +473,14 @@ void audio_shutdown(AudioEngine* eng) {
   for (int i = 0; i < NUM_INSTRUMENTS; i++) destroy_shared_states(eng, i);
   for (int v = 0; v < 8; v++) midi_voice_destroy(eng, v);
   AUDIO_UNLOCK(eng);
-#ifndef __EMSCRIPTEN__
-#ifdef _WIN32
-  DeleteCriticalSection(&eng->lock);
-#else
-  pthread_mutex_destroy(&eng->lock);
-#endif
-#endif
+  lock_destroy(&eng->lock);
   memset(eng, 0, sizeof(AudioEngine));
 }
 
-void audio_play_from(AudioEngine* eng, uint16_t start_row) {
-  AUDIO_LOCK(eng);
-  if (eng->playing) {
-    AUDIO_UNLOCK(eng);
-    return;
-  }
+// Rewind every lane to start_row and clear the transport, ready for playback.
+// Shared by all three entry points below and by the offline WAV render; the
+// caller holds the lock and sets eng->playing once it has finished setting up.
+static void playback_reset(AudioEngine* eng, uint16_t start_row) {
   audio_preview_kill(eng);
   for (int ch = 0; ch < SONG_CHANNELS; ch++) {
     eng->cursors[ch].song_row = start_row;
@@ -521,46 +491,27 @@ void audio_play_from(AudioEngine* eng, uint16_t start_row) {
   eng->tick_counter = 0;
   eng->row_tick = 0;
   eng->sample_acc = eng->samples_per_tick;
+}
 
-  preload_all_chan_states(eng);
-
-  eng->playing = true;
+void audio_play_from(AudioEngine* eng, uint16_t start_row) {
+  AUDIO_LOCK(eng);
+  if (!eng->playing) {
+    playback_reset(eng, start_row);
+    preload_all_chan_states(eng);
+    eng->playing = true;
+  }
   AUDIO_UNLOCK(eng);
 }
 
 void audio_play(AudioEngine* eng) {
-  AUDIO_LOCK(eng);
-  if (eng->playing) {
-    AUDIO_UNLOCK(eng);
-    return;
-  }
-  audio_preview_kill(eng);
-  for (int ch = 0; ch < SONG_CHANNELS; ch++) {
-    eng->cursors[ch].song_row = 0;
-    eng->cursors[ch].pattern_step = 0;
-  }
-  memset(eng->active_note, 0, sizeof(eng->active_note));
-  eng->pattern_loop = false;
-  eng->tick_counter = 0;
-  eng->row_tick = 0;
-  eng->sample_acc = eng->samples_per_tick;
-
-  preload_all_chan_states(eng);
-
-  eng->playing = true;
-  AUDIO_UNLOCK(eng);
+  audio_play_from(eng, 0);
 }
 
 void audio_play_pattern(AudioEngine* eng, uint8_t pattern_idx) {
   AUDIO_LOCK(eng);
   if (eng->playing)
     audio_stop(eng);
-  audio_preview_kill(eng);
-  for (int ch = 0; ch < SONG_CHANNELS; ch++) {
-    eng->cursors[ch].song_row = 0;
-    eng->cursors[ch].pattern_step = 0;
-  }
-  memset(eng->active_note, 0, sizeof(eng->active_note));
+  playback_reset(eng, 0);
   eng->loop_pattern_idx = pattern_idx;
   eng->pattern_loop = true;
 
@@ -582,8 +533,6 @@ void audio_play_pattern(AudioEngine* eng, uint8_t pattern_idx) {
       preload_chan_states_for_pattern(eng, ch, pattern_idx);
   }
 
-  eng->tick_counter = 0;
-  eng->sample_acc = eng->samples_per_tick;
   eng->playing = true;
   AUDIO_UNLOCK(eng);
 }
@@ -607,13 +556,7 @@ bool audio_is_playing(const AudioEngine* eng) { return eng->playing; }
 
 void audio_set_save_dir(AudioEngine* eng, const char* save_file_path) {
   AUDIO_LOCK(eng);
-  // GetDirectoryPath() drops the trailing slash for paths with a directory
-  // component, but keeps it for the bare-filename "./" case — normalize so
-  // save_dir always ends in a separator, since callers concatenate directly.
-  const char* dir = GetDirectoryPath(save_file_path);
-  size_t dl = strlen(dir);
-  bool has_sep = dl && (dir[dl - 1] == '/' || dir[dl - 1] == '\\');
-  snprintf(eng->save_dir, sizeof(eng->save_dir), "%s%s", dir, has_sep ? "" : "/");
+  path_dir_of(save_file_path, eng->save_dir, sizeof(eng->save_dir));
   // Destroy all states so they rebuild with new dir via set_data
   for (int ch = 0; ch < SONG_CHANNELS; ch++)
     destroy_lane_states(eng, ch);
@@ -1081,92 +1024,37 @@ void audio_fill_buffer(AudioEngine* eng, float* out, uint32_t frames) {
   AUDIO_UNLOCK(eng);
 }
 
-// Build a canonical 16-bit PCM stereo WAV byte stream from interleaved floats.
-static unsigned char* build_wav16(const float* interleaved, uint32_t frames,
-                                  uint32_t sample_rate, uint32_t channels, int* out_size) {
-  uint32_t data_bytes = frames * channels * 2u;
-  uint32_t total = 44u + data_bytes;
-  unsigned char* buf = (unsigned char*)malloc(total);
-  if (!buf)
-    return NULL;
-
-  uint32_t byte_rate = sample_rate * channels * 2u;
-  uint16_t block_align = (uint16_t)(channels * 2u);
-
-  // Little-endian writers
-  unsigned char* p = buf;
-#define W8(v) (*p++ = (unsigned char)(v))
-#define W16(v)             \
-  do {                     \
-    W8((v) & 0xFF);        \
-    W8(((v) >> 8) & 0xFF); \
-  } while (0)
-#define W32(v)              \
-  do {                      \
-    W8((v) & 0xFF);         \
-    W8(((v) >> 8) & 0xFF);  \
-    W8(((v) >> 16) & 0xFF); \
-    W8(((v) >> 24) & 0xFF); \
-  } while (0)
-  W8('R');
-  W8('I');
-  W8('F');
-  W8('F');
-  W32(36u + data_bytes);
-  W8('W');
-  W8('A');
-  W8('V');
-  W8('E');
-  W8('f');
-  W8('m');
-  W8('t');
-  W8(' ');
-  W32(16u);  // fmt chunk size
-  W16(1u);   // PCM
-  W16(channels);
-  W32(sample_rate);
-  W32(byte_rate);
-  W16(block_align);
-  W16(16u);  // bits per sample
-  W8('d');
-  W8('a');
-  W8('t');
-  W8('a');
-  W32(data_bytes);
-#undef W8
-#undef W16
-#undef W32
-
-  int16_t* samples = (int16_t*)p;
+// Write interleaved stereo floats out as a 16-bit PCM WAV. raylib's ExportWave
+// handles the container; all that's needed here is the float→int16 conversion.
+static bool export_wav16(const char* path, const float* interleaved,
+                         uint32_t frames, uint32_t channels) {
   uint32_t n = frames * channels;
+  int16_t* pcm = (int16_t*)malloc((size_t)n * sizeof(int16_t));
+  if (!pcm)
+    return false;
   for (uint32_t i = 0; i < n; i++) {
     float v = interleaved[i];
-    if (v > 1.0f)
-      v = 1.0f;
-    if (v < -1.0f)
-      v = -1.0f;
-    samples[i] = (int16_t)lrintf(v * 32767.0f);
+    v = v > 1.0f ? 1.0f : (v < -1.0f ? -1.0f : v);
+    pcm[i] = (int16_t)lrintf(v * 32767.0f);
   }
-
-  *out_size = (int)total;
-  return buf;
+  Wave wave = {
+      .frameCount = frames,
+      .sampleRate = AUDIO_SAMPLE_RATE,
+      .sampleSize = 16,
+      .channels = channels,
+      .data = pcm,
+  };
+  bool ok = ExportWave(wave, path);
+  free(pcm);
+  return ok;
 }
 
 bool audio_render_wav(AudioEngine* eng, const char* path) {
   // Set up playback from the top, forcing no-loop so the render terminates.
   AUDIO_LOCK(eng);
-  audio_preview_kill(eng);
   audio_midi_kill_all(eng);
-  for (int ch = 0; ch < SONG_CHANNELS; ch++) {
-    eng->cursors[ch].song_row = 0;
-    eng->cursors[ch].pattern_step = 0;
-  }
-  memset(eng->active_note, 0, sizeof(eng->active_note));
-  eng->pattern_loop = false;
-  eng->tick_counter = 0;
-  eng->row_tick = 0;
   eng->samples_per_tick = calc_samples_per_tick(eng->song->bpm);
-  eng->sample_acc = eng->samples_per_tick;
+  playback_reset(eng, 0);
 
   preload_all_chan_states(eng);
 
@@ -1225,13 +1113,7 @@ bool audio_render_wav(AudioEngine* eng, const char* path) {
     return false;
   }
 
-  int wav_size = 0;
-  unsigned char* wav = build_wav16(data, n_frames, AUDIO_SAMPLE_RATE, 2, &wav_size);
+  bool ok = export_wav16(path, data, n_frames, 2);
   free(data);
-  if (!wav)
-    return false;
-
-  bool ok = SaveFileData(path, wav, wav_size);
-  free(wav);
   return ok;
 }

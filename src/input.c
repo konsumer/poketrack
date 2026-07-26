@@ -1,7 +1,6 @@
 #include "input.h"
 
-#include <ctype.h>
-#include <string.h>
+#include <string.h>  // memcpy in input_update
 
 #include "raylib.h"
 
@@ -53,25 +52,18 @@ static bool prev[BTN_COUNT];
 static bool curr[BTN_COUNT];
 static int hframes[BTN_COUNT];
 
-// Case-insensitive substring search (no strcasestr on MSVC).
-static bool name_has(const char* name, const char* needle) {
-  if (!name)
-    return false;
-  size_t nlen = strlen(needle);
-  for (const char* p = name; *p; p++) {
-    size_t i = 0;
-    while (i < nlen && p[i] && (tolower((unsigned char)p[i]) == tolower((unsigned char)needle[i])))
-      i++;
-    if (i == nlen)
-      return true;
-  }
-  return false;
-}
-
 static bool is_nintendo_layout(int gp) {
   const char* name = GetGamepadName(gp);
-  return name_has(name, "nintendo") || name_has(name, "switch") || name_has(name, "joy-con") ||
-         name_has(name, "joycon");
+  if (!name)
+    return false;
+  // TextToLower returns raylib's single static buffer, so lowercase once and
+  // match the (already lowercase) needles against that.
+  const char* lower = TextToLower(name);
+  static const char* const NEEDLES[] = {"nintendo", "switch", "joy-con", "joycon"};
+  for (size_t i = 0; i < sizeof(NEEDLES) / sizeof(NEEDLES[0]); i++)
+    if (TextFindIndex(lower, NEEDLES[i]) >= 0)
+      return true;
+  return false;
 }
 
 static bool raw_down(TrackerButton btn) {

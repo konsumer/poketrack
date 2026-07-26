@@ -59,24 +59,17 @@ static int status_timer = 0;
 static void set_song_name_from_path(TrackerSong* song, const char* path) {
   strncpy(song->name, GetFileName(path), sizeof(song->name) - 1);
   song->name[sizeof(song->name) - 1] = '\0';
-  strip_ext(song->name, "rpt");
+  strip_ext(song->name, ".rpt");
 }
 
-// Build save filename from song name, defaulting to "song.rpt"
-static void song_save_path(const TrackerSong* song, char* out, size_t sz) {
-  const char* n = (song->name[0] && strcmp(song->name, "UNTITLED") != 0) ? song->name : "song";
-  snprintf(out, sz, "%s", n);
-  strip_ext(out, "rpt");
-  strncat(out, ".rpt", sz - strlen(out) - 1);
-}
-
-// Build export filename from song name, defaulting to "song.wav"
-static void song_export_path(const TrackerSong* song, char* out, size_t sz) {
+// Default filename offered by a save/export dialog: the song's name with the
+// given extension (".rpt", ".wav"), falling back to "song".
+static void song_filename(const TrackerSong* song, const char* ext, char* out, size_t sz) {
   const char* n = (song->name[0] && strcmp(song->name, "UNTITLED") != 0) ? song->name : "song";
   char base[64];
   snprintf(base, sizeof(base), "%s", n);
-  strip_ext(base, "rpt");
-  snprintf(out, sz, "%s.wav", base);
+  strip_ext(base, ".rpt");
+  snprintf(out, sz, "%s%s", base, ext);
 }
 
 void screen_menu_update(UIState* ui) {
@@ -177,7 +170,7 @@ void screen_menu_update(UIState* ui) {
       case MENU_SAVE:
         if (input_pressed(BTN_OK)) {
           char fname[64];
-          song_save_path(ui->song, fname, sizeof(fname));
+          song_filename(ui->song, ".rpt", fname, sizeof(fname));
           g_fb_mode = MENU_FB_SAVE;
           file_browser_save_as("Save song", fname);
         }
@@ -186,7 +179,7 @@ void screen_menu_update(UIState* ui) {
       case MENU_EXPORT:
         if (input_pressed(BTN_OK)) {
           char fname[64];
-          song_export_path(ui->song, fname, sizeof(fname));
+          song_filename(ui->song, ".wav", fname, sizeof(fname));
           g_fb_mode = MENU_FB_EXPORT;
           file_browser_save_as("Export WAV", fname);
         }

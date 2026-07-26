@@ -167,11 +167,9 @@ if(WIN32)
     # NOGDI/NOUSER: raylib declares its own Rectangle/CloseWindow/ShowCursor,
     # which collide with WinGDI/WinUser's identically-named ones — as a
     # compile definition (not a local #define in one header) this applies
-    # no matter which file's <windows.h> include happens to come first in a
-    # translation unit (audio.h's own lock, or dirent.h's FindFirstFile use).
+    # no matter which translation unit pulls in <windows.h> first (lock.h's
+    # CRITICAL_SECTION is the only one left that does).
     target_compile_definitions(${PROJECT_NAME} PRIVATE WIN32_LEAN_AND_MEAN NOGDI NOUSER)
-    # POSIX strcasecmp — MSVC's CRT only has the underscore-prefixed name.
-    target_compile_definitions(${PROJECT_NAME} PRIVATE strcasecmp=_stricmp)
 endif()
 
 if(EMSCRIPTEN)
@@ -250,7 +248,7 @@ else()
     endif()
     if(WIN32)
         target_link_libraries(poketrack_tests PRIVATE winmm)
-        target_compile_definitions(poketrack_tests PRIVATE _USE_MATH_DEFINES WIN32_LEAN_AND_MEAN NOGDI NOUSER strcasecmp=_stricmp)
+        target_compile_definitions(poketrack_tests PRIVATE _USE_MATH_DEFINES WIN32_LEAN_AND_MEAN NOGDI NOUSER)
     endif()
     if(APPLE)
         target_link_libraries(poketrack_tests PRIVATE "-framework CoreMIDI" "-framework CoreFoundation")
@@ -282,7 +280,7 @@ else()
     endif()
     if(WIN32)
         target_link_libraries(theme_shot PRIVATE winmm)
-        target_compile_definitions(theme_shot PRIVATE _USE_MATH_DEFINES WIN32_LEAN_AND_MEAN NOGDI NOUSER strcasecmp=_stricmp)
+        target_compile_definitions(theme_shot PRIVATE _USE_MATH_DEFINES WIN32_LEAN_AND_MEAN NOGDI NOUSER)
     endif()
     if(APPLE)
         target_link_libraries(theme_shot PRIVATE "-framework CoreMIDI" "-framework CoreFoundation")

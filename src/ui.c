@@ -3,11 +3,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #include "bip39_en.h"
 #include "file_browser.h"
 #include "icons.h"
+
+// Virtual screen size everything is laid out against; main.c renders into a
+// texture this size and letterboxes it to the real window. Overridable via
+// --width/--height. Defined here rather than in main.c so the test and
+// theme-shot targets (which build every source except main.c) still link.
+int WIN_W = 480;
+int WIN_H = 320;
 
 void ui_init(UIState* ui, TrackerSong* song, AudioEngine* engine) {
   memset(ui, 0, sizeof(UIState));
@@ -65,6 +71,21 @@ const char* fx_cmd_str(uint8_t fx) {
   }
 }
 
+const char* hex2(uint8_t v) {
+  // Rotating buffers so a couple of results can be live at once, same contract
+  // as raylib's TextFormat — but that one memsets a 1KB buffer and runs
+  // vsnprintf per call, and the pattern grid formats ~2000 bytes per frame.
+  static const char DIGITS[] = "0123456789ABCDEF";
+  static char bufs[4][3];
+  static int idx = 0;
+  char* b = bufs[idx];
+  idx = (idx + 1) & 3;
+  b[0] = DIGITS[v >> 4];
+  b[1] = DIGITS[v & 0xF];
+  b[2] = '\0';
+  return b;
+}
+
 void draw_cell(int x, int y, int w, int h, Color bg, const char* text, int fs, Color fg) {
   if (bg.a > 0)
     DrawRectangle(x, y, w, h, bg);
@@ -73,12 +94,20 @@ void draw_cell(int x, int y, int w, int h, Color bg, const char* text, int fs, C
 }
 
 bool strip_ext(char* name, const char* ext) {
-  size_t l = strlen(name), el = strlen(ext);
-  if (el && l > el + 1 && name[l - el - 1] == '.' && strcasecmp(name + l - el, ext) == 0) {
-    name[l - el - 1] = '\0';
-    return true;
-  }
-  return false;
+  if (!IsFileExtension(name, ext))
+    return false;
+  name[strlen(name) - strlen(ext)] = '\0';
+  return true;
+}
+
+void draw_scrollbar(int x, int y, int w, int h, int scroll, int visible, int total) {
+  if (total <= visible || visible <= 0)
+    return;
+  int th = h * visible / total;
+  if (th < 2)
+    th = 2;
+  DrawRectangle(x, y, w, h, C_DIM);
+  DrawRectangle(x, y + h * scroll / total, w, th, C_HEADER);
 }
 
 const char* truncate_to_width(const char* s, int pw, int fs) {
@@ -196,20 +225,6 @@ void ui_update(UIState* ui) {
   }
 }
 
-static const char* screen_label(AppScreen s) {
-  switch (s) {
-    case SCREEN_SONG:
-      return "SONG";
-    case SCREEN_PATTERN:
-      return "PATTERN";
-    case SCREEN_INSTRUMENT:
-      return "INSTRUMENT";
-    case SCREEN_MENU:
-      return "MENU";
-  }
-  return "";
-}
-
 static void draw_status(UIState* ui) {
   bool edit = input_held(BTN_OK);
   Color bar = edit ? (Color){0x14, 0x0C, 0x28, 0xFF} : C_BG_ALT;
@@ -304,16 +319,11 @@ static int kbm_max_col(const KBModal* kb, int row) {
 }
 
 static void kbm_suggest(KBModal* kb) {
-  static bool seeded = false;
-  if (!seeded) {
-    srand((unsigned int)time(NULL));
-    seeded = true;
-  }
   kb->buf[0] = '\0';
   for (int i = 0; i < kb->suggest_words; i++) {
     if (i)
       strncat(kb->buf, "-", kb->buf_sz - strlen(kb->buf) - 1);
-    strncat(kb->buf, bip39_en[rand() % 2048], kb->buf_sz - strlen(kb->buf) - 1);
+    strncat(kb->buf, bip39_en[GetRandomValue(0, 2047)], kb->buf_sz - strlen(kb->buf) - 1);
   }
 }
 
@@ -431,7 +441,7 @@ void kb_modal_draw(KBModal* kb, const char* label) {
   DrawLine(0, modal_y, WIN_W, modal_y, C_SEP);
 
   int name_y = modal_y + 4;
-  DrawRectangle(0, name_y, WIN_W, CH_H + 2, (Color){0x08, 0x08, 0x28, 0xFF});
+  DrawRectangle(0, name_y, WIN_W, CH_H + 2, C_FB_INPUT_BG);
   DrawText(label, 4, name_y + (CH_H - FONT_S) / 2, FONT_S, C_HEADER);
   const char* nm = kb->buf && kb->buf[0] ? kb->buf : "";
   int nx = MeasureText(label, FONT_S) + 10;

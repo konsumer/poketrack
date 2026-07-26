@@ -106,8 +106,6 @@ bool file_browser_active(void) { return false; }
 #include "theme.h"
 #include "ui.h"
 
-extern int WIN_W;
-extern int WIN_H;
 #define FB_W WIN_W
 #define FB_H WIN_H
 #define FB_FS 10
@@ -140,7 +138,7 @@ typedef struct {
 static FBMode g_mode = FB_NONE;
 static char g_dir[MAX_PATH] = {0};
 static char g_filt[128] = {0};
-static char g_ext[16] = "rpt";
+static char g_ext[16] = ".rpt";  // includes the dot, matching raylib's GetFileExtension
 static Ent g_ents[MAX_ENT];
 static int g_cnt = 0;
 static int g_cur = 0;
@@ -152,7 +150,7 @@ static KBModal g_kb;
 static void fb_fname_confirm(void) {
   if (!g_fname[0])
     return;
-  snprintf(g_result, sizeof(g_result), "%s/%s.%s", g_dir, g_fname, g_ext);
+  snprintf(g_result, sizeof(g_result), "%s/%s%s", g_dir, g_fname, g_ext);
   g_ready = 1;
   g_mode = FB_NONE;
   g_fname_ed = false;
@@ -164,20 +162,16 @@ static void fb_enter_kb(void) {
 
 bool file_browser_active(void) { return g_mode != FB_NONE; }
 
+// g_filt is a space-separated glob list, e.g. "*.sf2 *.SF2". IsFileExtension
+// already matches case-insensitively, so only the ".ext" part matters.
 static bool fmatch(const char* name) {
   if (!g_filt[0])
     return true;
   char buf[128];
-  strncpy(buf, g_filt, sizeof(buf) - 1);
-  char* tok = strtok(buf, " ");
-  while (tok) {
-    if (tok[0] == '*' && tok[1] == '.') {
-      const char* ext = GetFileExtension(name);
-      if (ext && strcasecmp(ext, tok + 1) == 0)
-        return true;
-    }
-    tok = strtok(NULL, " ");
-  }
+  snprintf(buf, sizeof(buf), "%s", g_filt);
+  for (char* tok = strtok(buf, " "); tok; tok = strtok(NULL, " "))
+    if (tok[0] == '*' && IsFileExtension(name, tok + 1))
+      return true;
   return false;
 }
 
@@ -246,13 +240,6 @@ static int vis_rows(void) {
   return (FB_H - 22 - 20) / FB_RH;
 }
 
-static bool fb_rep(TrackerButton b) {
-  if (input_pressed(b))
-    return true;
-  int f = input_held_frames(b);
-  return (f > 20) && (f % 4 == 0);
-}
-
 void file_browser_open(const char* title, const char* filter) {
   (void)title;
   g_mode = FB_OPEN;
@@ -272,10 +259,10 @@ void file_browser_save_as(const char* title, const char* def_name) {
   g_fname_ed = false;
   if (!g_dir[0])
     strncpy(g_dir, GetWorkingDirectory(), MAX_PATH - 1);
-  // Derive extension from def_name (e.g. "song.rpt" → "rpt", "inst.rpti" → "rpti")
+  // Derive extension from def_name (e.g. "song.rpt" → ".rpt", "inst.rpti" → ".rpti")
   const char* ext = def_name ? GetFileExtension(def_name) : NULL;
-  strncpy(g_ext, (ext && ext[1]) ? ext + 1 : "rpt", sizeof(g_ext) - 1);
-  snprintf(g_filt, sizeof(g_filt), "*.%s", g_ext);
+  snprintf(g_ext, sizeof(g_ext), "%s", (ext && ext[1]) ? ext : ".rpt");
+  snprintf(g_filt, sizeof(g_filt), "*%s", g_ext);
   strncpy(g_fname, def_name ? def_name : "song", sizeof(g_fname) - 1);
   strip_ext(g_fname, g_ext);
   scan();
@@ -312,12 +299,12 @@ void file_browser_tick(void) {
   int save_off = (g_mode == FB_SAVE) ? 1 : 0;
   int total = g_cnt + save_off;
 
-  if (fb_rep(BTN_UP) && g_cur > 0) {
+  if (ui_repeat(BTN_UP) && g_cur > 0) {
     g_cur--;
     if (g_cur < g_scr)
       g_scr = g_cur;
   }
-  if (fb_rep(BTN_DOWN) && g_cur < total - 1) {
+  if (ui_repeat(BTN_DOWN) && g_cur < total - 1) {
     g_cur++;
     if (g_cur >= g_scr + vis)
       g_scr = g_cur - vis + 1;
@@ -405,16 +392,7 @@ void file_browser_draw(void) {
     DrawText(label, 6, y + (FB_RH - FB_FS) / 2, FB_FS, cur ? C_WHT : (e->is_dir ? C_DIR : C_FILE));
   }
 
-  // Scrollbar
-  if (total > vis && vis > 0) {
-    int sx = FB_W - 5, sh = list_h, denom = total - vis;
-    DrawRectangle(sx, list_y, 5, sh, C_DIM);
-    int th = (vis * sh) / total;
-    if (th < 6)
-      th = 6;
-    int ty = list_y + (denom > 0 ? (g_scr * (sh - th)) / denom : 0);
-    DrawRectangle(sx, ty, 5, th, C_TXT);
-  }
+  draw_scrollbar(FB_W - 5, list_y, 5, list_h, g_scr, vis, total);
 
   // Bottom bar
   DrawLine(0, bot_y, FB_W, bot_y, C_SEP);

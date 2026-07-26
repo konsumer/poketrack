@@ -1,28 +1,9 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
-#ifndef __EMSCRIPTEN__
-#ifdef _WIN32
-// MSVC has no <pthread.h> (that only worked before via MinGW's winpthreads
-// shim) — use the native Win32 lock instead. NOGDI/NOUSER avoid the classic
-// raylib-vs-windows.h clash (both declare Rectangle/CloseWindow/ShowCursor)
-// in any translation unit that includes both this header and raylib.h.
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOGDI
-#define NOGDI
-#endif
-#ifndef NOUSER
-#define NOUSER
-#endif
-#include <windows.h>
-#else
-#include <pthread.h>
-#endif
-#endif
 
 #include "clap_host.h"
+#include "lock.h"
 #include "tracker.h"
 #include "units/unit_registry.h"
 
@@ -41,14 +22,8 @@ typedef struct {
   // Guards chan_states/preview_states/midi_voices/active_inst against the
   // audio callback thread (audio_fill_buffer) racing with main-thread edits
   // (e.g. swapping an instrument's SF2 file mid-playback destroys/frees the
-  // UnitState the audio thread may be rendering right then).
-#ifndef __EMSCRIPTEN__
-#ifdef _WIN32
-  CRITICAL_SECTION lock;  // recursive by default, matching PTHREAD_MUTEX_RECURSIVE below
-#else
-  pthread_mutex_t lock;
-#endif
-#endif
+  // UnitState the audio thread may be rendering right then). See lock.h.
+  Lock lock;
 
   bool playing;
   bool exporting;              // true = offline WAV render in progress; live callback outputs silence

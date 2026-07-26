@@ -674,7 +674,7 @@ void screen_instrument_draw(UIState* ui) {
           DrawRectangle(bar_x, y + 3, (int)(frac * bar_w), CH_H - 6, cur ? C_NOTE : C_HEADER);
         }
       } else {
-        DrawText(TextFormat("%02X", pv), PANEL_W + 72, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_VEL);
+        DrawText(hex2(pv), PANEL_W + 72, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_VEL);
         float frac = pv / 255.0f;
         DrawRectangle(bar_x, y + 3, bar_w, CH_H - 6, C_DIM);
         DrawRectangle(bar_x, y + 3, (int)(frac * bar_w), CH_H - 6, cur ? C_NOTE : C_HEADER);
@@ -683,7 +683,7 @@ void screen_instrument_draw(UIState* ui) {
       // CC map field (right edge)
       {
         uint8_t cc = (pi < UNIT_MAX_PARAMS) ? sl->cc_map[pi] : 0xFF;
-        const char* cc_str = (cc <= 127) ? TextFormat("%02X", cc) : "--";
+        const char* cc_str = (cc <= 127) ? hex2(cc) : "--";
         bool cc_focused = cur && ui->inst_param_cc_col;
         Color cc_col = cc_focused ? C_NOTE : (cc <= 127 ? C_VEL : C_DIM);
         DrawText(cc_str, WIN_W - 20, y + (CH_H - FONT_S) / 2, FONT_S, cc_col);

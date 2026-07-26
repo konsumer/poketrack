@@ -85,23 +85,20 @@ static char* trim(char* s) {
   return s;
 }
 
+// "RRGGBB" or "#RRGGBB" → opaque Color, via raylib's 0xRRGGBBAA constructor.
 static bool parse_hex_color(const char* s, Color* out) {
   if (s[0] == '#')
     s++;
-  if (strlen(s) != 6)
+  // Exactly six hex digits — strtoul alone would also swallow a leading sign.
+  if (strspn(s, "0123456789abcdefABCDEF") != 6 || s[6] != '\0')
     return false;
-  unsigned int r, g, b;
-  if (sscanf(s, "%2x%2x%2x", &r, &g, &b) != 3)
-    return false;
-  out->r = (unsigned char)r;
-  out->g = (unsigned char)g;
-  out->b = (unsigned char)b;
-  out->a = 0xFF;
+  *out = GetColor((unsigned int)(strtoul(s, NULL, 16) << 8 | 0xFF));
   return true;
 }
 
 static bool parse_bool(const char* s) {
-  return strcasecmp(s, "1") == 0 || strcasecmp(s, "true") == 0 || strcasecmp(s, "yes") == 0;
+  const char* l = TextToLower(s);
+  return TextIsEqual(l, "1") || TextIsEqual(l, "true") || TextIsEqual(l, "yes");
 }
 
 static Color* find_target(const char* key) {
@@ -117,16 +114,24 @@ static Color* find_target(const char* key) {
 }
 
 bool theme_load(const char* path) {
-  FILE* f = fopen(path, "r");
-  if (!f) {
+  char* text = LoadFileText(path);
+  if (!text) {
     fprintf(stderr, "theme: could not open '%s'\n", path);
     return false;
   }
 
   char line[256];
   int lineno = 0;
-  while (fgets(line, sizeof(line), f)) {
+  for (char* cur = text; *cur;) {
     lineno++;
+    char* nl = strchr(cur, '\n');
+    size_t n = nl ? (size_t)(nl - cur) : strlen(cur);
+    if (n >= sizeof(line))
+      n = sizeof(line) - 1;
+    memcpy(line, cur, n);
+    line[n] = '\0';
+    cur = nl ? nl + 1 : cur + strlen(cur);
+
     char* l = trim(line);
     if (l[0] == '\0' || l[0] == '#')
       continue;
@@ -153,7 +158,7 @@ bool theme_load(const char* path) {
       fprintf(stderr, "theme: %s:%d: bad color '%s' for '%s', skipping\n", path, lineno, val, key);
   }
 
-  fclose(f);
+  UnloadFileText(text);
   return true;
 }
 

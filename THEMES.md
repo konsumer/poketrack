@@ -105,7 +105,7 @@ below for how to convert your own.
 | `edit_tag`    | `ffc000`   | "editing" indicator                        |
 | `fb_header`   | `0a0a28`   | file browser header/footer bars            |
 | `fb_dim`      | `404060`   | file browser scrollbar track               |
-| `fb_input_bg` | `080820`   | file browser text-input field background   |
+| `fb_input_bg` | `080820`   | name field background in the on-screen keyboard |
 | `track0`–`track15` | see `src/theme.c` | per-track color in the song/pattern grid |
 
 Controller-button glyphs (A/B/X/Y colors, keycaps) are not themeable —

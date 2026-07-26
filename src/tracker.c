@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "paths.h"
 #include "raylib.h"
 #include "units/unit_registry.h"
 
@@ -176,49 +177,6 @@ void tracker_init(TrackerSong* song) {
 
 void tracker_clear(TrackerSong* song) {
   tracker_init(song);
-}
-
-// ---- path utilities --------------------------------------------------------
-
-// GetDirectoryPath() drops the trailing slash for paths with a directory
-// component, but keeps it for the bare-filename "./" case — normalize so
-// dir always ends in a separator, since callers concatenate directly.
-static void song_dir(const char* file_path, char* dir, int sz) {
-  const char* d = GetDirectoryPath(file_path);
-  size_t dl = strlen(d);
-  bool has_sep = dl && (d[dl - 1] == '/' || d[dl - 1] == '\\');
-  snprintf(dir, sz, "%s%s", d, has_sep ? "" : "/");
-}
-
-static void path_make_relative(const char* base_dir, const char* abs_path,
-                               char* out, int out_sz) {
-  int last_sep = 0;
-  for (int i = 0; base_dir[i] && abs_path[i]; i++) {
-    if (base_dir[i] != abs_path[i])
-      break;
-    if (base_dir[i] == '/')
-      last_sep = i + 1;
-  }
-  if (last_sep == 0) {
-    strncpy(out, abs_path, out_sz - 1);
-    out[out_sz - 1] = '\0';
-    return;
-  }
-  int ups = 0;
-  for (int i = last_sep; base_dir[i]; i++)
-    if (base_dir[i] == '/')
-      ups++;
-  out[0] = '\0';
-  for (int i = 0; i < ups; i++) strncat(out, "../", out_sz - (int)strlen(out) - 1);
-  strncat(out, abs_path + last_sep, out_sz - (int)strlen(out) - 1);
-}
-
-static void path_resolve(const char* base_dir, const char* rel, char* out, int out_sz) {
-  if (rel[0] == '/' || rel[0] == '\\' || (rel[0] && rel[1] == ':'))
-    strncpy(out, rel, out_sz - 1);
-  else
-    snprintf(out, out_sz, "%s%s", base_dir, rel);
-  out[out_sz - 1] = '\0';
 }
 
 // Rewrite the path portion of a ChainSlot data field (handles CLAP "path\tplugin_id").
@@ -400,7 +358,7 @@ static bool inst_has_data(const TrackerInstrument* inst, int idx) {
 
 bool tracker_save(const TrackerSong* song, const char* path) {
   char dir[512];
-  song_dir(path, dir, sizeof(dir));
+  path_dir_of(path, dir, sizeof(dir));
 
   WBuf b = {0};
   // Header: magic + version + num_sections placeholder
@@ -528,7 +486,7 @@ bool tracker_load(TrackerSong* song, const char* path) {
   }
 
   char dir[512];
-  song_dir(path, dir, sizeof(dir));
+  path_dir_of(path, dir, sizeof(dir));
 
   RBuf hdr = {raw, raw + sz};
   uint8_t magic[4];
@@ -635,7 +593,7 @@ bool tracker_load(TrackerSong* song, const char* path) {
           // Resolve relative path
           if (sl->data[0] && sl->data[0] != '/' && sl->data[0] != '\\' &&
               !(sl->data[0] && sl->data[1] == ':'))
-            rewrite_path(sl->data, (int)sizeof(sl->data), dir, path_resolve);
+            rewrite_path(sl->data, (int)sizeof(sl->data), dir, unit_resolve_path);
         }
       }
     }
@@ -648,7 +606,7 @@ bool tracker_load(TrackerSong* song, const char* path) {
 
 bool tracker_save_instrument(const TrackerInstrument* inst, const char* path, const char* save_dir) {
   char dir[512];
-  song_dir(path, dir, sizeof(dir));
+  path_dir_of(path, dir, sizeof(dir));
   // Use save_dir for relativising if path dir is empty (e.g. relative path)
   if (!dir[0] && save_dir && save_dir[0])
     strncpy(dir, save_dir, sizeof(dir) - 1);
@@ -691,7 +649,7 @@ bool tracker_load_instrument(TrackerInstrument* inst, const char* path) {
   }
 
   char dir[512];
-  song_dir(path, dir, sizeof(dir));
+  path_dir_of(path, dir, sizeof(dir));
 
   RBuf r = {raw, raw + sz};
   uint8_t magic[4];
@@ -721,7 +679,7 @@ bool tracker_load_instrument(TrackerInstrument* inst, const char* path) {
     sl->data[dl] = '\0';
     if (sl->data[0] && sl->data[0] != '/' && sl->data[0] != '\\' &&
         !(sl->data[0] && sl->data[1] == ':'))
-      rewrite_path(sl->data, (int)sizeof(sl->data), dir, path_resolve);
+      rewrite_path(sl->data, (int)sizeof(sl->data), dir, unit_resolve_path);
   }
 
   UnloadFileData(raw);

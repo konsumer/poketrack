@@ -5,19 +5,12 @@
 // P2 TRAN: 00=-128st  80=0  FF=+127st (translate incoming note → selects region/key)
 // P3 TUNE: 00=-100c  80=0  FF=+100c (cents fine tune, resamples pitch)
 #include <ctype.h>
-#include <dirent.h>
 #include <math.h>
 #include <raylib.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#ifdef _WIN32
-#include <direct.h>
-#else
-#include <strings.h>
-#endif
 
 #include "miniz.c"  // single-file zip reader, used to load .sfz bundled inside a .zip
 #include "unit.h"
@@ -594,18 +587,10 @@ static void sfz_parse(SfzShared* sh, const char* path) {
   ctx.sh = sh;
   ctx.mode = SFZ_MODE_NONE;
 
-  // Root dir for relative #include, default_path and sample= resolution
-  strncpy(ctx.root_dir, path, sizeof(ctx.root_dir) - 1);
-  char* slash = strrchr(ctx.root_dir, '/');
-#ifdef _WIN32
-  char* bslash = strrchr(ctx.root_dir, '\\');
-  if (bslash > slash)
-    slash = bslash;
-#endif
-  if (slash)
-    *(slash + 1) = '\0';
-  else
-    ctx.root_dir[0] = '\0';
+  // Root dir for relative #include, default_path and sample= resolution.
+  // GetDirectoryPath handles both separators and drops the trailing one;
+  // callers here concatenate directly, so put it back.
+  snprintf(ctx.root_dir, sizeof(ctx.root_dir), "%s/", GetDirectoryPath(path));
 
   region_defaults(&ctx.global_defaults);
   region_defaults(&ctx.group_defaults);
@@ -668,28 +653,6 @@ static void sfz_shared_release(SfzShared* sh) {
 
 // --- .zip bundle support (data field points at a .zip containing an .sfz + samples) ---
 
-static void mkdir_p(const char* dir) {
-  char tmp[SFZ_PATH_LEN];
-  strncpy(tmp, dir, sizeof(tmp) - 1);
-  tmp[sizeof(tmp) - 1] = '\0';
-  for (char* p = tmp + 1; *p; p++) {
-    if (*p == '/') {
-      *p = '\0';
-#ifdef _WIN32
-      _mkdir(tmp);
-#else
-      mkdir(tmp, 0755);
-#endif
-      *p = '/';
-    }
-  }
-#ifdef _WIN32
-  _mkdir(tmp);
-#else
-  mkdir(tmp, 0755);
-#endif
-}
-
 static uint32_t fnv1a(const char* s) {
   uint32_t h = 2166136261u;
   for (; *s; s++) {
@@ -701,16 +664,17 @@ static uint32_t fnv1a(const char* s) {
 
 // Deterministic extraction dir per zip path, so re-loading the same zip reuses it.
 static void zip_cache_dir(const char* zip_path, char* out, int sz) {
-  const char* tmp = getenv("TMPDIR");
-#ifdef _WIN32
-  if (!tmp)
-    tmp = getenv("TEMP");
-  if (!tmp)
-    tmp = getenv("TMP");
-#endif
-  if (!tmp || !tmp[0])
-    tmp = "/tmp";
-  snprintf(out, sz, "%s/rpt_sfz_%08x", tmp, fnv1a(zip_path));
+  // TMPDIR is the POSIX name and wins where it's set; TEMP/TMP are Windows'.
+  // Checking all three unconditionally beats an #ifdef — the Windows names are
+  // simply unset on POSIX, so the first hit is the right one either way.
+  static const char* const VARS[] = {"TMPDIR", "TEMP", "TMP"};
+  const char* tmp = NULL;
+  for (size_t i = 0; i < sizeof(VARS) / sizeof(VARS[0]) && !tmp; i++) {
+    const char* v = getenv(VARS[i]);
+    if (v && v[0])
+      tmp = v;
+  }
+  snprintf(out, sz, "%s/rpt_sfz_%08x", tmp ? tmp : "/tmp", fnv1a(zip_path));
 }
 
 static bool zip_extract_all(const char* zip_path, const char* dest_dir) {
@@ -736,18 +700,12 @@ static bool zip_extract_all(const char* zip_path, const char* dest_dir) {
     snprintf(out_path, sizeof(out_path), "%s/%s", dest_dir, norm);
 
     if (mz_zip_reader_is_file_a_directory(&zip, i)) {
-      mkdir_p(out_path);
+      MakeDirectory(out_path);
       continue;
     }
 
-    char parent[SFZ_PATH_LEN];
-    strncpy(parent, out_path, sizeof(parent) - 1);
-    parent[sizeof(parent) - 1] = '\0';
-    char* slash = strrchr(parent, '/');
-    if (slash) {
-      *slash = '\0';
-      mkdir_p(parent);
-    }
+    if (strchr(norm, '/'))
+      MakeDirectory(GetDirectoryPath(out_path));
     mz_zip_reader_extract_to_file(&zip, i, out_path, 0);
   }
 
@@ -755,55 +713,31 @@ static bool zip_extract_all(const char* zip_path, const char* dest_dir) {
   return true;
 }
 
-// Recursively search dir for the first *.sfz file (zips commonly nest it one folder deep).
-static bool find_sfz_file(const char* dir, char* out, int sz, int depth) {
-  if (depth > 6)
-    return false;
-  DIR* d = opendir(dir);
-  if (!d)
-    return false;
-  struct dirent* de;
-  bool found = false;
-  while (!found && (de = readdir(d))) {
-    if (de->d_name[0] == '.')
-      continue;
-    char full[SFZ_PATH_LEN];
-    snprintf(full, sizeof(full), "%s/%s", dir, de->d_name);
-    struct stat st;
-    if (stat(full, &st))
-      continue;
-    if (S_ISDIR(st.st_mode)) {
-      found = find_sfz_file(full, out, sz, depth + 1);
-    } else {
-      const char* ext = strrchr(de->d_name, '.');
-      if (ext && strcasecmp(ext, ".sfz") == 0) {
-        strncpy(out, full, sz - 1);
-        out[sz - 1] = '\0';
-        found = true;
-      }
-    }
-  }
-  closedir(d);
-  return found;
+// Find the first *.sfz anywhere under dir (zips commonly nest it a folder deep).
+static bool find_sfz_file(const char* dir, char* out, int sz) {
+  FilePathList found = LoadDirectoryFilesEx(dir, ".sfz", true);  // true = recursive
+  bool ok = found.count > 0;
+  if (ok)
+    snprintf(out, sz, "%s", found.paths[0]);
+  UnloadDirectoryFiles(found);
+  return ok;
 }
 
 // If path points at a .zip, extract it (once) to a stable cache dir and return the
 // path to the .sfz file found inside. Returns false (path untouched) for a plain .sfz.
 static bool zip_resolve_sfz(const char* path, char* out, int sz) {
-  const char* ext = strrchr(path, '.');
-  if (!ext || strcasecmp(ext, ".zip") != 0)
+  if (!IsFileExtension(path, ".zip"))
     return false;
 
   char cache_dir[SFZ_PATH_LEN];
   zip_cache_dir(path, cache_dir, sizeof(cache_dir));
 
-  struct stat st;
-  if (stat(cache_dir, &st) != 0) {
-    mkdir_p(cache_dir);
+  if (!DirectoryExists(cache_dir)) {
+    MakeDirectory(cache_dir);
     zip_extract_all(path, cache_dir);
   }
 
-  return find_sfz_file(cache_dir, out, sz, 0);
+  return find_sfz_file(cache_dir, out, sz);
 }
 
 // --- unit lifecycle ---

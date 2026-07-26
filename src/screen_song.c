@@ -6,22 +6,6 @@
 #define SONG_VISIBLE ((WIN_H - SONG_CONTENT_Y - STATUS_H) / CH_H)
 #define CELL_W ((WIN_W - SONG_LABEL_W) / SONG_VIEW_COLS)
 
-static int chan_x(UIState* ui, int ch) {
-  return SONG_LABEL_W + (ch - ui->song_col_scroll) * CELL_W;
-}
-
-static uint8_t next_free_pattern(TrackerSong* song) {
-  bool used[NUM_PATTERNS] = {0};
-  for (int ch = 0; ch < SONG_CHANNELS; ch++)
-    for (int r = 0; r < song->song_len; r++)
-      if (song->patterns[ch][r] != TRACKER_EMPTY)
-        used[song->patterns[ch][r]] = true;
-  for (int i = 0; i < NUM_PATTERNS; i++)
-    if (!used[i])
-      return (uint8_t)i;
-  return TRACKER_EMPTY;
-}
-
 void screen_song_update(UIState* ui) {
   TrackerSong* song = ui->song;
   bool edit = input_held(BTN_OK);
@@ -98,37 +82,23 @@ void screen_song_update(UIState* ui) {
       song->patterns[ui->song_col][ui->song_row] = TRACKER_EMPTY;
 
   } else {
+    // hold-A + dpad sets the pattern number: up/down ±1, right/left ±16.
+    // The first nudge on an empty cell just fills in the last one entered,
+    // rather than jumping away from it.
     uint8_t* cell = &song->patterns[ui->song_col][ui->song_row];
-    if (ui_repeat(BTN_UP)) {
-      if (*cell == TRACKER_EMPTY)
+    static const struct {
+      TrackerButton btn;
+      int delta;
+    } NUDGE[] = {{BTN_UP, +1}, {BTN_DOWN, -1}, {BTN_RIGHT, +16}, {BTN_LEFT, -16}};
+    for (size_t i = 0; i < sizeof(NUDGE) / sizeof(NUDGE[0]); i++) {
+      if (!ui_repeat(NUDGE[i].btn))
+        continue;
+      if (*cell == TRACKER_EMPTY) {
         *cell = ui->last_pattern;
-      else if (*cell < NUM_PATTERNS - 1)
-        (*cell)++;
-      ui->last_pattern = *cell;
-    }
-    if (ui_repeat(BTN_DOWN)) {
-      if (*cell == TRACKER_EMPTY)
-        *cell = ui->last_pattern;
-      else if (*cell > 0)
-        (*cell)--;
-      ui->last_pattern = *cell;
-    }
-    if (ui_repeat(BTN_RIGHT)) {
-      if (*cell == TRACKER_EMPTY)
-        *cell = ui->last_pattern;
-      else if (*cell + 16 > NUM_PATTERNS - 1)
-        *cell = NUM_PATTERNS - 1;
-      else
-        *cell += 16;
-      ui->last_pattern = *cell;
-    }
-    if (ui_repeat(BTN_LEFT)) {
-      if (*cell == TRACKER_EMPTY)
-        *cell = ui->last_pattern;
-      else if (*cell < 16)
-        *cell = 0;
-      else
-        *cell -= 16;
+      } else {
+        int v = (int)*cell + NUDGE[i].delta;
+        *cell = (uint8_t)(v < 0 ? 0 : (v > NUM_PATTERNS - 1 ? NUM_PATTERNS - 1 : v));
+      }
       ui->last_pattern = *cell;
     }
     if (input_pressed(BTN_NO))
@@ -227,7 +197,7 @@ void screen_song_draw(UIState* ui) {
       }
     }
     DrawRectangle(0, y, WIN_W, CH_H, row_bg);
-    DrawText(TextFormat("%02X", (uint8_t)r), 2, y + (CH_H - FONT_S) / 2, FONT_S,
+    DrawText(hex2((uint8_t)r), 2, y + (CH_H - FONT_S) / 2, FONT_S,
              r == ui->song_row ? C_TITLE : C_HEADER);
 
     for (int i = 0; i < SONG_VIEW_COLS; i++) {
@@ -246,7 +216,7 @@ void screen_song_draw(UIState* ui) {
         label = "--";
         text_col = C_DIM;
       } else {
-        label = TextFormat("%02X", pi);
+        label = hex2(pi);
         text_col = CH_COLORS[ch];
       }
       if (playing_cell) {
@@ -263,13 +233,6 @@ void screen_song_draw(UIState* ui) {
     }
   }
 
-  if (total_rows > SONG_VISIBLE) {
-    int bar_h = WIN_H - SONG_CONTENT_Y - STATUS_H;
-    int th = bar_h * SONG_VISIBLE / total_rows;
-    if (th < 2)
-      th = 2;
-    int ty = SONG_CONTENT_Y + bar_h * scroll / total_rows;
-    DrawRectangle(WIN_W - 3, SONG_CONTENT_Y, 3, bar_h, C_DIM);
-    DrawRectangle(WIN_W - 3, ty, 3, th, C_HEADER);
-  }
+  draw_scrollbar(WIN_W - 3, SONG_CONTENT_Y, 3, WIN_H - SONG_CONTENT_Y - STATUS_H,
+                 scroll, SONG_VISIBLE, total_rows);
 }

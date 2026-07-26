@@ -1,24 +1,26 @@
 // Quick sanity tests — run via `make test`.
 // Not a full suite: catches glaring breakage cheaply. Covers the unit
-// registry, song/instrument file round-trips, and a render smoke test
-// (every unit renders finite audio; synth sources actually make sound).
+// registry, song/instrument file round-trips, WAV export, the recursive file
+// scan the SFZ zip loader depends on, and a render smoke test (every unit
+// renders finite audio; synth sources actually make sound).
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "audio.h"
 #include "raylib.h"
 #include "tracker.h"
 #include "units/unit_registry.h"
 
 static int fails = 0;
-#define CHECK(cond, ...)                                \
-  do {                                                  \
-    if (!(cond)) {                                      \
-      fails++;                                          \
-      printf("FAIL %s:%d: ", __FILE__, __LINE__);       \
-      printf(__VA_ARGS__);                              \
-      printf("\n");                                     \
-    }                                                   \
+#define CHECK(cond, ...)                          \
+  do {                                            \
+    if (!(cond)) {                                \
+      fails++;                                    \
+      printf("FAIL %s:%d: ", __FILE__, __LINE__); \
+      printf(__VA_ARGS__);                        \
+      printf("\n");                               \
+    }                                             \
   } while (0)
 
 // TrackerSong is tens of MB — keep test copies off the stack
@@ -116,12 +118,76 @@ static void test_instrument_roundtrip(void) {
   remove("test_inst.rpti");
 }
 
+// The SFZ .zip loader relies on MakeDirectory creating a full nested path and
+// on LoadDirectoryFilesEx(dir, ".sfz", true) finding a file nested inside it
+// (that pairing replaced a hand-rolled mkdir_p + opendir/readdir walk).
+static void test_recursive_find(void) {
+  const char* root = "test_scan";
+  const char* nested = "test_scan/a/b";
+  CHECK(MakeDirectory(nested) == 0, "MakeDirectory failed to create nested path");
+  CHECK(DirectoryExists(nested), "nested dir missing after MakeDirectory");
+  SaveFileText("test_scan/a/b/kit.SFZ", "// sfz");  // uppercase: match must be case-insensitive
+  SaveFileText("test_scan/a/notes.txt", "ignored");
+
+  FilePathList found = LoadDirectoryFilesEx(root, ".sfz", true);
+  CHECK(found.count == 1, "recursive .sfz scan found %u files, want 1", found.count);
+  if (found.count == 1)
+    CHECK(strcmp(GetFileName(found.paths[0]), "kit.SFZ") == 0,
+          "found wrong file: %s", found.paths[0]);
+  UnloadDirectoryFiles(found);
+
+  remove("test_scan/a/b/kit.SFZ");
+  remove("test_scan/a/notes.txt");
+  remove("test_scan/a/b");
+  remove("test_scan/a");
+  remove("test_scan");
+}
+
+// Offline WAV render: a one-note song must come out as a readable 16-bit
+// stereo WAV at the engine sample rate, with actual audio in it.
+static void test_wav_export(void) {
+  static AudioEngine eng;
+  tracker_init(&song_a);
+  song_a.song_len = 1;
+  song_a.loop = false;
+  song_a.patterns[0][0] = 0;
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "osc", 0);
+  Pattern* p = tracker_pattern(&song_a, 0);
+  CHECK(p != NULL, "wav: pattern alloc failed");
+  p->len = 4;
+  p->steps[0][0] = (PatternStep){.note = 60, .velocity = 127, .instrument = 0, .fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
+
+  audio_init(&eng, &song_a);
+  bool ok = audio_render_wav(&eng, "test_export.wav");
+  audio_shutdown(&eng);
+  CHECK(ok, "wav: render failed");
+  if (!ok)
+    return;
+
+  Wave w = LoadWave("test_export.wav");
+  CHECK(w.frameCount > 0, "wav: no frames");
+  CHECK(w.sampleRate == AUDIO_SAMPLE_RATE, "wav: sample rate %u", w.sampleRate);
+  CHECK(w.channels == 2, "wav: channels %u", w.channels);
+  CHECK(w.sampleSize == 16, "wav: sample size %u", w.sampleSize);
+  const int16_t* pcm = (const int16_t*)w.data;
+  bool silent = true;
+  for (unsigned i = 0; pcm && i < w.frameCount * w.channels; i++)
+    if (pcm[i] != 0) {
+      silent = false;
+      break;
+    }
+  CHECK(!silent, "wav: rendered file is all silence");
+  UnloadWave(w);
+  remove("test_export.wav");
+}
+
 static void test_render_smoke(void) {
   const UnitDef* defs[64];
   int n = 0;
   unit_list(defs, &n);
 
-  enum { BLK = 512, BLOCKS = 8 };
+  enum { BLK = 512,
+         BLOCKS = 8 };
   static float in_l[BLK], in_r[BLK], out_l[BLK], out_r[BLK];
 
   for (int i = 0; i < n; i++) {
@@ -177,6 +243,8 @@ int main(void) {
   test_registry();
   test_song_roundtrip();
   test_instrument_roundtrip();
+  test_recursive_find();
+  test_wav_export();
   test_render_smoke();
 
   if (fails) {

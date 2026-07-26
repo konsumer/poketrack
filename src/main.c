@@ -18,9 +18,6 @@
 #include <emscripten/emscripten.h>
 #endif
 
-int WIN_W = 480;
-int WIN_H = 320;
-
 static AudioEngine g_engine;
 static UIState g_ui;
 static AudioStream g_stream;

@@ -94,12 +94,20 @@ void kb_modal_open(KBModal* kb, char* buf, int buf_sz, int suggest_words);
 // Returns true when modal closes (OK/Enter or cancel) — check kb->confirmed for which.
 bool kb_modal_update(KBModal* kb);
 void kb_modal_draw(KBModal* kb, const char* label);
+// Two-digit uppercase hex, no printf. Preferred over TextFormat("%02X", v) in
+// per-cell draw loops — TextFormat clears a 1KB buffer on every call.
+const char* hex2(uint8_t v);
 const char* note_str(uint8_t note);
 const char* fx_cmd_str(uint8_t fx);
 void draw_cell(int x, int y, int w, int h, Color bg, const char* text, int fs, Color fg);
 
-// Strips a trailing ".ext" (case-insensitive, ext without the leading dot)
-// from name in place. Returns true if something was stripped.
+// Vertical scrollbar for a list of `total` rows showing `visible` of them
+// starting at `scroll`. Draws nothing when everything already fits.
+void draw_scrollbar(int x, int y, int w, int h, int scroll, int visible, int total);
+
+// Strips a trailing extension from name in place, if it matches. ext includes
+// the dot and is matched case-insensitively, same as raylib's IsFileExtension.
+// Returns true if something was stripped.
 bool strip_ext(char* name, const char* ext);
 
 // Truncates s to its trailing portion so it fits within pw pixels at font

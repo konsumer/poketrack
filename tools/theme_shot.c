@@ -16,10 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "ui.h"
-
-int WIN_W = 480;
-int WIN_H = 320;
+#include "ui.h"  // provides WIN_W/WIN_H (defined in ui.c)
 
 // TrackerSong is tens of MB — keep it static, not on the stack (see tests/test_main.c).
 static TrackerSong g_song;

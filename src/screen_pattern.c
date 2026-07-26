@@ -4,7 +4,6 @@
 #include "file_browser.h"
 #include "tracker.h"
 #include "ui.h"
-#include "units/unit_registry.h"
 
 static int g_pat_fb_mode = 0;  // 0=none 1=save 2=load
 
@@ -53,6 +52,92 @@ static int track_x(UIState* ui, int tr) {
 
 static uint8_t clamp8(int v) { return v < 0 ? 0 : v > 255 ? 255
                                                           : (uint8_t)v; }
+
+// ── Sub-column accessors ────────────────────────────────────────────────────
+// The 7 sub-columns map onto PatternStep fields; every place that edits, fills
+// or clears a column goes through these instead of repeating the same switch.
+
+// Value byte behind sub-column c (VEL/INST/FXV columns). NULL for NOTE and the
+// two FX-command columns, which have their own stepping rules.
+static uint8_t* col_value(PatternStep* s, int c) {
+  switch (c) {
+    case 1:
+      return &s->velocity;
+    case 2:
+      return &s->instrument;
+    case 4:
+      return &s->fxv[0];
+    case 6:
+      return &s->fxv[1];
+    default:
+      return NULL;
+  }
+}
+
+// FX command byte behind sub-column c (P1/P2), or NULL.
+static uint8_t* col_fx(PatternStep* s, int c) {
+  return c == 3 ? &s->fx[0] : (c == 5 ? &s->fx[1] : NULL);
+}
+
+// The value a column resets to when cleared (B, Y, or a fresh row).
+static uint8_t col_empty(int c) {
+  switch (c) {
+    case 0:
+      return NOTE_EMPTY;
+    case 1:
+      return 0xFF;  // full velocity
+    case 3:
+    case 5:
+      return TRACKER_EMPTY;
+    default:
+      return 0;  // instrument, fx values
+  }
+}
+
+// Every sub-column is one byte wide, so one pointer covers all seven.
+// NULL for a column index outside 0..PT_NCOLS-1.
+static uint8_t* col_ptr(PatternStep* s, int c) {
+  if (c == 0)
+    return &s->note;
+  uint8_t* fx = col_fx(s, c);
+  return fx ? fx : col_value(s, c);
+}
+
+static uint8_t col_get(PatternStep* s, int c) {
+  const uint8_t* p = col_ptr(s, c);
+  return p ? *p : 0;
+}
+
+static void col_set(PatternStep* s, int c, uint8_t v) {
+  uint8_t* p = col_ptr(s, c);
+  if (p)
+    *p = v;
+}
+
+// hold-A + dpad on a plain value column: up/down ±1, right/left ±16.
+static void edit_value(uint8_t* v) {
+  if (ui_repeat(BTN_UP))
+    *v = clamp8(*v + 1);
+  if (ui_repeat(BTN_DOWN))
+    *v = clamp8((int)*v - 1);
+  if (ui_repeat(BTN_RIGHT))
+    *v = clamp8(*v + 16);
+  if (ui_repeat(BTN_LEFT))
+    *v = clamp8((int)*v - 16);
+}
+
+// hold-A + dpad on an FX command column. Unlike a plain value these wrap
+// through TRACKER_EMPTY ("--") at both ends rather than clamping.
+static void edit_fx(uint8_t* f) {
+  if (ui_repeat(BTN_UP))
+    *f = (*f == TRACKER_EMPTY) ? 0 : (*f < 0xFE ? *f + 1 : TRACKER_EMPTY);
+  if (ui_repeat(BTN_DOWN))
+    *f = (*f == TRACKER_EMPTY || *f == 0) ? TRACKER_EMPTY : *f - 1;
+  if (ui_repeat(BTN_RIGHT))
+    *f = (*f == TRACKER_EMPTY) ? 0 : (*f + 16 > 0xFE ? 0xFE : *f + 16);
+  if (ui_repeat(BTN_LEFT))
+    *f = (*f == TRACKER_EMPTY || *f < 16) ? TRACKER_EMPTY : *f - 16;
+}
 
 static void preview(UIState* ui, uint8_t note) {
   audio_preview_kill(ui->engine);
@@ -211,31 +296,8 @@ void screen_pattern_update(UIState* ui) {
       ensure_track_visible(ui);
     }
 
-    if (input_pressed(BTN_NO)) {
-      switch (ui->pattern_col) {
-        case 0:
-          step->note = NOTE_EMPTY;
-          break;
-        case 1:
-          step->velocity = 0xFF;
-          break;
-        case 2:
-          step->instrument = 0;
-          break;
-        case 3:
-          step->fx[0] = TRACKER_EMPTY;
-          break;
-        case 4:
-          step->fxv[0] = 0;
-          break;
-        case 5:
-          step->fx[1] = TRACKER_EMPTY;
-          break;
-        case 6:
-          step->fxv[1] = 0;
-          break;
-      }
-    }
+    if (input_pressed(BTN_NO))
+      col_set(step, ui->pattern_col, col_empty(ui->pattern_col));
 
     ui->ctx_instrument = step->instrument;
 
@@ -283,144 +345,41 @@ void screen_pattern_update(UIState* ui) {
           step->note = NOTE_OFF;
         break;
       }
-      case 1:
-        if (ui_repeat(BTN_UP))
-          step->velocity = clamp8(step->velocity + 1);
-        if (ui_repeat(BTN_DOWN))
-          step->velocity = clamp8((int)step->velocity - 1);
-        if (ui_repeat(BTN_RIGHT))
-          step->velocity = clamp8(step->velocity + 16);
-        if (ui_repeat(BTN_LEFT))
-          step->velocity = clamp8((int)step->velocity - 16);
+      // VEL / INST / FXV: plain ±1 / ±16 value columns.
+      // FX cmd (P1/P2): same dpad layout, but wraps through "--".
+      default: {
+        int c = ui->pattern_col;
+        uint8_t* fx = col_fx(step, c);
+        uint8_t* val = fx ? NULL : col_value(step, c);
+        if (fx)
+          edit_fx(fx);
+        else if (val)
+          edit_value(val);
+        else
+          break;  // column index out of range — nothing to edit
         if (input_pressed(BTN_NO))
-          step->velocity = 0xFF;
+          col_set(step, c, col_empty(c));
+        if (c == 2)
+          ui->ctx_instrument = step->instrument;
         break;
-      case 2:
-        if (ui_repeat(BTN_UP) && step->instrument < NUM_INSTRUMENTS - 1)
-          step->instrument++;
-        if (ui_repeat(BTN_DOWN) && step->instrument > 0)
-          step->instrument--;
-        if (ui_repeat(BTN_RIGHT))
-          step->instrument = clamp8((int)step->instrument + 16);
-        if (ui_repeat(BTN_LEFT))
-          step->instrument = clamp8((int)step->instrument - 16);
-        if (input_pressed(BTN_NO))
-          step->instrument = 0;
-        ui->ctx_instrument = step->instrument;
-        break;
-      case 3: {
-        uint8_t* f = &step->fx[0];
-        if (ui_repeat(BTN_UP))
-          *f = (*f == TRACKER_EMPTY) ? 0 : (*f < 0xFE ? *f + 1 : TRACKER_EMPTY);
-        if (ui_repeat(BTN_DOWN))
-          *f = (*f == TRACKER_EMPTY || *f == 0) ? TRACKER_EMPTY : *f - 1;
-        if (ui_repeat(BTN_RIGHT))
-          *f = (*f == TRACKER_EMPTY) ? 0 : (*f + 16 > 0xFE ? 0xFE : *f + 16);
-        if (ui_repeat(BTN_LEFT))
-          *f = (*f == TRACKER_EMPTY || *f < 16) ? TRACKER_EMPTY : *f - 16;
-        if (input_pressed(BTN_NO))
-          *f = TRACKER_EMPTY;
-        break;
-      }
-      case 4:
-        if (ui_repeat(BTN_UP))
-          step->fxv[0] = clamp8(step->fxv[0] + 1);
-        if (ui_repeat(BTN_DOWN))
-          step->fxv[0] = clamp8((int)step->fxv[0] - 1);
-        if (ui_repeat(BTN_RIGHT))
-          step->fxv[0] = clamp8(step->fxv[0] + 16);
-        if (ui_repeat(BTN_LEFT))
-          step->fxv[0] = clamp8((int)step->fxv[0] - 16);
-        if (input_pressed(BTN_NO))
-          step->fxv[0] = 0;
-        break;
-      case 5: {
-        uint8_t* f = &step->fx[1];
-        if (ui_repeat(BTN_UP))
-          *f = (*f == TRACKER_EMPTY) ? 0 : (*f < 0xFE ? *f + 1 : TRACKER_EMPTY);
-        if (ui_repeat(BTN_DOWN))
-          *f = (*f == TRACKER_EMPTY || *f == 0) ? TRACKER_EMPTY : *f - 1;
-        if (ui_repeat(BTN_RIGHT))
-          *f = (*f == TRACKER_EMPTY) ? 0 : (*f + 16 > 0xFE ? 0xFE : *f + 16);
-        if (ui_repeat(BTN_LEFT))
-          *f = (*f == TRACKER_EMPTY || *f < 16) ? TRACKER_EMPTY : *f - 16;
-        if (input_pressed(BTN_NO))
-          *f = TRACKER_EMPTY;
-        break;
-      }
-      case 6:
-        if (ui_repeat(BTN_UP))
-          step->fxv[1] = clamp8(step->fxv[1] + 1);
-        if (ui_repeat(BTN_DOWN))
-          step->fxv[1] = clamp8((int)step->fxv[1] - 1);
-        if (ui_repeat(BTN_RIGHT))
-          step->fxv[1] = clamp8(step->fxv[1] + 16);
-        if (ui_repeat(BTN_LEFT))
-          step->fxv[1] = clamp8((int)step->fxv[1] - 16);
-        if (input_pressed(BTN_NO))
-          step->fxv[1] = 0;
-        break;
-    }
-  }
-
-  // X = fill current column down the current track; Y = clear it.
-  if (input_pressed(BTN_ALL)) {
-    for (int i = 0; i < pat->len; i++) {
-      PatternStep* s = &pat->steps[ui->pattern_track][i];
-      switch (ui->pattern_col) {
-        case 0:
-          s->note = step->note;
-          if (s->note != NOTE_EMPTY && s->note != NOTE_OFF && !s->velocity)
-            s->velocity = 0xFF;
-          break;
-        case 1:
-          s->velocity = step->velocity;
-          break;
-        case 2:
-          s->instrument = step->instrument;
-          break;
-        case 3:
-          s->fx[0] = step->fx[0];
-          break;
-        case 4:
-          s->fxv[0] = step->fxv[0];
-          break;
-        case 5:
-          s->fx[1] = step->fx[1];
-          break;
-        case 6:
-          s->fxv[1] = step->fxv[1];
-          break;
       }
     }
   }
 
-  if (!file_browser_active() && input_pressed(BTN_NONE)) {
+  // X = fill current column down the current track with the cursor cell's
+  // value; Y = clear it. Both write the same byte to every step.
+  bool fill = input_pressed(BTN_ALL);
+  bool clear = !file_browser_active() && input_pressed(BTN_NONE);
+  if (fill || clear) {
+    int c = ui->pattern_col;
+    uint8_t v = fill ? col_get(step, c) : col_empty(c);
     for (int i = 0; i < pat->len; i++) {
       PatternStep* s = &pat->steps[ui->pattern_track][i];
-      switch (ui->pattern_col) {
-        case 0:
-          s->note = NOTE_EMPTY;
-          break;
-        case 1:
-          s->velocity = 0xFF;
-          break;
-        case 2:
-          s->instrument = 0;
-          break;
-        case 3:
-          s->fx[0] = TRACKER_EMPTY;
-          break;
-        case 4:
-          s->fxv[0] = 0;
-          break;
-        case 5:
-          s->fx[1] = TRACKER_EMPTY;
-          break;
-        case 6:
-          s->fxv[1] = 0;
-          break;
-      }
+      col_set(s, c, v);
+      // A filled note with no velocity would be silent — give it full velocity,
+      // matching what entering the note by hand does.
+      if (fill && c == 0 && v != NOTE_EMPTY && v != NOTE_OFF && !s->velocity)
+        s->velocity = 0xFF;
     }
   }
 }
@@ -433,75 +392,25 @@ static void draw_track_cells(int tx, int y, PatternStep* s, int cur_col) {
     int cx = tx + sub_x(c), cw = sub_w(c);
     if (cur_cell)
       DrawRectangle(cx, y, cw - 1, CH_H, C_CURSOR);
-    Color fc2;
+    // A column reads as blank ("--", dimmed) when the thing it qualifies is
+    // absent: velocity without a note, an fx value without its fx command.
+    bool has_note = (s->note != NOTE_EMPTY && s->note != NOTE_OFF);
+    bool blank = (c == 1 && !has_note) ||
+                 ((c >= 3) && s->fx[(c - 3) / 2] == TRACKER_EMPTY);
+
     const char* txt;
-    char tmp[8];
-    switch (c) {
-      case 0:
-        txt = note_str(s->note);
-        fc2 = s->note == NOTE_EMPTY ? (cur_cell ? C_TEXT : C_DIM)
-              : s->note == NOTE_OFF ? C_NOTE_OFF
-                                    : C_NOTE;
-        break;
-      case 1:
-        if (s->note == NOTE_EMPTY || s->note == NOTE_OFF) {
-          txt = "--";
-          fc2 = cur_cell ? C_TEXT : C_DIM;
-        } else {
-          snprintf(tmp, 8, "%02X", s->velocity);
-          txt = tmp;
-          fc2 = C_VEL;
-        }
-        break;
-      case 2:
-        snprintf(tmp, 8, "%02X", s->instrument);
-        txt = tmp;
-        fc2 = C_INST;
-        break;
-      case 3:
-        if (s->fx[0] == TRACKER_EMPTY) {
-          txt = "--";
-          fc2 = cur_cell ? C_TEXT : C_DIM;
-        } else {
-          snprintf(tmp, 8, "%02X", s->fx[0]);
-          txt = tmp;
-          fc2 = C_FX;
-        }
-        break;
-      case 4:
-        if (s->fx[0] == TRACKER_EMPTY) {
-          txt = "--";
-          fc2 = cur_cell ? C_TEXT : C_DIM;
-        } else {
-          snprintf(tmp, 8, "%02X", s->fxv[0]);
-          txt = tmp;
-          fc2 = C_FX;
-        }
-        break;
-      case 5:
-        if (s->fx[1] == TRACKER_EMPTY) {
-          txt = "--";
-          fc2 = cur_cell ? C_TEXT : C_DIM;
-        } else {
-          snprintf(tmp, 8, "%02X", s->fx[1]);
-          txt = tmp;
-          fc2 = C_FX;
-        }
-        break;
-      case 6:
-        if (s->fx[1] == TRACKER_EMPTY) {
-          txt = "--";
-          fc2 = cur_cell ? C_TEXT : C_DIM;
-        } else {
-          snprintf(tmp, 8, "%02X", s->fxv[1]);
-          txt = tmp;
-          fc2 = C_FX;
-        }
-        break;
-      default:
-        txt = "?";
-        fc2 = C_TEXT;
-        break;
+    Color fc2;
+    if (c == 0) {
+      txt = note_str(s->note);
+      fc2 = s->note == NOTE_EMPTY ? (cur_cell ? C_TEXT : C_DIM)
+            : s->note == NOTE_OFF ? C_NOTE_OFF
+                                  : C_NOTE;
+    } else if (blank) {
+      txt = "--";
+      fc2 = cur_cell ? C_TEXT : C_DIM;
+    } else {
+      txt = hex2(col_get(s, c));
+      fc2 = (c == 1) ? C_VEL : (c == 2 ? C_INST : C_FX);
     }
     DrawText(txt, cx + 2, y + (CH_H - FONT_S) / 2, FONT_S, fc2);
   }
@@ -597,7 +506,7 @@ void screen_pattern_draw(UIState* ui) {
     if (i == playing_step)
       row_bg = C_CURSOR2;
     DrawRectangle(0, y, WIN_W, CH_H, row_bg);
-    DrawText(TextFormat("%02X", (uint8_t)i), 2, y + (CH_H - FONT_S) / 2, FONT_S,
+    DrawText(hex2((uint8_t)i), 2, y + (CH_H - FONT_S) / 2, FONT_S,
              is_cur ? C_TITLE : C_HEADER);
 
     for (int ti = 0; ti < vt; ti++) {
@@ -622,13 +531,6 @@ void screen_pattern_draw(UIState* ui) {
     DrawLine(x, hy, x, grid_bottom, C_SEP);
   }
 
-  if (total_rows > pt_visible) {
-    int bar_h = pt_visible * CH_H;
-    int th = bar_h * pt_visible / total_rows;
-    if (th < 2)
-      th = 2;
-    int ty = PT_CONTENT_Y + bar_h * scroll / total_rows;
-    DrawRectangle(WIN_W - 3, PT_CONTENT_Y, 3, bar_h, C_DIM);
-    DrawRectangle(WIN_W - 3, ty, 3, th, C_HEADER);
-  }
+  draw_scrollbar(WIN_W - 3, PT_CONTENT_Y, 3, pt_visible * CH_H,
+                 scroll, pt_visible, total_rows);
 }

@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "paths.h"  // unit_resolve_path, used by every file-backed unit
+
 #define UNIT_MAX_PARAMS 16
 #define UNIT_ID_LEN 8
 
@@ -84,26 +86,6 @@ typedef struct {
                  const float* in_l, const float* in_r,
                  float* out_l, float* out_r, uint32_t frames);
 } UnitDef;
-
-// Resolve a path relative to base_dir; writes result to out.
-// If path is already absolute, copies as-is.
-static inline void unit_resolve_path(const char* base_dir, const char* path,
-                                     char* out, int sz) {
-  if (!path || !path[0]) {
-    out[0] = '\0';
-    return;
-  }
-#ifdef _WIN32
-  int abs = (path[0] == '/' || path[0] == '\\' || (path[1] == ':'));
-#else
-  int abs = (path[0] == '/');
-#endif
-  if (abs || !base_dir || !base_dir[0]) {
-    snprintf(out, sz, "%s", path);
-  } else {
-    snprintf(out, sz, "%s%s", base_dir, path);
-  }
-}
 
 // Map 00-FF param to float range [lo, hi]
 static inline float p2f(uint8_t p, float lo, float hi) {
