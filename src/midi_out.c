@@ -188,9 +188,18 @@ int midi_out_port_idx(const MidiOut* m) { return m ? m->port_idx : -1; }
 // ============================================================
 #elif defined(_WIN32)
 
+// Order matters and is NOT alphabetical: mmsystem.h uses UINT/DWORD/FAR from
+// windef.h, which only windows.h pulls in. Sorting these swaps them and the
+// MSVC build dies inside mmsyscom.h ("syntax error: identifier 'MMVERSION'").
+// clang-format's Google preset regroups and sorts system includes, so a blank
+// line between them is not enough to hold the order — hence the guard.
+// clang-format off
+#ifndef WIN32_LEAN_AND_MEAN  // already set on the command line; keep the file standalone-compilable
 #define WIN32_LEAN_AND_MEAN
-#include <mmsystem.h>
+#endif
 #include <windows.h>
+#include <mmsystem.h>
+// clang-format on
 
 struct MidiOut {
   HMIDIOUT handle;

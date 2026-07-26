@@ -126,7 +126,10 @@ bool file_browser_active(void) { return false; }
 #define C_WHT C_TITLE
 
 #define MAX_ENT 1024
-#define MAX_PATH 512
+// Not MAX_PATH: windows.h (via dir.h) already defines that as 260, and
+// redefining it both warns and silently changes it for the Win32 calls in
+// this translation unit.
+#define FB_PATH 512
 
 typedef enum { FB_NONE,
                FB_OPEN,
@@ -137,7 +140,7 @@ typedef struct {
 } Ent;
 
 static FBMode g_mode = FB_NONE;
-static char g_dir[MAX_PATH] = {0};
+static char g_dir[FB_PATH] = {0};
 static char g_filt[128] = {0};
 static char g_ext[16] = ".rpt";  // includes the dot, matching raylib's GetFileExtension
 static Ent g_ents[MAX_ENT];
@@ -252,7 +255,7 @@ void file_browser_open(const char* title, const char* filter) {
   g_fname[0] = '\0';
   g_fname_ed = false;
   if (!g_dir[0])
-    strncpy(g_dir, GetWorkingDirectory(), MAX_PATH - 1);
+    strncpy(g_dir, GetWorkingDirectory(), FB_PATH - 1);
   strncpy(g_filt, filter ? filter : "", sizeof(g_filt) - 1);
   scan();
 }
@@ -263,7 +266,7 @@ void file_browser_save_as(const char* title, const char* def_name) {
   g_ready = 0;
   g_fname_ed = false;
   if (!g_dir[0])
-    strncpy(g_dir, GetWorkingDirectory(), MAX_PATH - 1);
+    strncpy(g_dir, GetWorkingDirectory(), FB_PATH - 1);
   // Derive extension from def_name (e.g. "song.rpt" → ".rpt", "inst.rpti" → ".rpti")
   const char* ext = def_name ? GetFileExtension(def_name) : NULL;
   snprintf(g_ext, sizeof(g_ext), "%s", (ext && ext[1]) ? ext : ".rpt");
@@ -324,9 +327,9 @@ void file_browser_tick(void) {
         if (!strcmp(e->name, "..")) {
           go_up();
         } else {
-          char np[MAX_PATH];
+          char np[FB_PATH];
           snprintf(np, sizeof(np), "%s/%s", g_dir, e->name);
-          strncpy(g_dir, np, MAX_PATH - 1);
+          strncpy(g_dir, np, FB_PATH - 1);
           scan();
         }
       } else {
@@ -358,7 +361,7 @@ void file_browser_draw(void) {
   // Title bar (always)
   DrawRectangle(0, 0, FB_W, title_h, C_HDR);
   const char* mstr = (g_mode == FB_SAVE) ? "SAVE" : "LOAD";
-  char hdr[MAX_PATH + 16];
+  char hdr[FB_PATH + 16];
   snprintf(hdr, sizeof(hdr), "%s  %s", mstr, g_dir);
   if (MeasureText(hdr, FB_FS) > FB_W - 8) {
     const char* tail = g_dir + strlen(g_dir);

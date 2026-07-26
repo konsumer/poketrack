@@ -210,9 +210,17 @@ const char* midi_in_port_name(int idx) { return (idx >= 0 && idx < g_in_nports) 
 // ============================================================
 #elif defined(_WIN32)
 
+// Same ordering trap as midi_out.c: mmsystem.h needs windows.h's types first,
+// and clang-format would otherwise sort them the other way round. This file
+// happens to include windows.h near the top already (for the atomics shim), so
+// it survives either way — but don't leave it depending on that.
+// clang-format off
+#ifndef WIN32_LEAN_AND_MEAN  // already set on the command line; keep the file standalone-compilable
 #define WIN32_LEAN_AND_MEAN
-#include <mmsystem.h>
+#endif
 #include <windows.h>
+#include <mmsystem.h>
+// clang-format on
 
 #define MAX_IN_DEVS 32
 static HMIDIIN g_in_handles[MAX_IN_DEVS];
