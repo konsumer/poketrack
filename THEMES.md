@@ -53,23 +53,25 @@ to your project directory as `theme.ptt` and start editing hex values:
 cp examples/theme.ptt theme.ptt
 ```
 
+<img src="./art/themes/theme.png" width="160" alt="built-in default theme" />
+
 ## Gallery
 
 [`examples/themes/`](./examples/themes/) has more to try or pick apart:
 
-| Theme | Look |
-|---|---|
-| `cyber.ptt` | hand-tuned monochrome phosphor green — old hacker-terminal CRT |
-| `lgpt-default.ptt` | LGPT's own default — warm dusty rose |
-| `purple.ptt` | black + hot pink/magenta |
-| `furrest.ptt` | pale pink background, forest green accents |
-| `dustrial.ptt` | near-black, dusty mauve, industrial amber |
-| `sylveon.ptt` | off-white background, soft pink/blue pastel |
-| `minecraft.ptt` | parchment background, orange/red accents |
-| `rain.ptt` | dark olive, muted teal-green |
-| `808.ptt` | charcoal, orange + yellow accents |
-| `wavetable.ptt` | near-black, warm orange/teal |
-| `greeny.ptt` | teal background, lime/hot-pink accents |
+| Theme | Look | Preview |
+|---|---|---|
+| `cyber.ptt` | hand-tuned monochrome phosphor green — old hacker-terminal CRT | <img src="./art/themes/cyber.png" width="160" alt="cyber theme" /> |
+| `lgpt-default.ptt` | LGPT's own default — warm dusty rose | <img src="./art/themes/lgpt-default.png" width="160" alt="lgpt-default theme" /> |
+| `purple.ptt` | black + hot pink/magenta | <img src="./art/themes/purple.png" width="160" alt="purple theme" /> |
+| `furrest.ptt` | pale pink background, forest green accents | <img src="./art/themes/furrest.png" width="160" alt="furrest theme" /> |
+| `dustrial.ptt` | near-black, dusty mauve, industrial amber | <img src="./art/themes/dustrial.png" width="160" alt="dustrial theme" /> |
+| `sylveon.ptt` | off-white background, soft pink/blue pastel | <img src="./art/themes/sylveon.png" width="160" alt="sylveon theme" /> |
+| `minecraft.ptt` | parchment background, orange/red accents | <img src="./art/themes/minecraft.png" width="160" alt="minecraft theme" /> |
+| `rain.ptt` | dark olive, muted teal-green | <img src="./art/themes/rain.png" width="160" alt="rain theme" /> |
+| `808.ptt` | charcoal, orange + yellow accents | <img src="./art/themes/808.png" width="160" alt="808 theme" /> |
+| `wavetable.ptt` | near-black, warm orange/teal | <img src="./art/themes/wavetable.png" width="160" alt="wavetable theme" /> |
+| `greeny.ptt` | teal background, lime/hot-pink accents | <img src="./art/themes/greeny.png" width="160" alt="greeny theme" /> |
 
 ```
 poketrack --theme examples/themes/cyber.ptt
@@ -138,18 +140,3 @@ Since LGPT only has 4 colors and poketrack has more roles, some roles
 collapse onto the same anchor color (e.g. there's no dedicated LGPT
 "note-off" color, so it reuses `HICOLOR2`). Edit the generated `.ptt` by
 hand afterwards if you want to split any of those apart.
-
-This is what the premade themes (in [examples/themes](./examples/themes)) looks like:
-
-- default ![default](./art/themes/theme.png)
-- 808 ![808](./art/themes/808.png)
-- cyber ![cyber](./art/themes/cyber.png)
-- dustrial ![dustrial](./art/themes/dustrial.png)
-- furrest ![furrest](./art/themes/furrest.png)
-- greeny ![greeny](./art/themes/greeny.png)
-- lgpt-default ![lgpt-default](./art/themes/lgpt-default.png)
-- minecraft ![minecraft](./art/themes/minecraft.png)
-- purple ![purple](./art/themes/purple.png)
-- rain ![rain](./art/themes/rain.png)
-- sylveon ![sylveon](./art/themes/sylveon.png)
-- wavetable ![wavetable](./art/themes/wavetable.png)

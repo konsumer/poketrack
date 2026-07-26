@@ -105,3 +105,27 @@ bool strip_ext(char* name, const char* ext);
 // Truncates s to its trailing portion so it fits within pw pixels at font
 // size fs (keeps the tail, e.g. for a long file path — no ellipsis).
 const char* truncate_to_width(const char* s, int pw, int fs);
+
+// Shared scrollable list-picker overlay (CLAP param picker, device picker,
+// MIDI-in device picker all use this — same nav/scroll/highlight, different
+// row content and confirm actions).
+typedef enum { PICKER_NONE,
+               PICKER_CONFIRMED,
+               PICKER_CANCELLED } PickerResult;
+
+// Up/down repeat-nav + OK/NO detection, clamping *row to [0, total-1].
+// Caller applies its own confirm/cancel side effects and clears its own
+// active flag based on the result.
+PickerResult list_picker_nav(int* row, int total);
+
+typedef const char* (*PickerLabelFn)(void* ctx, int idx);
+// Optional (may be NULL to use the default cur ? C_TITLE : C_TEXT) — returns
+// the row's final color, already resolved for whether it's the cursor row.
+typedef Color (*PickerColorFn)(void* ctx, int idx, bool cur);
+
+// Draws a scrollable list-picker overlay at (x, y, w, h): title bar + hint
+// line, then rows scrolled to keep `row` visible. empty_msg (may be NULL) is
+// shown instead of the list when total == 0.
+void list_picker_draw(int x, int y, int w, int h, const char* title,
+                      int row, int total, PickerLabelFn get_label,
+                      PickerColorFn get_color, const char* empty_msg, void* ctx);

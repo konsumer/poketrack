@@ -88,6 +88,47 @@ const char* truncate_to_width(const char* s, int pw, int fs) {
   return (len > max_chars) ? s + (len - max_chars) : s;
 }
 
+PickerResult list_picker_nav(int* row, int total) {
+  if (ui_repeat(BTN_UP) && *row > 0)
+    (*row)--;
+  if (ui_repeat(BTN_DOWN) && *row < total - 1)
+    (*row)++;
+  if (input_pressed(BTN_OK))
+    return PICKER_CONFIRMED;
+  if (input_pressed(BTN_NO))
+    return PICKER_CANCELLED;
+  return PICKER_NONE;
+}
+
+void list_picker_draw(int x, int y, int w, int h, const char* title,
+                      int row, int total, PickerLabelFn get_label,
+                      PickerColorFn get_color, const char* empty_msg, void* ctx) {
+  DrawRectangle(x, y, w, h, C_BG);
+  DrawText(TextFormat("%s  [A]=select  [B]=cancel", title),
+           x + 4, y + (CH_H - FONT_S) / 2, FONT_S - 1, C_HEADER);
+  DrawLine(x, y + CH_H, x + w, y + CH_H, C_SEP);
+
+  if (total == 0) {
+    if (empty_msg)
+      DrawText(empty_msg, x + 4, y + CH_H + (CH_H - FONT_S) / 2, FONT_S, C_DIM);
+    return;
+  }
+
+  int visible = (h - CH_H) / CH_H;
+  int scroll = 0;
+  if (row >= visible)
+    scroll = row - visible + 1;
+
+  for (int i = 0; i < visible && (scroll + i) < total; i++) {
+    int idx = scroll + i;
+    int py = y + CH_H + i * CH_H;
+    bool cur = (idx == row);
+    DrawRectangle(x, py, w, CH_H, cur ? C_CURSOR : (i % 2 == 0 ? C_BG_ALT : C_BG));
+    Color tc = get_color ? get_color(ctx, idx, cur) : (cur ? C_TITLE : C_TEXT);
+    DrawText(get_label(ctx, idx), x + 4, py + (CH_H - FONT_S) / 2, FONT_S, tc);
+  }
+}
+
 // Forward declarations
 void screen_song_update(UIState* ui);
 void screen_song_draw(UIState* ui);

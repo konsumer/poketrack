@@ -50,6 +50,39 @@ static uint8_t param_get_default(const UnitDef* def, UnitState* state, int param
   return param < UNIT_MAX_PARAMS ? def->param_defaults[param] : 0;
 }
 
+// ---- Shared list-picker label/color callbacks (see ui.h list_picker_draw) --
+
+typedef struct {
+  const UnitDef* def;
+  UnitState* state;
+} DefPickerCtx;
+
+static const char* clap_picker_label(void* ctx_, int idx) {
+  DefPickerCtx* ctx = ctx_;
+  static char buf[32];
+  const char* pname = ctx->def->picker_name(ctx->state, idx);
+  snprintf(buf, sizeof(buf), "%d %.20s", idx, pname ? pname : "");
+  return buf;
+}
+
+static const char* dev_picker_label(void* ctx_, int idx) {
+  DefPickerCtx* ctx = ctx_;
+  const char* dname = ctx->def->dev_picker_name(ctx->state, idx);
+  return dname ? dname : "(unnamed)";
+}
+
+static const char* midi_in_picker_label(void* ctx, int idx) {
+  (void)ctx;
+  return (idx == 0) ? "NONE" : midi_in_port_name(idx - 1);
+}
+
+static Color midi_in_picker_color(void* ctx, int idx, bool cur) {
+  (void)ctx;
+  if (cur)
+    return C_TITLE;
+  return (idx == 0) ? C_DIM : C_TEXT;
+}
+
 static void param_set(UIState* ui, const UnitDef* def, UnitState* state,
                       ChainSlot* sl, int slot, int param, uint8_t val) {
   if (def->set_param_val && state) {
@@ -91,11 +124,8 @@ void screen_instrument_update(UIState* ui) {
   // ---- MIDI-in device picker overlay ----
   if (ui->midi_in_picker_active) {
     int total = midi_in_port_count() + 1;  // +1 for NONE at index 0
-    if (ui_repeat(BTN_UP) && ui->midi_in_picker_row > 0)
-      ui->midi_in_picker_row--;
-    if (ui_repeat(BTN_DOWN) && ui->midi_in_picker_row < total - 1)
-      ui->midi_in_picker_row++;
-    if (input_pressed(BTN_OK)) {
+    PickerResult r = list_picker_nav(&ui->midi_in_picker_row, total);
+    if (r == PICKER_CONFIRMED) {
       if (ui->midi_in_picker_row == 0) {
         inst->midi_in_device[0] = '\0';
       } else {
@@ -104,9 +134,9 @@ void screen_instrument_update(UIState* ui) {
         inst->midi_in_device[sizeof(inst->midi_in_device) - 1] = '\0';
       }
       ui->midi_in_picker_active = false;
-    }
-    if (input_pressed(BTN_NO))
+    } else if (r == PICKER_CANCELLED) {
       ui->midi_in_picker_active = false;
+    }
     return;
   }
 
@@ -268,30 +298,24 @@ void screen_instrument_update(UIState* ui) {
     // Device picker mode: select MIDI/audio device
     if (ui->dev_picker_active) {
       int total = def->dev_picker_count(state);
-      if (ui_repeat(BTN_UP) && ui->dev_picker_row > 0)
-        ui->dev_picker_row--;
-      if (ui_repeat(BTN_DOWN) && ui->dev_picker_row < total - 1)
-        ui->dev_picker_row++;
-      if (input_pressed(BTN_OK)) {
+      PickerResult r = list_picker_nav(&ui->dev_picker_row, total);
+      if (r == PICKER_CONFIRMED) {
         def->dev_picker_set(state, ui->dev_picker_row);
         if (def->sync_to_data)
           def->sync_to_data(state, sl->data, sizeof(sl->data));
         audio_rebuild_instrument(ui->engine, (uint8_t)ui->ctx_instrument);
         ui->dev_picker_active = false;
-      }
-      if (input_pressed(BTN_NO))
+      } else if (r == PICKER_CANCELLED) {
         ui->dev_picker_active = false;
+      }
       return;
     }
 
     // Picker mode: browse all plugin params
     if (ui->clap_picker_active) {
       int total = def->picker_count(state);
-      if (ui_repeat(BTN_UP) && ui->clap_picker_row > 0)
-        ui->clap_picker_row--;
-      if (ui_repeat(BTN_DOWN) && ui->clap_picker_row < total - 1)
-        ui->clap_picker_row++;
-      if (input_pressed(BTN_OK)) {
+      PickerResult r = list_picker_nav(&ui->clap_picker_row, total);
+      if (r == PICKER_CONFIRMED) {
         int before = def->dyn_num_params ? def->dyn_num_params(state) : 0;
         def->picker_add(state, ui->clap_picker_row);
         if (def->sync_to_data)
@@ -300,9 +324,9 @@ void screen_instrument_update(UIState* ui) {
         if (after > before)
           ui->inst_row = INST_PARAM_BASE + after;
         ui->clap_picker_active = false;
-      }
-      if (input_pressed(BTN_NO))
+      } else if (r == PICKER_CANCELLED) {
         ui->clap_picker_active = false;
+      }
       return;
     }
 
@@ -717,94 +741,32 @@ void screen_instrument_draw(UIState* ui) {
     }
 
     // Picker overlays
+    int overlay_y = INST_CONTENT_Y;
+    int overlay_h = WIN_H - STATUS_H - overlay_y;
     if (ui->clap_picker_active && has_picker_draw) {
-      int total = def->picker_count(cur_state);
-      int overlay_x = PANEL_W, overlay_y = INST_CONTENT_Y;
-      int overlay_w = WIN_W - PANEL_W, overlay_h = WIN_H - STATUS_H - overlay_y;
-      DrawRectangle(overlay_x, overlay_y, overlay_w, overlay_h, C_BG);
+      DefPickerCtx ctx = {def, cur_state};
       const char* ptitle = (def->picker_title && def->picker_title[0]) ? def->picker_title : "ADD PARAM";
-      DrawText(TextFormat("%s  [A]=select  [B]=cancel", ptitle),
-               overlay_x + 4, overlay_y + (CH_H - FONT_S) / 2, FONT_S - 1, C_HEADER);
-      DrawLine(overlay_x, overlay_y + CH_H, WIN_W, overlay_y + CH_H, C_SEP);
-
-      int visible = (overlay_h - CH_H) / CH_H;
-      int scroll = 0;
-      if (ui->clap_picker_row >= visible)
-        scroll = ui->clap_picker_row - visible + 1;
-
-      for (int i = 0; i < visible && (scroll + i) < total; i++) {
-        int pi = scroll + i;
-        int py = overlay_y + CH_H + i * CH_H;
-        bool cur = (pi == ui->clap_picker_row);
-        DrawRectangle(overlay_x, py, overlay_w, CH_H,
-                      cur ? C_CURSOR : (i % 2 == 0 ? C_BG_ALT : C_BG));
-        const char* pname = def->picker_name(cur_state, pi);
-        char label[32];
-        snprintf(label, sizeof(label), "%d %.20s", pi, pname ? pname : "");
-        DrawText(label, overlay_x + 4, py + (CH_H - FONT_S) / 2, FONT_S,
-                 cur ? C_TITLE : C_TEXT);
-      }
+      list_picker_draw(PANEL_W, overlay_y, WIN_W - PANEL_W, overlay_h, ptitle,
+                       ui->clap_picker_row, def->picker_count(cur_state),
+                       clap_picker_label, NULL, NULL, &ctx);
     }
 
     if (ui->dev_picker_active && has_dev_picker_draw) {
-      int total = def->dev_picker_count(cur_state);
-      int overlay_x = PANEL_W, overlay_y = INST_CONTENT_Y;
-      int overlay_w = WIN_W - PANEL_W, overlay_h = WIN_H - STATUS_H - overlay_y;
-      DrawRectangle(overlay_x, overlay_y, overlay_w, overlay_h, C_BG);
+      DefPickerCtx ctx = {def, cur_state};
       const char* dtitle = (def->dev_picker_title && def->dev_picker_title[0])
                                ? def->dev_picker_title
                                : "SELECT DEVICE";
-      DrawText(TextFormat("%s  [A]=select  [B]=cancel", dtitle),
-               overlay_x + 4, overlay_y + (CH_H - FONT_S) / 2, FONT_S - 1, C_HEADER);
-      DrawLine(overlay_x, overlay_y + CH_H, WIN_W, overlay_y + CH_H, C_SEP);
-
-      int visible = (overlay_h - CH_H) / CH_H;
-      int scroll = 0;
-      if (ui->dev_picker_row >= visible)
-        scroll = ui->dev_picker_row - visible + 1;
-
-      for (int i = 0; i < visible && (scroll + i) < total; i++) {
-        int pi = scroll + i;
-        int py = overlay_y + CH_H + i * CH_H;
-        bool cur = (pi == ui->dev_picker_row);
-        DrawRectangle(overlay_x, py, overlay_w, CH_H,
-                      cur ? C_CURSOR : (i % 2 == 0 ? C_BG_ALT : C_BG));
-        const char* dname = def->dev_picker_name(cur_state, pi);
-        DrawText(dname ? dname : "(unnamed)",
-                 overlay_x + 4, py + (CH_H - FONT_S) / 2, FONT_S,
-                 cur ? C_TITLE : C_TEXT);
-      }
-      if (total == 0)
-        DrawText("no devices found", overlay_x + 4, overlay_y + CH_H + (CH_H - FONT_S) / 2, FONT_S, C_DIM);
+      list_picker_draw(PANEL_W, overlay_y, WIN_W - PANEL_W, overlay_h, dtitle,
+                       ui->dev_picker_row, def->dev_picker_count(cur_state),
+                       dev_picker_label, NULL, "no devices found", &ctx);
     }
   }
 
 draw_overlays:
   // MIDI-in device picker overlay (full-panel)
   if (ui->midi_in_picker_active) {
-    int total = midi_in_port_count();
-    int overlay_x = 0, overlay_y = INST_CONTENT_Y;
-    int overlay_w = WIN_W, overlay_h = WIN_H - STATUS_H - overlay_y;
-    DrawRectangle(overlay_x, overlay_y, overlay_w, overlay_h, C_BG);
-    DrawText("MIDI IN DEVICE  [A]=select  [B]=cancel",
-             overlay_x + 4, overlay_y + (CH_H - FONT_S) / 2, FONT_S - 1, C_HEADER);
-    DrawLine(overlay_x, overlay_y + CH_H, WIN_W, overlay_y + CH_H, C_SEP);
-
-    int total_draw = midi_in_port_count() + 1;
-    int visible = (overlay_h - CH_H) / CH_H;
-    int scroll = 0;
-    if (ui->midi_in_picker_row >= visible)
-      scroll = ui->midi_in_picker_row - visible + 1;
-
-    for (int i = 0; i < visible && (scroll + i) < total_draw; i++) {
-      int pi = scroll + i;
-      int py = overlay_y + CH_H + i * CH_H;
-      bool cur = (pi == ui->midi_in_picker_row);
-      DrawRectangle(overlay_x, py, overlay_w, CH_H,
-                    cur ? C_CURSOR : (i % 2 == 0 ? C_BG_ALT : C_BG));
-      const char* label = (pi == 0) ? "NONE" : midi_in_port_name(pi - 1);
-      DrawText(label, overlay_x + 4, py + (CH_H - FONT_S) / 2, FONT_S,
-               cur ? C_TITLE : (pi == 0 ? C_DIM : C_TEXT));
-    }
+    list_picker_draw(0, INST_CONTENT_Y, WIN_W, WIN_H - STATUS_H - INST_CONTENT_Y,
+                     "MIDI IN DEVICE", ui->midi_in_picker_row, midi_in_port_count() + 1,
+                     midi_in_picker_label, midi_in_picker_color, NULL, NULL);
   }
 }
