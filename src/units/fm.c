@@ -38,40 +38,8 @@ struct UnitState {
 };
 
 static float env_tick(FMVoice* v, float dt, float atk, float dcy, float sus, float rel) {
-  switch (v->env_stage) {
-    case 0:
-      v->env_time += dt;
-      v->env_level = (atk > 0) ? v->env_time / atk : 1.0f;
-      if (v->env_level >= 1.0f) {
-        v->env_level = 1.0f;
-        v->env_stage = 1;
-        v->env_time = 0;
-      }
-      break;
-    case 1:
-      v->env_time += dt;
-      v->env_level = 1.0f - (1.0f - sus) * (v->env_time / dcy);
-      if (v->env_time >= dcy) {
-        v->env_level = sus;
-        v->env_stage = 2;
-      }
-      break;
-    case 2:
-      v->env_level = sus;
-      break;
-    case 3:
-      v->env_time += dt;
-      v->env_level -= (sus > 0 ? sus : 0.5f) / rel * dt;
-      if (v->env_level <= 0) {
-        v->env_level = 0;
-        v->env_stage = 4;
-        v->active = false;
-      }
-      break;
-    default:
-      return 0;
-  }
-  return v->env_level;
+  return unit_env_tick(&v->active, &v->env_level, &v->env_time, &v->env_stage,
+                        dt, atk, dcy, sus, rel);
 }
 
 static UnitState* fm_create(float sr) {
@@ -151,12 +119,8 @@ static void fm_render(UnitState* s, const uint8_t* p,
       float car = unit_sin(v->car_phase + depth * mod_out);
       mix += car * env * v->vel;
 
-      v->mod_phase += v->mod_freq * dt;
-      if (v->mod_phase >= 1.0f)
-        v->mod_phase -= 1.0f;
-      v->car_phase += v->car_freq * dt;
-      if (v->car_phase >= 1.0f)
-        v->car_phase -= 1.0f;
+      v->mod_phase = unit_phase_advance(v->mod_phase, v->mod_freq * dt);
+      v->car_phase = unit_phase_advance(v->car_phase, v->car_freq * dt);
     }
     mix = unit_softclip(mix * 0.5f) * vol;
     out_l[f] += mix;

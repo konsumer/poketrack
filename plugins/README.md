@@ -8,7 +8,7 @@ There's no GUI support (CLAP plugin UIs aren't hosted), so you map plugin params
 
 Native `.clap` plugins (the traditional OS-loaded kind) aren't supported — only WCLAP `.wasm` files.
 
-Here are soem examples hoste elsewhere:
+Here are some examples hosted elsewhere:
 
 - [as-clap](https://github.com/WebCLAP/as-clap) — WCLAP written in AssemblyScript (gain + synth example)
 - [clack](https://github.com/prokopyl/clack) — Rust CLAP host/plugin library (gain + polysynth examples)

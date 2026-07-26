@@ -8,7 +8,7 @@
 # breaks `cmake --build` in CI with a bogus "Permission denied".
 SHELL := /bin/bash
 
-.PHONY: help build build-web clean serve format format-check test run plugins
+.PHONY: help build build-web clean serve format format-check test run plugins theme-shots
 .DEFAULT_GOAL := help
 
 help: ## Show this help
@@ -47,6 +47,13 @@ format: ## Format all C/H source files with clang-format
 
 format-check: ## Fail if any source file is not clang-format clean (for CI)
 	find src -name "*.c" -o -name "*.h" | xargs clang-format --dry-run --Werror
+
+theme-shots: ## Render a PNG preview of every examples/themes/*.ptt into art/themes/
+	cmake -B build -DCMAKE_BUILD_TYPE=Release
+	cmake --build build --parallel --target theme_shot
+	mkdir -p art/themes
+	for f in examples/themes/*.ptt; do ./build/theme_shot "$$f" art/themes; done
+	./build/theme_shot "examples/theme.ptt" art/themes
 
 plugins: ## Build bundled example WCLAP plugins into examples/plugins/
 	cd plugins/karplus && [ -d node_modules ] || npm install

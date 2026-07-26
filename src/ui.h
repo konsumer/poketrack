@@ -97,3 +97,11 @@ void kb_modal_draw(KBModal* kb, const char* label);
 const char* note_str(uint8_t note);
 const char* fx_cmd_str(uint8_t fx);
 void draw_cell(int x, int y, int w, int h, Color bg, const char* text, int fs, Color fg);
+
+// Strips a trailing ".ext" (case-insensitive, ext without the leading dot)
+// from name in place. Returns true if something was stripped.
+bool strip_ext(char* name, const char* ext);
+
+// Truncates s to its trailing portion so it fits within pw pixels at font
+// size fs (keeps the tail, e.g. for a long file path — no ellipsis).
+const char* truncate_to_width(const char* s, int pw, int fs);

@@ -91,17 +91,12 @@ int midi_out_port_idx(const MidiOut* m) { return m ? m->port_idx : -1; }
 // ============================================================
 #elif defined(__linux__) && defined(HAVE_ALSA)
 
-#include <alsa/asoundlib.h>
+#include "midi_alsa_common.h"
 
 static snd_seq_t* g_seq = NULL;
 static int g_myport = -1;
 
 #define MAX_PORTS 64
-typedef struct {
-  int client;
-  int port;
-  char name[256];
-} AlsaPort;
 static AlsaPort g_ports[MAX_PORTS];
 static int g_nports = 0;
 
@@ -112,34 +107,7 @@ struct MidiOut {
 };
 
 static void refresh_ports(void) {
-  g_nports = 0;
-  if (!g_seq)
-    return;
-  snd_seq_client_info_t* ci;
-  snd_seq_port_info_t* pi;
-  snd_seq_client_info_alloca(&ci);
-  snd_seq_port_info_alloca(&pi);
-  snd_seq_client_info_set_client(ci, -1);
-  while (snd_seq_query_next_client(g_seq, ci) >= 0 && g_nports < MAX_PORTS) {
-    int c = snd_seq_client_info_get_client(ci);
-    if (c == 0 || c == snd_seq_client_id(g_seq))
-      continue;
-    snd_seq_port_info_set_client(pi, c);
-    snd_seq_port_info_set_port(pi, -1);
-    while (snd_seq_query_next_port(g_seq, pi) >= 0 && g_nports < MAX_PORTS) {
-      unsigned int caps = snd_seq_port_info_get_capability(pi);
-      if (!(caps & SND_SEQ_PORT_CAP_WRITE))
-        continue;
-      if (caps & SND_SEQ_PORT_CAP_NO_EXPORT)
-        continue;
-      g_ports[g_nports].client = c;
-      g_ports[g_nports].port = snd_seq_port_info_get_port(pi);
-      snprintf(g_ports[g_nports].name, 256, "%s:%s",
-               snd_seq_client_info_get_name(ci),
-               snd_seq_port_info_get_name(pi));
-      g_nports++;
-    }
-  }
+  g_nports = alsa_enumerate_ports(g_seq, SND_SEQ_PORT_CAP_WRITE, g_ports, MAX_PORTS, -1);
 }
 
 void midi_out_global_init(void) {

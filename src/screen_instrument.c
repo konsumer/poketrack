@@ -530,10 +530,7 @@ void screen_instrument_draw(UIState* ui) {
     const char* dname = inst->midi_in_device[0] ? inst->midi_in_device : "none";
     int px = 46;
     int pw = PANEL_W - px - 4;
-    int cw = MeasureText("W", FONT_S);
-    int max_chars = pw / (cw > 0 ? cw : 6);
-    int dlen = (int)strlen(dname);
-    const char* display = (dlen > max_chars) ? dname + (dlen - max_chars) : dname;
+    const char* display = truncate_to_width(dname, pw, FONT_S);
     DrawText(display, px, y + (CH_H - FONT_S) / 2, FONT_S, inst->midi_in_device[0] ? (cur ? C_NOTE : C_VEL) : C_DIM);
   }
 
@@ -708,10 +705,7 @@ void screen_instrument_draw(UIState* ui) {
         }
         int px = PANEL_W + 4 + MeasureText(dlabel, FONT_S) + 6;
         int pw = WIN_W - px - 4;
-        int cw = MeasureText("W", FONT_S);
-        int max_chars = pw / (cw > 0 ? cw : 6);
-        int plen = (int)strlen(path);
-        const char* display = (plen > max_chars) ? path + (plen - max_chars) : path;
+        const char* display = truncate_to_width(path, pw, FONT_S);
         Color tc = editing ? C_STATUS : (using_hint ? C_HEADER : (cur ? C_NOTE : C_VEL));
         DrawText(display, px, y + (CH_H - FONT_S) / 2, FONT_S, tc);
 

@@ -141,6 +141,68 @@ static inline float unit_sin(float phase) {
   return g_unit_sin_lut[i] + (g_unit_sin_lut[i + 1] - g_unit_sin_lut[i]) * (x - i);
 }
 
+// Advances a per-sample [0,1) phase accumulator by inc and wraps it back
+// into range. Only valid for inc < 1.0 (true for all per-sample audio-rate
+// callers here) — a block-rate jump that can exceed a full cycle needs its
+// own loop instead (see units/lfo.c).
+static inline float unit_phase_advance(float phase, float inc) {
+  phase += inc;
+  if (phase >= 1.0f)
+    phase -= 1.0f;
+  return phase;
+}
+
+// Standard ADSR envelope tick, shared by any voice struct with these four
+// fields (name and struct type don't matter — passed by pointer so this
+// works regardless of what else the voice struct holds).
+// Stages: 0=attack 1=decay 2=sustain 3=release 4=done (*active cleared here).
+static inline float unit_env_tick(bool* active, float* level, float* time, int* stage,
+                                   float dt, float atk, float dcy, float sus, float rel) {
+  switch (*stage) {
+    case 0:
+      *time += dt;
+      *level = (atk > 0) ? *time / atk : 1.0f;
+      if (*level >= 1.0f) {
+        *level = 1.0f;
+        *stage = 1;
+        *time = 0;
+      }
+      break;
+    case 1:
+      *time += dt;
+      *level = 1.0f - (1.0f - sus) * (*time / dcy);
+      if (*time >= dcy) {
+        *level = sus;
+        *stage = 2;
+      }
+      break;
+    case 2:
+      *level = sus;
+      break;
+    case 3:
+      *time += dt;
+      *level -= (sus > 0 ? sus : 0.5f) / rel * dt;
+      if (*level <= 0) {
+        *level = 0;
+        *stage = 4;
+        *active = false;
+      }
+      break;
+    default:
+      return 0;
+  }
+  return *level;
+}
+
+// Linear-interpolated read from a power-of-2-sized circular delay buffer
+// (chorus/flanger-style modulated delay lines). buf_mask must be (size - 1).
+static inline float unit_delay_read(const float* buf, int buf_mask, float pos) {
+  int i0 = (int)pos & buf_mask;
+  int i1 = (i0 + 1) & buf_mask;
+  float fr = pos - (int)pos;
+  return buf[i0] * (1.0f - fr) + buf[i1] * fr;
+}
+
 // tanh-shaped soft clip, much cheaper than tanhf. Smoothly saturates,
 // reaching exactly +/-1 at |x|=3.
 static inline float unit_softclip(float x) {

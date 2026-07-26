@@ -185,19 +185,14 @@ void tracker_clear(TrackerSong* song) {
 
 // ---- path utilities --------------------------------------------------------
 
+// GetDirectoryPath() drops the trailing slash for paths with a directory
+// component, but keeps it for the bare-filename "./" case — normalize so
+// dir always ends in a separator, since callers concatenate directly.
 static void song_dir(const char* file_path, char* dir, int sz) {
-  strncpy(dir, file_path, sz - 1);
-  dir[sz - 1] = '\0';
-  char* sep = strrchr(dir, '/');
-  if (!sep)
-    sep = strrchr(dir, '\\');
-  if (sep)
-    *(sep + 1) = '\0';
-  else {
-    dir[0] = '.';
-    dir[1] = '/';
-    dir[2] = '\0';
-  }
+  const char* d = GetDirectoryPath(file_path);
+  size_t dl = strlen(d);
+  bool has_sep = dl && (d[dl - 1] == '/' || d[dl - 1] == '\\');
+  snprintf(dir, sz, "%s%s", d, has_sep ? "" : "/");
 }
 
 static void path_make_relative(const char* base_dir, const char* abs_path,

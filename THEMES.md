@@ -6,6 +6,11 @@ poketrack's colors can be overridden at launch:
 poketrack --theme ~/cyber.ptt
 ```
 
+Or from within the app: MENU screen → THEME → hold A + press A to browse for
+and load a `.ptt` file. This applies immediately but isn't saved anywhere —
+it only lasts for the current run (see "Default theme" below if you want it
+to stick).
+
 There's no persisted config — if you want a theme, pass it every time (alias
 the command, or wrap it in a launcher script) or just put `theme.ptt` in your start-dir.
 
@@ -133,3 +138,18 @@ Since LGPT only has 4 colors and poketrack has more roles, some roles
 collapse onto the same anchor color (e.g. there's no dedicated LGPT
 "note-off" color, so it reuses `HICOLOR2`). Edit the generated `.ptt` by
 hand afterwards if you want to split any of those apart.
+
+This is what the premade themes (in [examples/themes](./examples/themes)) looks like:
+
+- default ![default](./art/themes/theme.png)
+- 808 ![808](./art/themes/808.png)
+- cyber ![cyber](./art/themes/cyber.png)
+- dustrial ![dustrial](./art/themes/dustrial.png)
+- furrest ![furrest](./art/themes/furrest.png)
+- greeny ![greeny](./art/themes/greeny.png)
+- lgpt-default ![lgpt-default](./art/themes/lgpt-default.png)
+- minecraft ![minecraft](./art/themes/minecraft.png)
+- purple ![purple](./art/themes/purple.png)
+- rain ![rain](./art/themes/rain.png)
+- sylveon ![sylveon](./art/themes/sylveon.png)
+- wavetable ![wavetable](./art/themes/wavetable.png)

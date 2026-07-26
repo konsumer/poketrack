@@ -83,9 +83,7 @@ static void phaser_render(UnitState* s, const uint8_t* p,
     out_l[f] = in_l[f] * (1.0f - mix) + xl * mix;
     out_r[f] = in_r[f] * (1.0f - mix) + xr * mix;
 
-    s->lfo += lfo_inc;
-    if (s->lfo >= 1.0f)
-      s->lfo -= 1.0f;
+    s->lfo = unit_phase_advance(s->lfo, lfo_inc);
   }
 }
 

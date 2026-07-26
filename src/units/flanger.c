@@ -3,7 +3,6 @@
 // P1 DEPTH: 00=0%      FF=100% (of delay range)
 // P2 FDBK:  00=none    FF=strong
 // P3 MIX:   00=dry     FF=wet
-#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -30,13 +29,6 @@ static void flanger_kill(UnitState* s) {
   memset(s->buf_r, 0, sizeof(s->buf_r));
 }
 
-static float read_interp_f(float* buf, float pos) {
-  int i0 = (int)pos & (FLNG_BUF - 1);
-  int i1 = (i0 + 1) & (FLNG_BUF - 1);
-  float fr = pos - (int)pos;
-  return buf[i0] * (1.0f - fr) + buf[i1] * fr;
-}
-
 static void flanger_render(UnitState* s, const uint8_t* p,
                            const float* in_l, const float* in_r,
                            float* out_l, float* out_r, uint32_t frames) {
@@ -56,8 +48,8 @@ static void flanger_render(UnitState* s, const uint8_t* p,
     float del_l = dmin + (unit_sin(s->lfo_l) * 0.5f + 0.5f) * d_range;
     float del_r = dmin + (unit_sin(s->lfo_r) * 0.5f + 0.5f) * d_range;
 
-    float wet_l = read_interp_f(s->buf_l, (s->write - del_l + FLNG_BUF * 2));
-    float wet_r = read_interp_f(s->buf_r, (s->write - del_r + FLNG_BUF * 2));
+    float wet_l = unit_delay_read(s->buf_l, FLNG_BUF - 1, (s->write - del_l + FLNG_BUF * 2));
+    float wet_r = unit_delay_read(s->buf_r, FLNG_BUF - 1, (s->write - del_r + FLNG_BUF * 2));
 
     s->buf_l[s->write] = in_l[f] + wet_l * fdbk;
     s->buf_r[s->write] = in_r[f] + wet_r * fdbk;
@@ -66,12 +58,8 @@ static void flanger_render(UnitState* s, const uint8_t* p,
     out_r[f] = in_r[f] * (1.0f - mix) + wet_r * mix;
 
     s->write = (s->write + 1) & (FLNG_BUF - 1);
-    s->lfo_l += lfo_inc;
-    if (s->lfo_l >= 1.0f)
-      s->lfo_l -= 1.0f;
-    s->lfo_r += lfo_inc;
-    if (s->lfo_r >= 1.0f)
-      s->lfo_r -= 1.0f;
+    s->lfo_l = unit_phase_advance(s->lfo_l, lfo_inc);
+    s->lfo_r = unit_phase_advance(s->lfo_r, lfo_inc);
   }
 }
 

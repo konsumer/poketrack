@@ -9,7 +9,8 @@
 typedef enum { MENU_FB_NONE,
                MENU_FB_LOAD,
                MENU_FB_SAVE,
-               MENU_FB_EXPORT } MenuFileBrowserMode;
+               MENU_FB_EXPORT,
+               MENU_FB_THEME } MenuFileBrowserMode;
 static MenuFileBrowserMode g_fb_mode = MENU_FB_NONE;
 
 #define MENU_CONTENT_Y (STATUS_H + 2)
@@ -24,6 +25,7 @@ typedef enum {
   MENU_EXPORT,
   MENU_LOAD,
   MENU_NEW,
+  MENU_THEME,
 #ifndef __EMSCRIPTEN__
   MENU_FULLSCREEN,
   MENU_EXIT,
@@ -41,6 +43,7 @@ static const char* menu_labels[] = {
     "EXPORT WAV",
     "LOAD",
     "NEW",
+    "THEME",
 #ifndef __EMSCRIPTEN__
     "FULLSCREEN",
     "EXIT",
@@ -50,31 +53,21 @@ static const char* menu_labels[] = {
 static char status_msg[48] = "";
 static int status_timer = 0;
 
-// Last path component, e.g. "/foo/bar/song.rpt" -> "song.rpt"
-static const char* path_basename(const char* path) {
-  const char* base = strrchr(path, '/');
-  return base ? base + 1 : path;
-}
-
 // Save (and export) go through the same dir-then-name file browser dialog
 // patterns/instruments use, so the chosen filename becomes the song's name —
 // there's no separate rename step.
 static void set_song_name_from_path(TrackerSong* song, const char* path) {
-  strncpy(song->name, path_basename(path), sizeof(song->name) - 1);
+  strncpy(song->name, GetFileName(path), sizeof(song->name) - 1);
   song->name[sizeof(song->name) - 1] = '\0';
-  size_t l = strlen(song->name);
-  if (l >= 4 && strcasecmp(song->name + l - 4, ".rpt") == 0)
-    song->name[l - 4] = '\0';
+  strip_ext(song->name, "rpt");
 }
 
 // Build save filename from song name, defaulting to "song.rpt"
 static void song_save_path(const TrackerSong* song, char* out, size_t sz) {
   const char* n = (song->name[0] && strcmp(song->name, "UNTITLED") != 0) ? song->name : "song";
-  size_t nl = strlen(n);
-  if (nl >= 4 && strcasecmp(n + nl - 4, ".rpt") == 0)
-    snprintf(out, sz, "%s", n);
-  else
-    snprintf(out, sz, "%s.rpt", n);
+  snprintf(out, sz, "%s", n);
+  strip_ext(out, "rpt");
+  strncat(out, ".rpt", sz - strlen(out) - 1);
 }
 
 // Build export filename from song name, defaulting to "song.wav"
@@ -82,10 +75,7 @@ static void song_export_path(const TrackerSong* song, char* out, size_t sz) {
   const char* n = (song->name[0] && strcmp(song->name, "UNTITLED") != 0) ? song->name : "song";
   char base[64];
   snprintf(base, sizeof(base), "%s", n);
-  size_t bl = strlen(base);
-  // Strip a trailing .rpt so we don't produce "song.rpt.wav"
-  if (bl >= 4 && strcasecmp(base + bl - 4, ".rpt") == 0)
-    base[bl - 4] = '\0';
+  strip_ext(base, "rpt");
   snprintf(out, sz, "%s.wav", base);
 }
 
@@ -118,15 +108,19 @@ void screen_menu_update(UIState* ui) {
       bool ok = tracker_save(ui->song, fb_path);
       if (ok) {
         audio_set_save_dir(ui->engine, fb_path);
-        file_browser_download(fb_path, path_basename(fb_path));
+        file_browser_download(fb_path, GetFileName(fb_path));
       }
       snprintf(status_msg, sizeof(status_msg), ok ? "SAVED" : "SAVE FAILED");
       status_timer = 180;
     } else if (g_fb_mode == MENU_FB_EXPORT) {
       bool ok = audio_render_wav(ui->engine, fb_path);
       if (ok)
-        file_browser_download(fb_path, path_basename(fb_path));
+        file_browser_download(fb_path, GetFileName(fb_path));
       snprintf(status_msg, sizeof(status_msg), ok ? "EXPORTED WAV" : "EXPORT FAILED");
+      status_timer = 180;
+    } else if (g_fb_mode == MENU_FB_THEME) {
+      bool ok = theme_load(fb_path);
+      snprintf(status_msg, sizeof(status_msg), ok ? "THEME LOADED" : "THEME LOAD FAILED");
       status_timer = 180;
     }
     g_fb_mode = MENU_FB_NONE;
@@ -217,6 +211,13 @@ void screen_menu_update(UIState* ui) {
           status_timer = 120;
         }
         break;
+
+      case MENU_THEME:
+        if (input_pressed(BTN_OK)) {
+          g_fb_mode = MENU_FB_THEME;
+          file_browser_open("Load theme", "*.ptt");
+        }
+        break;
 #ifndef __EMSCRIPTEN__
       case MENU_FULLSCREEN:
         if (input_pressed(BTN_UP) || input_pressed(BTN_DOWN) || input_pressed(BTN_OK))
@@ -263,6 +264,7 @@ void screen_menu_draw(UIState* ui) {
       case MENU_SAVE:
       case MENU_EXPORT:
       case MENU_LOAD:
+      case MENU_THEME:
         if (cur)
           DrawText("[holdA+A]", WIN_W - 64, y + (CH_H - FONT_S) / 2, FONT_S - 1, C_DIM);
         break;

@@ -158,9 +158,7 @@ bool theme_load(const char* path) {
 }
 
 bool theme_load_default(const char* path) {
-  FILE* f = fopen(path, "r");
-  if (!f)
+  if (!FileExists(path))
     return false;
-  fclose(f);
   return theme_load(path);
 }

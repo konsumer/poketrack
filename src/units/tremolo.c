@@ -3,7 +3,6 @@
 // P1 DEPTH: 00=0      FF=1.0
 // P2 SHAPE: 0=Sine 1=Square 2=Saw 3=Tri
 // P3 MODE:  0=Trem 1=Pan 2=Both
-#include <math.h>
 #include <stdlib.h>
 
 #include "unit.h"
@@ -58,9 +57,7 @@ static void tremolo_render(UnitState* s, const uint8_t* p,
     out_l[f] = in_l[f] * gl;
     out_r[f] = in_r[f] * gr;
 
-    phase += phase_inc;
-    if (phase >= 1.0f)
-      phase -= 1.0f;
+    phase = unit_phase_advance(phase, phase_inc);
   }
 
   s->phase = phase;

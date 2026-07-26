@@ -1,0 +1,3 @@
+These beats are digitized from the [Pocket Operations](https://shittyrecording.studio/) PDF, with permission. Go buy the book, or donate to [Tree Trust](https://treetrust.org/non-profit/donate/), if you find them useful. Paul Wenzel very kindly offers the PDF for free, if you want to print your own, but the physical lil blue book is also incredibly handy for drummers and drum-machine operators.
+
+If you want to see what they all sound like before loading them, I made [this lil web app](https://konsumer.js.org/pocketopweb/).

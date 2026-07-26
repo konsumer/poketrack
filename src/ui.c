@@ -72,6 +72,22 @@ void draw_cell(int x, int y, int w, int h, Color bg, const char* text, int fs, C
     DrawText(text, x + 2, y + (h - fs) / 2, fs, fg);
 }
 
+bool strip_ext(char* name, const char* ext) {
+  size_t l = strlen(name), el = strlen(ext);
+  if (el && l > el + 1 && name[l - el - 1] == '.' && strcasecmp(name + l - el, ext) == 0) {
+    name[l - el - 1] = '\0';
+    return true;
+  }
+  return false;
+}
+
+const char* truncate_to_width(const char* s, int pw, int fs) {
+  int cw = MeasureText("W", fs);
+  int max_chars = pw / (cw > 0 ? cw : 6);
+  int len = (int)strlen(s);
+  return (len > max_chars) ? s + (len - max_chars) : s;
+}
+
 // Forward declarations
 void screen_song_update(UIState* ui);
 void screen_song_draw(UIState* ui);

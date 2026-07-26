@@ -2,7 +2,8 @@
 build/
 build-*/
 .claude
-ports/poketrack
+scripts/ports/poketrack
+*.log
 __pycache__
 /*.rpt
 /*.rpti

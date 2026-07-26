@@ -67,25 +67,6 @@ if(NOT EMSCRIPTEN)
     target_include_directories(wclap-bridge PRIVATE ${CMAKE_SOURCE_DIR}/src/vendor/webview-gui-stub)
 endif()
 
-# dirent.h (Windows only — MSVC has no POSIX dirent.h; MinGW used to paper
-# over this with its own winpthreads-adjacent shim). MIT-licensed.
-if(WIN32)
-    set(DIRENT_HEADER "${CMAKE_BINARY_DIR}/dirent_include/dirent.h")
-    if(NOT EXISTS "${DIRENT_HEADER}")
-        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/dirent_include")
-        file(DOWNLOAD
-            "https://raw.githubusercontent.com/tronkko/dirent/master/include/dirent.h"
-            "${DIRENT_HEADER}"
-            STATUS DIRENT_STATUS
-        )
-        list(GET DIRENT_STATUS 0 DIRENT_STATUS_CODE)
-        if(NOT DIRENT_STATUS_CODE EQUAL 0)
-            message(WARNING "dirent.h download failed — Windows build will fail to find directory entries")
-        endif()
-    endif()
-    set(DIRENT_INCLUDE_DIR "${CMAKE_BINARY_DIR}/dirent_include")
-endif()
-
 # TinySoundFont (single-header SF2 player)
 set(TSF_HEADER "${CMAKE_BINARY_DIR}/tsf_include/tsf.h")
 if(NOT EXISTS "${TSF_HEADER}")
@@ -172,7 +153,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${raylib_SOURCE_DIR}/src
     ${TSF_INCLUDE_DIR}
     ${MINIZ_INCLUDE_DIR}
-    ${TFD_DIR}
     src
 )
 target_include_directories(${PROJECT_NAME} PRIVATE ${clap_SOURCE_DIR}/include)
@@ -182,7 +162,6 @@ if(NOT EMSCRIPTEN)
     set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 endif()
 if(WIN32)
-    target_include_directories(${PROJECT_NAME} PRIVATE ${DIRENT_INCLUDE_DIR})
     # MSVC's math.h doesn't define M_PI etc. without this.
     target_compile_definitions(${PROJECT_NAME} PRIVATE _USE_MATH_DEFINES)
     # NOGDI/NOUSER: raylib declares its own Rectangle/CloseWindow/ShowCursor,
@@ -237,8 +216,7 @@ else()
     endif()
     target_link_libraries(${PROJECT_NAME} PRIVATE wclap-bridge)
     if(APPLE)
-        target_sources(${PROJECT_NAME} PRIVATE src/macos_dialog.m)
-        target_link_libraries(${PROJECT_NAME} PRIVATE "-framework Cocoa" "-framework AppKit" "-framework CoreMIDI" "-framework CoreFoundation")
+        target_link_libraries(${PROJECT_NAME} PRIVATE "-framework CoreMIDI" "-framework CoreFoundation")
         set_target_properties(${PROJECT_NAME} PROPERTIES
             MACOSX_BUNDLE TRUE
             MACOSX_BUNDLE_BUNDLE_NAME "poketrack"
@@ -256,7 +234,6 @@ else()
         ${raylib_SOURCE_DIR}/src
         ${TSF_INCLUDE_DIR}
         ${MINIZ_INCLUDE_DIR}
-        ${TFD_DIR}
         src
         ${clap_SOURCE_DIR}/include
         ${wclap-bridge_SOURCE_DIR}/include
@@ -274,10 +251,40 @@ else()
     if(WIN32)
         target_link_libraries(poketrack_tests PRIVATE winmm)
         target_compile_definitions(poketrack_tests PRIVATE _USE_MATH_DEFINES WIN32_LEAN_AND_MEAN NOGDI NOUSER strcasecmp=_stricmp)
-        target_include_directories(poketrack_tests PRIVATE ${DIRENT_INCLUDE_DIR})
     endif()
     if(APPLE)
-        target_sources(poketrack_tests PRIVATE src/macos_dialog.m)
-        target_link_libraries(poketrack_tests PRIVATE "-framework Cocoa" "-framework AppKit" "-framework CoreMIDI" "-framework CoreFoundation")
+        target_link_libraries(poketrack_tests PRIVATE "-framework CoreMIDI" "-framework CoreFoundation")
+    endif()
+
+    # Theme screenshot tool (native only, not built by default): renders a
+    # fake pattern screen under each examples/themes/*.ptt and saves a PNG.
+    # cmake --build build --target theme_shot
+    set(THEME_SHOT_SOURCES ${SOURCES})
+    list(REMOVE_ITEM THEME_SHOT_SOURCES src/main.c)
+    add_executable(theme_shot EXCLUDE_FROM_ALL ${THEME_SHOT_SOURCES} tools/theme_shot.c)
+    target_include_directories(theme_shot PRIVATE
+        ${raylib_SOURCE_DIR}/src
+        ${TSF_INCLUDE_DIR}
+        ${MINIZ_INCLUDE_DIR}
+        src
+        ${clap_SOURCE_DIR}/include
+        ${wclap-bridge_SOURCE_DIR}/include
+    )
+    set_target_properties(theme_shot PROPERTIES LINKER_LANGUAGE CXX)
+    target_link_libraries(theme_shot PRIVATE raylib wclap-bridge)
+    if(NOT WIN32)
+        target_link_libraries(theme_shot PRIVATE m)
+    endif()
+    if(UNIX AND NOT APPLE AND ALSA_FOUND)
+        target_compile_definitions(theme_shot PRIVATE HAVE_ALSA)
+        target_include_directories(theme_shot PRIVATE ${ALSA_INCLUDE_DIRS})
+        target_link_libraries(theme_shot PRIVATE ${ALSA_LIBRARIES})
+    endif()
+    if(WIN32)
+        target_link_libraries(theme_shot PRIVATE winmm)
+        target_compile_definitions(theme_shot PRIVATE _USE_MATH_DEFINES WIN32_LEAN_AND_MEAN NOGDI NOUSER strcasecmp=_stricmp)
+    endif()
+    if(APPLE)
+        target_link_libraries(theme_shot PRIVATE "-framework CoreMIDI" "-framework CoreFoundation")
     endif()
 endif()

@@ -130,17 +130,13 @@ const char* midi_in_port_name(int idx) {
 // ============================================================
 #elif defined(__linux__) && defined(HAVE_ALSA)
 
-#include <alsa/asoundlib.h>
 #include <pthread.h>
+
+#include "midi_alsa_common.h"
 
 #define MAX_IN_PORTS 64
 
-typedef struct {
-  int client;
-  int port;
-  char name[256];
-} AlsaInPort;
-static AlsaInPort g_in_ports[MAX_IN_PORTS];
+static AlsaPort g_in_ports[MAX_IN_PORTS];
 static int g_in_nports = 0;
 
 static snd_seq_t* g_in_seq = NULL;
@@ -150,35 +146,8 @@ static bool g_in_running = false;
 static bool g_in_thread_started = false;
 
 static void refresh_in_ports(void) {
-  g_in_nports = 0;
-  if (!g_in_seq)
-    return;
-  snd_seq_client_info_t* ci;
-  snd_seq_port_info_t* pi;
-  snd_seq_client_info_alloca(&ci);
-  snd_seq_port_info_alloca(&pi);
-  snd_seq_client_info_set_client(ci, -1);
-  while (snd_seq_query_next_client(g_in_seq, ci) >= 0 && g_in_nports < MAX_IN_PORTS) {
-    int c = snd_seq_client_info_get_client(ci);
-    if (c == 0 || c == snd_seq_client_id(g_in_seq))
-      continue;
-    snd_seq_port_info_set_client(pi, c);
-    snd_seq_port_info_set_port(pi, -1);
-    while (snd_seq_query_next_port(g_in_seq, pi) >= 0 && g_in_nports < MAX_IN_PORTS) {
-      unsigned int caps = snd_seq_port_info_get_capability(pi);
-      if (!(caps & SND_SEQ_PORT_CAP_READ))
-        continue;
-      if (caps & SND_SEQ_PORT_CAP_NO_EXPORT)
-        continue;
-      g_in_ports[g_in_nports].client = c;
-      g_in_ports[g_in_nports].port = snd_seq_port_info_get_port(pi);
-      snprintf(g_in_ports[g_in_nports].name, 256, "%s:%s",
-               snd_seq_client_info_get_name(ci),
-               snd_seq_port_info_get_name(pi));
-      snd_seq_connect_from(g_in_seq, g_in_myport, c, g_in_ports[g_in_nports].port);
-      g_in_nports++;
-    }
-  }
+  g_in_nports = alsa_enumerate_ports(g_in_seq, SND_SEQ_PORT_CAP_READ,
+                                      g_in_ports, MAX_IN_PORTS, g_in_myport);
 }
 
 static int find_port_idx(int client, int port) {

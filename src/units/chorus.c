@@ -3,7 +3,6 @@
 // P1 DEPTH: 00=0ms    FF=5ms  (modulation depth)
 // P2 DELAY: 00=5ms    FF=40ms (base delay)
 // P3 MIX:   00=dry    FF=wet
-#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -31,13 +30,6 @@ static void chorus_kill(UnitState* s) {
   memset(s->buf_r, 0, sizeof(s->buf_r));
 }
 
-static float read_interp(float* buf, float pos) {
-  int i0 = (int)pos & (BUF_SIZE - 1);
-  int i1 = (i0 + 1) & (BUF_SIZE - 1);
-  float fr = pos - (int)pos;
-  return buf[i0] * (1.0f - fr) + buf[i1] * fr;
-}
-
 static void chorus_render(UnitState* s, const uint8_t* p,
                           const float* in_l, const float* in_r,
                           float* out_l, float* out_r, uint32_t frames) {
@@ -58,19 +50,15 @@ static void chorus_render(UnitState* s, const uint8_t* p,
     float pos_l = (s->write - delay + mod_l + BUF_SIZE * 2) - 1;
     float pos_r = (s->write - delay + mod_r + BUF_SIZE * 2) - 1;
 
-    float wet_l = read_interp(s->buf_l, pos_l);
-    float wet_r = read_interp(s->buf_r, pos_r);
+    float wet_l = unit_delay_read(s->buf_l, BUF_SIZE - 1, pos_l);
+    float wet_r = unit_delay_read(s->buf_r, BUF_SIZE - 1, pos_r);
 
     out_l[f] = in_l[f] * (1.0f - mix) + wet_l * mix;
     out_r[f] = in_r[f] * (1.0f - mix) + wet_r * mix;
 
     s->write = (s->write + 1) & (BUF_SIZE - 1);
-    s->lfo_l += lfo_inc;
-    if (s->lfo_l >= 1.0f)
-      s->lfo_l -= 1.0f;
-    s->lfo_r += lfo_inc;
-    if (s->lfo_r >= 1.0f)
-      s->lfo_r -= 1.0f;
+    s->lfo_l = unit_phase_advance(s->lfo_l, lfo_inc);
+    s->lfo_r = unit_phase_advance(s->lfo_r, lfo_inc);
   }
 }
 

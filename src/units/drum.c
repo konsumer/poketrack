@@ -7,7 +7,6 @@
 // pitch derived from note (C4=normal)
 #include <math.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "unit.h"
 
@@ -105,9 +104,7 @@ static void drum_render(UnitState* s, const uint8_t* p,
     } else {
       samp = (float)(int32_t)lcg(&s->noise_seed) / 2147483648.0f;
     }
-    s->phase += pitch / s->sample_rate;
-    if (s->phase >= 1.0f)
-      s->phase -= 1.0f;
+    s->phase = unit_phase_advance(s->phase, pitch / s->sample_rate);
 
     float out = unit_softclip(samp * s->amp) * s->vol;
     out_l[f] += out;

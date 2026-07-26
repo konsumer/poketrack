@@ -607,18 +607,13 @@ bool audio_is_playing(const AudioEngine* eng) { return eng->playing; }
 
 void audio_set_save_dir(AudioEngine* eng, const char* save_file_path) {
   AUDIO_LOCK(eng);
-  strncpy(eng->save_dir, save_file_path, sizeof(eng->save_dir) - 1);
-  // Strip filename, keep directory (including trailing slash)
-  char* sep = strrchr(eng->save_dir, '/');
-  if (!sep)
-    sep = strrchr(eng->save_dir, '\\');
-  if (sep)
-    *(sep + 1) = '\0';
-  else {
-    eng->save_dir[0] = '.';
-    eng->save_dir[1] = '/';
-    eng->save_dir[2] = '\0';
-  }
+  // GetDirectoryPath() drops the trailing slash for paths with a directory
+  // component, but keeps it for the bare-filename "./" case — normalize so
+  // save_dir always ends in a separator, since callers concatenate directly.
+  const char* dir = GetDirectoryPath(save_file_path);
+  size_t dl = strlen(dir);
+  bool has_sep = dl && (dir[dl - 1] == '/' || dir[dl - 1] == '\\');
+  snprintf(eng->save_dir, sizeof(eng->save_dir), "%s%s", dir, has_sep ? "" : "/");
   // Destroy all states so they rebuild with new dir via set_data
   for (int ch = 0; ch < SONG_CHANNELS; ch++)
     destroy_lane_states(eng, ch);

@@ -101,9 +101,6 @@ bool file_browser_active(void) { return false; }
 
 #else  // ---- DESKTOP: inline raylib file browser ----
 
-#include <dirent.h>
-#include <sys/stat.h>
-
 #include "input.h"
 #include "raylib.h"
 #include "theme.h"
@@ -152,11 +149,6 @@ static char g_fname[256] = {0};
 static bool g_fname_ed = false;
 static KBModal g_kb;
 
-static void fb_strip_ext(char* name) {
-  size_t l = strlen(name), el = strlen(g_ext);
-  if (el && l > el + 1 && name[l - el - 1] == '.' && strcasecmp(name + l - el, g_ext) == 0)
-    name[l - el - 1] = '\0';
-}
 static void fb_fname_confirm(void) {
   if (!g_fname[0])
     return;
@@ -180,7 +172,7 @@ static bool fmatch(const char* name) {
   char* tok = strtok(buf, " ");
   while (tok) {
     if (tok[0] == '*' && tok[1] == '.') {
-      const char* ext = strrchr(name, '.');
+      const char* ext = GetFileExtension(name);
       if (ext && strcasecmp(ext, tok + 1) == 0)
         return true;
     }
@@ -202,29 +194,31 @@ static int ecmp(const void* a, const void* b) {
 
 static void scan(void) {
   g_cnt = g_cur = g_scr = 0;
-  DIR* d = opendir(g_dir);
-  if (!d)
-    return;
-  struct dirent* de;
-  while ((de = readdir(d)) && g_cnt < MAX_ENT) {
-    const char* n = de->d_name;
-    if (n[0] == '.' && strcmp(n, "..") != 0)
+
+  // Synthesize ".." unless we're at the filesystem root — LoadDirectoryFilesEx
+  // always excludes "." and ".." (see raylib's ScanDirectoryFiles).
+  if (strcmp(g_dir, "/") != 0) {
+    strncpy(g_ents[g_cnt].name, "..", sizeof(g_ents[g_cnt].name) - 1);
+    g_ents[g_cnt].is_dir = true;
+    g_cnt++;
+  }
+
+  // "*.*" (not NULL) — raylib only includes directories when the filter
+  // string literally contains "*.*" or "DIRS*"; NULL means files-only.
+  FilePathList files = LoadDirectoryFilesEx(g_dir, "*.*", false);
+  for (unsigned i = 0; i < files.count && g_cnt < MAX_ENT; i++) {
+    const char* n = GetFileName(files.paths[i]);
+    if (n[0] == '.')
+      continue;  // hide dotfiles/dirs, same as before
+    bool isdir = !IsPathFile(files.paths[i]);
+    if (!isdir && !fmatch(n))
       continue;
-    char full[MAX_PATH];
-    snprintf(full, sizeof(full), "%s/%s", g_dir, n);
-    struct stat st;
-    if (stat(full, &st))
-      continue;
-    bool isdir = S_ISDIR(st.st_mode);
-    if (!isdir) {
-      if (!fmatch(n))
-        continue;
-    }
     strncpy(g_ents[g_cnt].name, n, 255);
     g_ents[g_cnt].is_dir = isdir;
     g_cnt++;
   }
-  closedir(d);
+  UnloadDirectoryFiles(files);
+
   qsort(g_ents, g_cnt, sizeof(Ent), ecmp);
 }
 
@@ -279,11 +273,11 @@ void file_browser_save_as(const char* title, const char* def_name) {
   if (!g_dir[0])
     strncpy(g_dir, GetWorkingDirectory(), MAX_PATH - 1);
   // Derive extension from def_name (e.g. "song.rpt" → "rpt", "inst.rpti" → "rpti")
-  const char* dot = def_name ? strrchr(def_name, '.') : NULL;
-  strncpy(g_ext, (dot && dot[1]) ? dot + 1 : "rpt", sizeof(g_ext) - 1);
+  const char* ext = def_name ? GetFileExtension(def_name) : NULL;
+  strncpy(g_ext, (ext && ext[1]) ? ext + 1 : "rpt", sizeof(g_ext) - 1);
   snprintf(g_filt, sizeof(g_filt), "*.%s", g_ext);
   strncpy(g_fname, def_name ? def_name : "song", sizeof(g_fname) - 1);
-  fb_strip_ext(g_fname);
+  strip_ext(g_fname, g_ext);
   scan();
 }
 
