@@ -3,6 +3,15 @@ name: Release Builds
 on:
   release:
     types: [published]
+  # Also build on every branch push, uploading the same zips as workflow
+  # artifacts instead of release assets (see the two upload steps below).
+  # Without this, the native builds only ran when a release was published —
+  # a clang-format include reorder broke the Windows build and survived four
+  # commits before the next tag surfaced it.
+  # 'branches: **' matches branch pushes only, so pushing a tag doesn't build
+  # twice (once here, once for the release the tag creates).
+  push:
+    branches: ['**']
   workflow_dispatch:
 
 permissions:
