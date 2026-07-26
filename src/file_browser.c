@@ -101,6 +101,7 @@ bool file_browser_active(void) { return false; }
 
 #else  // ---- DESKTOP: inline raylib file browser ----
 
+#include "dir.h"
 #include "input.h"
 #include "raylib.h"
 #include "theme.h"
@@ -186,32 +187,36 @@ static int ecmp(const void* a, const void* b) {
   return strcmp(ea->name, eb->name);
 }
 
+// Streams entries straight into the fixed g_ents array — see dir.h for why
+// this doesn't use raylib's LoadDirectoryFilesEx.
 static void scan(void) {
   g_cnt = g_cur = g_scr = 0;
 
-  // Synthesize ".." unless we're at the filesystem root — LoadDirectoryFilesEx
-  // always excludes "." and ".." (see raylib's ScanDirectoryFiles).
+  // Synthesize ".." unless we're at the filesystem root. Skipping every name
+  // starting with '.' below hides dotfiles, and drops the real "." / ".."
+  // along with them, so this is the only way back up.
   if (strcmp(g_dir, "/") != 0) {
     strncpy(g_ents[g_cnt].name, "..", sizeof(g_ents[g_cnt].name) - 1);
     g_ents[g_cnt].is_dir = true;
     g_cnt++;
   }
 
-  // "*.*" (not NULL) — raylib only includes directories when the filter
-  // string literally contains "*.*" or "DIRS*"; NULL means files-only.
-  FilePathList files = LoadDirectoryFilesEx(g_dir, "*.*", false);
-  for (unsigned i = 0; i < files.count && g_cnt < MAX_ENT; i++) {
-    const char* n = GetFileName(files.paths[i]);
-    if (n[0] == '.')
-      continue;  // hide dotfiles/dirs, same as before
-    bool isdir = !IsPathFile(files.paths[i]);
-    if (!isdir && !fmatch(n))
-      continue;
-    strncpy(g_ents[g_cnt].name, n, 255);
-    g_ents[g_cnt].is_dir = isdir;
-    g_cnt++;
+  DirIter it;
+  if (dir_open(&it, g_dir)) {
+    const char* name;
+    bool is_dir;
+    while (g_cnt < MAX_ENT && dir_next(&it, &name, &is_dir)) {
+      if (name[0] == '.')
+        continue;  // dotfiles, plus "." and ".."
+      if (!is_dir && !fmatch(name))
+        continue;
+      strncpy(g_ents[g_cnt].name, name, sizeof(g_ents[g_cnt].name) - 1);
+      g_ents[g_cnt].name[sizeof(g_ents[g_cnt].name) - 1] = '\0';
+      g_ents[g_cnt].is_dir = is_dir;
+      g_cnt++;
+    }
+    dir_close(&it);
   }
-  UnloadDirectoryFiles(files);
 
   qsort(g_ents, g_cnt, sizeof(Ent), ecmp);
 }

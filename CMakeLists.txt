@@ -168,7 +168,7 @@ if(WIN32)
     # which collide with WinGDI/WinUser's identically-named ones — as a
     # compile definition (not a local #define in one header) this applies
     # no matter which translation unit pulls in <windows.h> first (lock.h's
-    # CRITICAL_SECTION is the only one left that does).
+    # CRITICAL_SECTION and dir.h's FindFirstFile are the only ones left).
     target_compile_definitions(${PROJECT_NAME} PRIVATE WIN32_LEAN_AND_MEAN NOGDI NOUSER)
 endif()
 
