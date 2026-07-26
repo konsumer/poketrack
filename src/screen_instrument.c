@@ -157,6 +157,8 @@ void screen_instrument_update(UIState* ui) {
       if (input_pressed(BTN_NO)) {
         audio_rebuild_instrument(ui->engine, (uint8_t)ui->ctx_instrument);
         memset(&inst->chain[slot], 0, sizeof(ChainSlot));
+        // 0x00 from the memset above means "mapped to CC 0"; 0xFF is unmapped.
+        memset(inst->chain[slot].cc_map, 0xFF, UNIT_MAX_PARAMS);
       }
     } else {
       const UnitDef* defs[32];
