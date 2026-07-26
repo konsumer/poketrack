@@ -107,17 +107,18 @@ void screen_instrument_update(UIState* ui) {
   bool in_io = (!in_params && ui->inst_row >= INST_SAVE_ROW);
   bool in_midi = (!in_params && !in_io && ui->inst_row >= INST_MIDI_DEV_ROW);
 
-  // L/R shoulder: cycle instrument (not while editing or in param/midi rows)
-  if (!edit && !in_params && !in_midi) {
+  // L/R shoulder: cycle instrument (not while editing or in midi rows).
+  // Works from the right (param) panel too, jumping focus back to the left panel.
+  if (!edit && !in_midi) {
     if (ui_repeat(BTN_NEXT) && ui->ctx_instrument < NUM_INSTRUMENTS - 1) {
       ui->ctx_instrument++;
       ui->inst_row = 0;
-      inst = &ui->song->instruments[ui->ctx_instrument];
+      return;
     }
     if (ui_repeat(BTN_PREV) && ui->ctx_instrument > 0) {
       ui->ctx_instrument--;
       ui->inst_row = 0;
-      inst = &ui->song->instruments[ui->ctx_instrument];
+      return;
     }
   }
 
