@@ -175,12 +175,7 @@ void tracker_init(TrackerSong* song) {
 }
 
 void tracker_clear(TrackerSong* song) {
-  uint16_t bpm = song->bpm;
-  char name[32];
-  strncpy(name, song->name, 32);
   tracker_init(song);
-  song->bpm = bpm;
-  strncpy(song->name, name, 32);
 }
 
 // ---- path utilities --------------------------------------------------------
