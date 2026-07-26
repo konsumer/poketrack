@@ -147,7 +147,7 @@ static bool g_in_thread_started = false;
 
 static void refresh_in_ports(void) {
   g_in_nports = alsa_enumerate_ports(g_in_seq, SND_SEQ_PORT_CAP_READ,
-                                      g_in_ports, MAX_IN_PORTS, g_in_myport);
+                                     g_in_ports, MAX_IN_PORTS, g_in_myport);
 }
 
 static int find_port_idx(int client, int port) {

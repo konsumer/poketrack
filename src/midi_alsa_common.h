@@ -20,8 +20,8 @@ typedef struct {
 // currently-visible source; MIDI-out passes -1 since it connects lazily,
 // only to the one port the user actually selects.
 static inline int alsa_enumerate_ports(snd_seq_t* seq, unsigned int cap_flag,
-                                        AlsaPort* out, int max_ports,
-                                        int connect_from_myport) {
+                                       AlsaPort* out, int max_ports,
+                                       int connect_from_myport) {
   int n = 0;
   if (!seq)
     return 0;

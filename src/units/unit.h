@@ -157,7 +157,7 @@ static inline float unit_phase_advance(float phase, float inc) {
 // works regardless of what else the voice struct holds).
 // Stages: 0=attack 1=decay 2=sustain 3=release 4=done (*active cleared here).
 static inline float unit_env_tick(bool* active, float* level, float* time, int* stage,
-                                   float dt, float atk, float dcy, float sus, float rel) {
+                                  float dt, float atk, float dcy, float sus, float rel) {
   switch (*stage) {
     case 0:
       *time += dt;

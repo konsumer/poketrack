@@ -420,7 +420,7 @@ void file_browser_draw(void) {
   DrawLine(0, bot_y, FB_W, bot_y, C_SEP);
   DrawRectangle(0, bot_y, FB_W, bot_h, C_HDR);
   DrawText(g_mode == FB_SAVE ? "A=select   B=up   SELECT+B=cancel"
-                              : "A=open/enter dir   B=up   SELECT+B=cancel",
+                             : "A=open/enter dir   B=up   SELECT+B=cancel",
            4, bot_y + (bot_h - (FB_FS - 1)) / 2, FB_FS - 1, C_DIM);
 }
 

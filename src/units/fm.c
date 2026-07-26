@@ -39,7 +39,7 @@ struct UnitState {
 
 static float env_tick(FMVoice* v, float dt, float atk, float dcy, float sus, float rel) {
   return unit_env_tick(&v->active, &v->env_level, &v->env_time, &v->env_stage,
-                        dt, atk, dcy, sus, rel);
+                       dt, atk, dcy, sus, rel);
 }
 
 static UnitState* fm_create(float sr) {

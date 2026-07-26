@@ -54,7 +54,7 @@ static float osc_sample(OscVoice* v, int wave, float pw) {
 
 static float env_tick(OscVoice* v, float dt, float atk, float dcy, float sus, float rel) {
   return unit_env_tick(&v->active, &v->env_level, &v->env_time, &v->env_stage,
-                        dt, atk, dcy, sus, rel);
+                       dt, atk, dcy, sus, rel);
 }
 
 static UnitState* osc_create(float sr) {
