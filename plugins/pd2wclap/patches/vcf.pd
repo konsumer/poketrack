@@ -1,0 +1,9 @@
+#N canvas 0 50 450 300 12;
+#X obj 20 20 noise~;
+#X obj 20 60 hsl 128 15 100 5000 0 0 empty cutoff empty 0 -8 0 10 -262144 -1 -1 800 1;
+#X obj 20 100 vcf~ 400 4;
+#X obj 20 140 dac~;
+#X connect 0 0 2 0;
+#X connect 1 0 2 1;
+#X connect 2 0 3 0;
+#X connect 2 0 3 1;

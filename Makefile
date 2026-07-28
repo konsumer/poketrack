@@ -63,3 +63,9 @@ plugins: ## Build bundled example WCLAP plugins into examples/plugins/
 	mkdir -p examples/plugins
 	cp plugins/karplus/build/release.wasm examples/plugins/karp.wclap.wasm
 	cp plugins/robotalk/target/wasm32-wasip1/release/robotalk.wasm examples/plugins/robotalk.wclap.wasm
+	command -v pd2ast >/dev/null && command -v pdast2wclap >/dev/null && [ -x "$${WASI_SDK_PATH:-/opt/wasi-sdk}/bin/clang" ] && ( \
+		plugins/pd2wclap/build.sh plugins/pd2wclap/patches/osc.pd pd-osc && \
+		plugins/pd2wclap/build.sh plugins/pd2wclap/patches/vcf.pd pd-vcf && \
+		cp plugins/pd2wclap/build/pd-osc.wasm examples/plugins/pd-osc.wclap.wasm && \
+		cp plugins/pd2wclap/build/pd-vcf.wasm examples/plugins/pd-vcf.wclap.wasm \
+	) || echo "skipping pd2wclap demos (see plugins/pd2wclap/README.md#install) — pd2ast/pdast2wclap/wasi-sdk not found"

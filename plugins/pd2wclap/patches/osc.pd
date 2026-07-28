@@ -1,0 +1,13 @@
+#N canvas 0 50 450 300 12;
+#X obj 20 20 notein;
+#X obj 20 60 mtof;
+#X obj 20 100 osc~;
+#X obj 20 140 r volume;
+#X obj 20 180 *~;
+#X obj 20 220 dac~;
+#X connect 0 0 1 0;
+#X connect 1 0 2 0;
+#X connect 2 0 4 0;
+#X connect 3 0 4 1;
+#X connect 4 0 5 0;
+#X connect 4 0 5 1;

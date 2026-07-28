@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "audio.h"
+#include "clap_host.h"
 #include "raylib.h"
 #include "tracker.h"
 #include "units/unit_registry.h"
@@ -236,6 +237,58 @@ static void test_render_smoke(void) {
   }
 }
 
+// End-to-end check of the pd2wclap pipeline: loads the pre-built demo WCLAP
+// plugin (plugins/pd2wclap/build/pd-osc.wasm — see plugins/pd2wclap/README.md)
+// straight through the real Wasmtime host, same path clap_unit.c uses, sends
+// a note on, and checks for actual non-silent finite output. Skips (not
+// fails) if the demo hasn't been built, since that requires an external
+// toolchain (pd2ast/pdast2wclap/wasi-sdk) not every dev/CI box has.
+static void test_clap_plugin_pd(void) {
+  const char* path = "../plugins/pd2wclap/build/pd-osc.wasm";
+  if (!FileExists(path)) {
+    printf("SKIP test_clap_plugin_pd: %s not built (see plugins/pd2wclap/README.md)\n", path);
+    return;
+  }
+
+  ClapPlugin* p = clap_host_load(path, NULL, 44100.0f, 512);
+  CHECK(p != NULL, "pd-osc.wasm: load failed");
+  if (!p)
+    return;
+
+  CHECK(clap_host_is_instrument(p), "pd-osc.wasm: expected an instrument (notein port)");
+
+  uint32_t total = clap_host_param_count(p);
+  CHECK(total == 1, "pd-osc.wasm: expected 1 param (volume), got %u", total);
+  uint32_t volume_id = 0;
+  char name[24];
+  double min = 0, max = 0, def = 0;
+  if (total > 0) {
+    clap_host_param_info(p, 0, &volume_id, name, sizeof(name), &min, &max, &def);
+    CHECK(strcmp(name, "volume") == 0, "pd-osc.wasm: param 0 name %s, want volume", name);
+  }
+  clap_host_queue_param(p, volume_id, 1.0);
+
+  clap_host_note_on(p, 60, 100, 0);
+
+  enum { BLK = 512,
+         BLOCKS = 8 };
+  static float out_l[BLK], out_r[BLK];
+  bool all_finite = true;
+  float energy = 0.0f;
+  for (int blk = 0; blk < BLOCKS; blk++) {
+    clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+    for (int f = 0; f < BLK; f++) {
+      if (!isfinite(out_l[f]) || !isfinite(out_r[f]))
+        all_finite = false;
+      energy += out_l[f] * out_l[f] + out_r[f] * out_r[f];
+    }
+  }
+  CHECK(all_finite, "pd-osc.wasm: non-finite output");
+  CHECK(energy > 1e-4f, "pd-osc.wasm: silent after note_on + volume param");
+
+  clap_host_unload(p);
+}
+
 int main(void) {
   SetTraceLogLevel(LOG_ERROR);  // silence raylib INFO spam
   unit_dsp_init();
@@ -246,6 +299,7 @@ int main(void) {
   test_recursive_find();
   test_wav_export();
   test_render_smoke();
+  test_clap_plugin_pd();
 
   if (fails) {
     printf("%d FAILURE(S)\n", fails);
