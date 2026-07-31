@@ -1,0 +1,65 @@
+name: Deploy to Steam
+
+# Runs after "Release Builds" finishes for a published GitHub release, so
+# the windows/macos/linux zips are guaranteed to already be attached to
+# the release before this tries to download them. Can also be triggered
+# by hand for a past release/branch.
+on:
+  workflow_run:
+    workflows: ['Release Builds']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to deploy (e.g. v1.2.3)
+        required: true
+      releaseBranch:
+        description: Steam branch to publish to
+        required: true
+        default: prerelease
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'release')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Determine release tag
+        id: tag
+        run: |
+          TAG="${{ inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.event.workflow_run.head_branch }}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Download release builds
+        run: |
+          mkdir -p dl content/windows content/macos content/linux
+          gh release download "${{ steps.tag.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            -p 'poketrack-windows.zip' -p 'poketrack-macos.zip' -p 'poketrack-linux.zip' \
+            -D dl
+
+      - name: Unpack builds
+        run: |
+          unzip -o dl/poketrack-windows.zip -d content/windows
+          unzip -o dl/poketrack-macos.zip -d content/macos
+          unzip -o dl/poketrack-linux.zip -d content/linux
+
+      - name: Deploy to Steam
+        uses: game-ci/steam-deploy@v3
+        with:
+          username: ${{ secrets.STEAM_USERNAME }}
+          configVdf: ${{ secrets.STEAM_CONFIG_VDF }}
+          appId: ${{ secrets.STEAM_APP_ID }}
+          buildDescription: ${{ steps.tag.outputs.tag }}
+          rootPath: content
+          depot1Path: windows
+          depot2Path: macos
+          depot3Path: linux
+          releaseBranch: ${{ inputs.releaseBranch || 'prerelease' }}

@@ -1,4 +1,6 @@
-This is a cross-platform joystick-driven music-tracker.
+# PokeTrack
+
+Cross-platform joystick-driven music-tracker.
 
 <img align="right" width="150" src="https://github.com/konsumer/poketrack/blob/main/art/square.png?raw=true" />
 
@@ -118,6 +120,6 @@ I use `make` to record common tasks (and `cmake` to actually build) so you can r
 
 - "bundle" a save for distribution, that creates a zip with song + all referenced files
 - web: some WCLAP plugins (e.g. `signalsmith-clap-cpp.wasm`) declare shared/thread-capable memory and hang on load — needs real Worker-based multi-agent threading in the web CLAP host, not just single-threaded WASI. Native (Wasmtime) already handles this fine.
-
-
+- use steam input API to make it easier to use on steam?
+- multiple languages
 

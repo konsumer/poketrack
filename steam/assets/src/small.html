@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html,body{margin:0;padding:0;background:#000;}
+  #capsule{position:relative;width:462px;height:174px;overflow:hidden;background:#0a1210;}
+  #bg{position:absolute; inset:-12%; background-image:url('../../../art/horiz.png'); background-size:cover; background-position:center; filter: blur(20px) brightness(0.5) saturate(1.2); transform: scale(1.15);}
+  #shade{position:absolute; inset:0; background: radial-gradient(ellipse at center, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0.55) 100%);}
+  #logo{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:'Avenir Next','Helvetica Neue',Arial,sans-serif; font-weight:800; letter-spacing:-0.01em; font-size:59px; white-space:nowrap;}
+  .poke{color:#f3f7f6;}
+  .track{color:#5fd9c4; text-shadow:0 0 25px rgba(95,217,196,0.45);}
+</style>
+</head>
+<body>
+  <div id="capsule">
+    <div id="bg"></div>
+    <div id="shade"></div>
+    <div id="logo"><span class="poke">POKE</span><span class="track">TRACK</span></div>
+  </div>
+</body>
+</html>
