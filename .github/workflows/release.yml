@@ -83,7 +83,9 @@ jobs:
 
       - name: Zip artifact (macOS)
         if: runner.os == 'macOS'
-        run: zip -r ${{ matrix.name }}.zip build/poketrack.app
+        run: |
+          cp -R build/poketrack.app poketrack.app
+          zip -r ${{ matrix.name }}.zip poketrack.app
 
       - name: Zip artifact (Windows)
         if: runner.os == 'Windows'
