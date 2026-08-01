@@ -54,7 +54,7 @@ GEN_C="$OUT_DIR/$NAME.c"
 # not a bare binary name found only via $PATH.
 WASM_LD="${WASM_LD:-$(command -v wasm-ld || echo "$WASI_SDK_PATH/bin/wasm-ld")}"
 
-"$WASI_SDK_PATH/bin/clang" --target=wasm32-wasi -mexec-model=reactor -O2 \
+"$WASI_SDK_PATH/bin/clang" --target=wasm32-wasip1 -mexec-model=reactor -O2 \
   -fuse-ld="$WASM_LD" \
   -I"$CLAP_INCLUDE" -I"$SCRIPT_DIR" \
   -DPD_PLUGIN_ID="\"com.poketrack.clap.$NAME\"" -DPD_PLUGIN_NAME="\"$NAME (PD)\"" \
