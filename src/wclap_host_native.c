@@ -33,7 +33,15 @@ static LibEntry* lib_acquire(const char* path) {
       return &s_libs[i];
     }
   }
-  if (s_num_libs >= MAX_LOADED_LIBS)
+  // Reuse a slot freed by lib_release before growing the array.
+  LibEntry* free_slot = NULL;
+  for (int i = 0; i < s_num_libs; i++) {
+    if (!s_libs[i].wclap) {
+      free_slot = &s_libs[i];
+      break;
+    }
+  }
+  if (!free_slot && s_num_libs >= MAX_LOADED_LIBS)
     return NULL;
   void* wclap = wclap_open(path);
   if (!wclap)
@@ -44,7 +52,8 @@ static LibEntry* lib_acquire(const char* path) {
     wclap_close(wclap);
     return NULL;
   }
-  LibEntry* le = &s_libs[s_num_libs++];
+  LibEntry* le = free_slot ? free_slot : &s_libs[s_num_libs++];
+  memset(le->path, 0, sizeof(le->path));
   strncpy(le->path, path, sizeof(le->path) - 1);
   le->wclap = wclap;
   le->ref_count = 1;
@@ -55,10 +64,14 @@ static void lib_release(LibEntry* le) {
   if (!le || --le->ref_count > 0)
     return;
   wclap_close(le->wclap);
-  int idx = (int)(le - s_libs);
-  for (int i = idx; i < s_num_libs - 1; i++)
-    s_libs[i] = s_libs[i + 1];
-  s_num_libs--;
+  // Mark the slot free in place — do NOT compact the array. Every ClapPlugin
+  // holds a raw LibEntry* into s_libs, so shifting later entries down would
+  // silently repoint still-live plugins at a different library's entry: the
+  // next unload would then close the WRONG wclap while its plugin instance
+  // was still alive, which wclap-bridge detects and aborts on.
+  le->wclap = NULL;
+  le->path[0] = '\0';
+  le->ref_count = 0;
 }
 
 struct ClapPlugin {

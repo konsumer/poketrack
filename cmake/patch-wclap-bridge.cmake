@@ -29,3 +29,23 @@ string(REPLACE
   content "${content}")
 
 file(WRITE "${f}" "${content}")
+
+# Stop forwarding a loaded WCLAP's WASI stdout to poketrack's own stdout.
+# Guest plugins can end up with debug console.log() calls compiled in
+# (e.g. as-clap's clap_entry.init()/pluginInit() tracing, used by the
+# karplus plugin's AssemblyScript build) — with stdout inherited, every
+# plugin (re)instantiation spams that straight into poketrack's own
+# console. stderr stays inherited so real WASM traps/errors still surface.
+set(wf "source/wclap-instance-wasmtime/wclap-instance-wasmtime.cpp")
+if(NOT EXISTS "${wf}")
+  message(FATAL_ERROR "patch-wclap-bridge.cmake: ${wf} not found — wclap-bridge layout may have changed")
+endif()
+
+file(READ "${wf}" wcontent)
+
+string(REPLACE
+  "wasi_config_inherit_stdout(wasiConfig);\n"
+  ""
+  wcontent "${wcontent}")
+
+file(WRITE "${wf}" "${wcontent}")

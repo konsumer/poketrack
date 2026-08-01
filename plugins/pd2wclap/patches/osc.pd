@@ -4,7 +4,7 @@
 #X obj 20 100 osc~;
 #X obj 20 180 *~;
 #X obj 20 220 dac~;
-#X obj 129 78 hsl 128 17 0 255 0 0 empty volue volume -2 -8 0 10 #191919 #e1e1e1 #e1e1e1 0 1;
+#X obj 129 78 hsl 128 17 0 1 0 0 empty volume volume -2 -8 0 10 #191919 #e1e1e1 #e1e1e1 0.5 1;
 #X connect 0 0 1 0;
 #X connect 1 0 2 0;
 #X connect 2 0 3 0;

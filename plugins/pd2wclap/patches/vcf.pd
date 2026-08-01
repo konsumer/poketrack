@@ -2,7 +2,7 @@
 #X obj 20 20 noise~;
 #X obj 20 100 vcf~ 400 4;
 #X obj 20 140 dac~;
-#X obj 141 43 hsl 128 17 100 5000 0 0 empty cutoff cutoff -2 -8 0 10 #191919 #e1e1e1 #e1e1e1 0 1;
+#X obj 141 43 hsl 128 17 100 5000 0 0 empty cutoff cutoff -2 -8 0 10 #191919 #e1e1e1 #e1e1e1 1200 1;
 #X connect 0 0 1 0;
 #X connect 1 0 2 0;
 #X connect 1 0 2 1;

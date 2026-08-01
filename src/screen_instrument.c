@@ -326,6 +326,13 @@ void screen_instrument_update(UIState* ui) {
         int after = def->dyn_num_params ? def->dyn_num_params(state) : 0;
         if (after > before)
           ui->inst_row = INST_PARAM_BASE + after;
+        // Without this, a newly-added mapping only exists in preview_states
+        // (the `state` mutated above) — shared_states/chan_states, the
+        // instances actually used for playback, keep their old, shorter
+        // mappings[] array, so the new param silently no-ops until some
+        // other chain edit happens to force a rebuild. Same pattern as the
+        // device-picker and DATA-row file-select flows below/above.
+        audio_rebuild_instrument(ui->engine, (uint8_t)ui->ctx_instrument);
         ui->clap_picker_active = false;
       } else if (r == PICKER_CANCELLED) {
         ui->clap_picker_active = false;
@@ -431,6 +438,7 @@ void screen_instrument_update(UIState* ui) {
             def->mapping_remove(state, param);
             if (def->sync_to_data)
               def->sync_to_data(state, sl->data, sizeof(sl->data));
+            audio_rebuild_instrument(ui->engine, (uint8_t)ui->ctx_instrument);
             if (ui->inst_row > INST_PARAM_BASE)
               ui->inst_row--;
           } else {

@@ -460,8 +460,14 @@ void audio_rebuild_instrument(AudioEngine* eng, uint8_t inst_idx) {
     for (int tr = 0; tr < PATTERN_TRACKS; tr++)
       if (eng->active_inst[ch][tr] == inst_idx)
         destroy_chan_states(eng, ch, tr);
-  if (eng->preview_inst == inst_idx)
-    destroy_preview_states(eng);
+  // Unconditional, like destroy_shared_states below: ensure_preview_states()
+  // treats `preview_inst == inst_idx` as "already built, nothing changed" —
+  // but preview_inst can still equal inst_idx here from a stale, pre-edit
+  // build (e.g. this instrument was last previewed before this chain edit).
+  // Without unconditionally invalidating it, that stale cache survives the
+  // edit and param changes on newly-added units silently go nowhere until
+  // some other edit happens to flip preview_inst away and back.
+  destroy_preview_states(eng);
   destroy_shared_states(eng, inst_idx);
   AUDIO_UNLOCK(eng);
 }

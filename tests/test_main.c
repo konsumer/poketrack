@@ -289,6 +289,234 @@ static void test_clap_plugin_pd(void) {
   clap_host_unload(p);
 }
 
+// A freshly-added PLUGIN unit in poketrack never explicitly sets a param
+// before the first note — it plays with whatever default value the CLAP
+// host reports (which comes straight from each GUI slider's saved
+// default_value field in the .pd file). If that default sits at a
+// degenerate position (a gain of 0, or a filter cutoff of 0 Hz — below
+// its own declared 100..5000 range), the plugin is correctly silent by
+// design, not broken — but that's indistinguishable from "doesn't work"
+// to a user who just added the instrument and played a note. This test
+// locks down that both demo patches are actually audible out of the box.
+static void test_clap_plugin_pd_default_params_are_audible(void) {
+  const char* paths[] = {
+      "../plugins/pd2wclap/build/pd-osc.wasm",
+      "../plugins/pd2wclap/build/pd-vcf.wasm",
+  };
+  for (int i = 0; i < 2; i++) {
+    const char* path = paths[i];
+    if (!FileExists(path)) {
+      printf("SKIP test_clap_plugin_pd_default_params_are_audible: %s not built\n", path);
+      continue;
+    }
+    ClapPlugin* p = clap_host_load(path, NULL, 44100.0f, 512);
+    CHECK(p != NULL, "%s: load failed", path);
+    if (!p)
+      continue;
+
+    if (clap_host_is_instrument(p))
+      clap_host_note_on(p, 60, 100, 0);
+
+    enum { BLK = 512, BLOCKS = 8 };
+    static float out_l[BLK], out_r[BLK];
+    float energy = 0.0f;
+    for (int blk = 0; blk < BLOCKS; blk++) {
+      clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+      for (int f = 0; f < BLK; f++)
+        energy += out_l[f] * out_l[f] + out_r[f] * out_r[f];
+    }
+    CHECK(energy > 1e-4f, "%s: silent with default params (no param explicitly set) — check GUI slider default_value fields", path);
+
+    clap_host_unload(p);
+  }
+}
+
+// Regression test for a real bug in the ADD-param-mapping flow
+// (screen_instrument.c): adding a new param mapping to a CLAP unit (via
+// def->picker_add + sync_to_data) mutates preview_states[slot], but unless
+// audio_rebuild_instrument() runs afterward too, shared_states[inst][slot]
+// — the instance actually used for pattern/MIDI playback — keeps its old,
+// shorter mappings[] array. The next param-value edit then silently no-ops
+// on the live instance (index out of range), with no error: "params don't
+// do anything until I add another unit" (adding a unit happens to trigger
+// exactly the audio_rebuild_instrument call this path was missing). This
+// drives the real AudioEngine/ChainSlot machinery end to end, mirroring
+// what screen_instrument.c now does, and checks the newly-added mapping
+// and a value change on it both reach the shared instance with no other
+// chain edit in between.
+static void test_clap_param_mapping_reaches_shared_instance(void) {
+  const char* path = "../plugins/pd2wclap/build/pd-osc.wasm";
+  if (!FileExists(path)) {
+    printf("SKIP test_clap_param_mapping_reaches_shared_instance: %s not built\n", path);
+    return;
+  }
+
+  static AudioEngine eng;
+  tracker_init(&song_a);
+  ChainSlot* sl = &song_a.instruments[0].chain[0];
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "clap", 0);
+  strncpy(sl->data, path, sizeof(sl->data) - 1);  // no tab-suffix: zero mappings yet, like a freshly-loaded plugin
+  audio_init(&eng, &song_a);
+
+  const UnitDef* def = unit_find("clap");
+  CHECK(def != NULL, "clap unit not registered");
+  if (!def) {
+    audio_shutdown(&eng);
+    return;
+  }
+
+  // Mirror screen_instrument.c's ADD-row flow: ensure_preview, picker_add,
+  // sync_to_data, then (the fix) rebuild the instrument.
+  audio_ensure_preview(&eng, 0);
+  UnitState* preview = eng.preview_states[0];
+  CHECK(preview != NULL, "preview_states[0] not created");
+  if (!preview) {
+    audio_shutdown(&eng);
+    return;
+  }
+  CHECK(def->picker_count(preview) > 0, "pd-osc.wasm exposes no pickable params");
+  def->picker_add(preview, 0);  // maps pd-osc's one param ("volume")
+  CHECK(def->dyn_num_params(preview) == 1, "picker_add didn't add a mapping to preview state");
+  def->sync_to_data(preview, sl->data, sizeof(sl->data));
+  audio_rebuild_instrument(&eng, 0);
+
+  // Now bring up the shared instance the way real playback does (a MIDI
+  // note), with no OTHER chain edit since the mapping was added.
+  audio_midi_note_on(&eng, 0, 60);
+  UnitState* shared = eng.shared_states[0][0];
+  CHECK(shared != NULL, "shared_states[0][0] not created by note-on");
+  if (shared) {
+    CHECK(def->dyn_num_params(shared) == 1,
+          "shared instance has %d mappings, want 1 — new mapping never reached the playing instance",
+          def->dyn_num_params(shared));
+
+    audio_set_dyn_param(&eng, 0, 0, 0, 200);
+    CHECK(def->get_param_val(shared, 0) == 200,
+          "shared instance param value is %d after set, want 200 — edit never reached the playing instance",
+          def->get_param_val(shared, 0));
+  }
+
+  audio_shutdown(&eng);
+}
+
+// Same real-Wasmtime-host path as test_clap_plugin_pd, but for the
+// polyphonic supersaw patch (notein -> poly 4 1 -> 4 [voice] sub-patch
+// instances) — checks it's actually silent with no notes held, and
+// produces real overlapping-note polyphony: two simultaneously-held
+// notes must sound *louder* (more energy) than either one alone, which
+// is only possible if poly is correctly assigning them to separate
+// voices rather than one voice stomping on the other.
+static void test_clap_plugin_pd_supersaw_polyphony(void) {
+  const char* path = "../plugins/pd2wclap/build/pd-supersaw.wasm";
+  if (!FileExists(path)) {
+    printf("SKIP test_clap_plugin_pd_supersaw_polyphony: %s not built\n", path);
+    return;
+  }
+
+  ClapPlugin* p = clap_host_load(path, NULL, 44100.0f, 512);
+  CHECK(p != NULL, "pd-supersaw.wasm: load failed");
+  if (!p)
+    return;
+
+  enum { BLK = 512 };
+  static float out_l[BLK], out_r[BLK];
+
+  // Silent with nothing held.
+  float silent_energy = 0.0f;
+  for (int blk = 0; blk < 4; blk++) {
+    clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+    for (int f = 0; f < BLK; f++)
+      silent_energy += out_l[f] * out_l[f] + out_r[f] * out_r[f];
+  }
+  CHECK(silent_energy < 1e-6f, "pd-supersaw.wasm: not silent with no notes held (energy=%g)", silent_energy);
+
+  // One note, let the attack ramp settle, measure.
+  clap_host_note_on(p, 60, 100, 0);
+  for (int blk = 0; blk < 8; blk++)
+    clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+  float one_note_energy = 0.0f;
+  for (int blk = 0; blk < 4; blk++) {
+    clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+    for (int f = 0; f < BLK; f++)
+      one_note_energy += out_l[f] * out_l[f] + out_r[f] * out_r[f];
+  }
+  CHECK(one_note_energy > 1e-4f, "pd-supersaw.wasm: silent after single note_on");
+
+  // Add a second, different, overlapping note (not choked off — this is
+  // the real overlapping-note path clap_unit.c doesn't exercise).
+  clap_host_note_on(p, 67, 100, 0);
+  for (int blk = 0; blk < 8; blk++)
+    clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+  float two_note_energy = 0.0f;
+  for (int blk = 0; blk < 4; blk++) {
+    clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+    for (int f = 0; f < BLK; f++)
+      two_note_energy += out_l[f] * out_l[f] + out_r[f] * out_r[f];
+  }
+  CHECK(two_note_energy > one_note_energy * 1.3f,
+        "pd-supersaw.wasm: two held notes (%g) not louder than one (%g) — poly isn't assigning separate voices",
+        two_note_energy, one_note_energy);
+
+  clap_host_note_off(p, 60, 0);
+  clap_host_note_off(p, 67, 0);
+  for (int blk = 0; blk < 20; blk++)
+    clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+  float released_energy = 0.0f;
+  for (int blk = 0; blk < 4; blk++) {
+    clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+    for (int f = 0; f < BLK; f++)
+      released_energy += out_l[f] * out_l[f] + out_r[f] * out_r[f];
+  }
+  CHECK(released_energy < one_note_energy * 0.05f,
+        "pd-supersaw.wasm: still loud (%g) well after both notes released", released_energy);
+
+  clap_host_unload(p);
+}
+
+// Regression test for a dangling-pointer crash on save. lib_release() in
+// wclap_host_native.c used to compact its s_libs[] array by shifting entries
+// down, but every ClapPlugin holds a raw LibEntry* into that array — so
+// tearing down the FIRST of several loaded WCLAPs silently repointed the
+// others at the wrong entry, and the next unload closed a wclap whose plugin
+// instance was still alive (wclap-bridge detects that and abort()s).
+//
+// Needs three or more distinct WCLAP files loaded at once to show up, which
+// is exactly what a real song with several plugin instruments does, and what
+// audio_set_save_dir()'s full teardown after every save triggers.
+static void test_multiple_wclap_teardown_does_not_dangle(void) {
+  const char* plugins[] = {
+      "../examples/plugins/karp.wclap.wasm",
+      "../examples/plugins/pd-osc.wclap.wasm",
+      "../examples/plugins/pd-supersaw.wclap.wasm",
+  };
+  const int n = 3;
+  for (int i = 0; i < n; i++) {
+    if (!FileExists(plugins[i])) {
+      printf("SKIP test_multiple_wclap_teardown_does_not_dangle: %s not built\n", plugins[i]);
+      return;
+    }
+  }
+
+  ClapPlugin* p[3];
+  for (int i = 0; i < n; i++) {
+    p[i] = clap_host_load(plugins[i], NULL, 44100.0f, 512);
+    CHECK(p[i] != NULL, "%s: load failed", plugins[i]);
+    if (!p[i])
+      return;
+  }
+  // Unload front-to-back: this is the order that used to corrupt the entries
+  // still held by the not-yet-unloaded plugins.
+  for (int i = 0; i < n; i++)
+    clap_host_unload(p[i]);
+
+  // Re-load afterwards to prove freed slots are genuinely reusable (the fix
+  // marks slots free in place rather than compacting).
+  ClapPlugin* again = clap_host_load(plugins[0], NULL, 44100.0f, 512);
+  CHECK(again != NULL, "reload after teardown failed — freed slot not reusable");
+  if (again)
+    clap_host_unload(again);
+}
+
 int main(void) {
   SetTraceLogLevel(LOG_ERROR);  // silence raylib INFO spam
   unit_dsp_init();
@@ -300,6 +528,10 @@ int main(void) {
   test_wav_export();
   test_render_smoke();
   test_clap_plugin_pd();
+  test_multiple_wclap_teardown_does_not_dangle();
+  test_clap_plugin_pd_default_params_are_audible();
+  test_clap_param_mapping_reaches_shared_instance();
+  test_clap_plugin_pd_supersaw_polyphony();
 
   if (fails) {
     printf("%d FAILURE(S)\n", fails);
