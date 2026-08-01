@@ -18,10 +18,11 @@ DATA field at the resulting `.wasm`, exactly like any other WCLAP plugin.
 
 Some things to consider:
 
-- Any `receive`, without a `send` will get turned into a plugin param, but it's better to use a slider with a `receive`. They are nice because they let you play with the values in puredata, and also tell poketrack their range (which is mapped to 00-FF.)
-- Some ops are not implemented yet, some are missing or work slightly different. If you find something is off in one of your own patches let me know, and I will try to improve [pdast](https://github.com/konsumer/pdast).
+- Any `receive`, without a `send` will get turned into a plugin param (mapped range 0-1) but it's better to use a slider/toggle/etc with a `receive`. They are nice because they let you play with the values in puredata, and also tell poketrack their range (which is mapped to 00-FF.)
+- Some ops are not implemented yet, some are missing or work slightly different. If you find something is off in one of your own patches let me know, and I will try to improve [pdast](https://github.com/konsumer/pdast). It's a hack for sure, and there will always be gaps, but I am interested in getting it usably close.
 - polyphony is done with standard pattern of `notein -> pack -> poly -> route` and you can make sub-patches (`pd`) to copy logic for voices. see [supersaw](./patches/supersaw.pd) for an example.
-- you may need more `OFF` messages in poketrack, dpending on how your patch works. it's standard `note.on/off` messages, whcih is slightly different than the tracker paradigm. You might need to use envelopes on note-in, or just send more off messages, since plugins let you take over control of all that.
+- you may need more `OFF` messages in poketrack, dpending on how your patch works. it's standard `note.on/off` messages, which is slightly different than the tracker paradigm. You might need to use envelopes on note-in, or just send more `OFF` messages, since plugins let you take over control of all that.
+- use [plugdata](https://plugdata.org/) it's built-in C stuff doesn't work directly for plugins, but you can limit your scope to "compiled mode" which is a pretty good start. The UI is also more modern, and it's primarily what I use, so it'll be easier to stay in sync wth how I do things. SInce people also often use it to target that smaller C subset, you can find a lot of patches for it, that should work well as WCLAP plugins, too.
 
 
 3 intentionally simple demo patches ship in `patches/`:
