@@ -63,3 +63,38 @@ jobs:
           depot2Path: macos
           depot3Path: linux
           releaseBranch: ${{ inputs.releaseBranch || 'prerelease' }}
+
+  deploy-examples:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'release')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Determine release tag
+        id: tag
+        run: |
+          TAG="${{ inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.event.workflow_run.head_branch }}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Download examples
+        run: |
+          mkdir -p dl content-examples
+          gh release download "${{ steps.tag.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            -p 'examples.zip' \
+            -D dl
+          unzip -o dl/examples.zip -d content-examples
+
+      - name: Deploy Example Beats to Steam
+        uses: game-ci/steam-deploy@v3
+        with:
+          username: ${{ secrets.STEAM_USERNAME }}
+          configVdf: ${{ secrets.STEAM_CONFIG_VDF }}
+          appId: '5043220'
+          buildDescription: ${{ steps.tag.outputs.tag }}
+          rootPath: content-examples
+          depot1Path: .
+          releaseBranch: default
