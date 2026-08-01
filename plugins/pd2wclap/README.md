@@ -16,15 +16,21 @@ Because the patch is compiled in, not loaded at runtime, "picking a patch" is
 a build step: run `build.sh` against your `.pd` file and point poketrack's
 DATA field at the resulting `.wasm`, exactly like any other WCLAP plugin.
 
-Two intentionally simple demo patches ship in `patches/`:
+Some things to consider:
+
+- Use GUI elements for params (sliders, etc.) Any `receive`, without a `send` will get turned into a plugin param, but it's better to use a slider. Any GUI element with a `receive` set, and range is determined by GUI. They are nice because they let you play with the values in puredata, and also tell poketrack their range (which is mapped to 00-FF.)
+- Some ops are not implemented yet, some are missing or work slightly different. If you find something is off in one of your own patches let me know, and I will try to improve [pdast](https://github.com/konsumer/pdast).
+- polyphony is done with standard pattern of `notein -> pack -> poly -> route` and you can make sub-patches (`pd`) to copy logic for voices. see [supersaw](./patches/supersaw.pd) for an example.
+- you may need more `OFF` messages in poketrack, dpending on how your patch works. it's standard `note.on/off` messages, whcih is slightly different than the tracker paradigm. you might need to use envelopes on note-in, or just send more off messages, since plugins let you take over control of all that.
+
+
+3 intentionally simple demo patches ship in `patches/`:
 
 - **osc.pd** — `notein` → `mtof` → `osc~`, multiplied by a `volume` param,
   into `dac~`.
 - **vcf.pd** — `noise~` through `vcf~` (resonant bandpass)
   slider driving `cutoff` (100–5000 Hz).
-- **supersaw.pd** — multiple detuned saw-waves
-
-Any GUI element with a `receive` set, or `receive`, without a `send` will get turned into a param, and range is determined by GUI (if you use that.) For this reason, GUI elements (sliders, etc) are nice because they let you play with the values and also tell poketrack their range.
+- **supersaw.pd** — polyphonous voice-stealing multiple detuned saw-waves
 
 ## Params
 
