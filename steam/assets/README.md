@@ -43,19 +43,29 @@ above (`sips -z <h> <w> in.png --out out.png` or ffmpeg `scale=`).
 
 No logo-fill/no-text checkboxes apply to these — they're already just the icon.
 
+## Library assets
+
+| File | Size | Steam asset |
+|---|---|---|
+| `library_hero_3840x1240.png` | 3840×1240 | Library Hero |
+| `library_logo_1280x360.png` | 1280×360 | Library Logo |
+
+Built the same way as the capsules (`src/library_hero.html`, `src/library_logo.html`)
+except at a size the browser-screenshot workflow can't capture at full
+resolution (Chrome caps screenshots around ~1568px on the long edge), so
+these two are rendered directly with Pillow instead of a browser screenshot:
+
+- **Hero**: same cover-fit/blur/darken/saturate/vignette recipe as the
+  capsules, applied to `art/horiz.png` at full 3840×1240 — no text, since
+  it's a straight blur of the render (destroys the baked-in wordmark same
+  as the capsules do).
+- **Logo**: "POKETRACK" wordmark, same styling as the capsules' overlay
+  text, rendered on a transparent background. True alpha is recovered by
+  rendering the HTML twice (once on white, once on black) and diffing —
+  Chrome's screenshot tool only outputs JPEG, which has no alpha channel.
+
 ## Not generated — need real source art
 
-- **Library Hero** (3840×1240, .png, must contain **no text at all** — Valve
-  overlays the Library Logo on top of it): horiz.png/vert.png both have the
-  wordmark baked into the render, and neither is remotely close to the
-  3.1:1 aspect ratio. Needs a fresh render/crop of just the workbench scene
-  without the "POKETRACK" text layer — ask whoever built the 3D render for
-  a text-free version, or a wider background plate.
-- **Library Logo** (transparent PNG, ≤1280w and/or ≤720h): needs the
-  "POKETRACK / HANDHELD MUSIC TRACKER" wordmark as its own layer with a
-  transparent background, isolated from the 3D render. Not derivable from
-  the flattened PNGs in `art/` — check if the original design file (e.g.
-  Blender/Photoshop/Figma project) still has the text as a separate layer.
 - **Screenshots** (1920×1080+, 16:9): need real in-app captures, not
   promotional renders. `art/keys.png` is a controls diagram, not a
   screenshot — grab a few live shots of the pattern/song/instrument
