@@ -20,8 +20,11 @@ Two intentionally simple demo patches ship in `patches/`:
 
 - **osc.pd** — `notein` → `mtof` → `osc~`, multiplied by a `volume` param,
   into `dac~`.
-- **vcf.pd** — `noise~` through `vcf~` (resonant bandpass), with an `hsl`
+- **vcf.pd** — `noise~` through `vcf~` (resonant bandpass)
   slider driving `cutoff` (100–5000 Hz).
+- **supersaw.pd** — multiple detuned saw-waves
+
+Any GUI element with a `receive` set, or `receive`, without a `send` will get turned into a param, and range is determined by GUI (if you use that.) For this reason, GUI elements (sliders, etc) are nice because they let you play with the values and also tell poketrack their range.
 
 ## Params
 
@@ -29,13 +32,19 @@ Two intentionally simple demo patches ship in `patches/`:
 
 | Param | Range | Notes |
 |-------|-------|-------|
-| volume | 0–1 | `*~` gain, driven by `[r volume]` |
+| volume | 0–1 | `*~` gain, driven by an `hsl` |
 
 **vcf.pd**
 
 | Param | Range | Notes |
 |-------|-------|-------|
 | cutoff | 100–5000 Hz | `vcf~` center frequency, driven by an `hsl` |
+
+**supersaw.pd**
+
+| Param | Range | Notes |
+|-------|-------|-------|
+| detune | 0-255 | Detune amount, with math around native poketrack range (0-255) driven by an `hsl` |
 
 ## Install
 
@@ -63,6 +72,7 @@ its own shallow clone into `vendor/` on first run.
 ```sh
 ./build.sh patches/osc.pd pd-osc
 ./build.sh patches/vcf.pd pd-vcf
+./build.sh patches/supersaw.pd pd-supersaw
 ```
 
 Each produces `build/<name>.wasm`. `make plugins` (from the repo root) runs
