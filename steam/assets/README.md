@@ -64,10 +64,25 @@ these two are rendered directly with Pillow instead of a browser screenshot:
   rendering the HTML twice (once on white, once on black) and diffing —
   Chrome's screenshot tool only outputs JPEG, which has no alpha channel.
 
-## Not generated — need real source art
+## Screenshots
 
-- **Screenshots** (1920×1080+, 16:9): need real in-app captures, not
-  promotional renders. `art/keys.png` is a controls diagram, not a
-  screenshot — grab a few live shots of the pattern/song/instrument
-  screens instead.
-- **Trailer**: not an image asset, but same issue — needs real capture.
+`screenshots/` — real in-app captures at 2532×1424 (16:9, comfortably over
+Steam's 1920×1080 minimum), one per main screen:
+
+| File | Screen |
+|---|---|
+| `01-song.png` | Song / arrangement |
+| `02-pattern-empty.png` | Pattern editor, empty |
+| `03-menu.png` | Menu |
+| `04-instrument.png` | Instrument chain + params |
+| `05-pattern-filled.png` | Pattern editor with a song loaded |
+
+Steam shows these in store-page order, so the numeric prefix is the upload
+order, not just a filename. Re-capture rather than upscale if the UI changes —
+Steam rejects obvious upscales and these are already above the minimum.
+
+## Not generated — needs real capture
+
+- **Trailer**: not an image asset, and the only remaining gap. Steam wants a
+  real capture (gameplay, not a promo render); `art/keys.png` is a controls
+  diagram and doesn't substitute.

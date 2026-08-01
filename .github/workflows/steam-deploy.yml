@@ -14,12 +14,23 @@ on:
         description: Release tag to deploy (e.g. v1.2.3)
         required: true
       releaseBranch:
-        description: Steam branch to publish to
-        required: true
+        description: >-
+          Steam beta branch to set live. Must already exist in Steamworks.
+          Leave empty to upload without setting anything live. Cannot be
+          "default" — Steam refuses to set the default branch live from
+          steamcmd, that's an App Admin panel action.
+        required: false
         default: prerelease
 
 permissions:
   contents: read
+
+# Steam allows one steamcmd session per account at a time, and the two jobs
+# below share one build account, so overlapping runs step on each other and
+# fail in ways that look like nothing went wrong. One deploy at a time.
+concurrency:
+  group: steam-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -35,7 +46,22 @@ jobs:
           if [ -z "$TAG" ]; then
             TAG="${{ github.event.workflow_run.head_branch }}"
           fi
+          if [ -z "$TAG" ]; then
+            echo "::error::Could not determine a release tag to deploy."
+            exit 1
+          fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      # Fail fast with an explanation rather than uploading a whole build and
+      # then dying at the set-live step with an unexplained non-zero exit.
+      - name: Validate release branch
+        run: |
+          BRANCH="${{ inputs.releaseBranch }}"
+          if [ "$BRANCH" = "default" ]; then
+            echo "::error::Steam cannot set the 'default' branch live from steamcmd — that must be done in the Steamworks App Admin panel. Deploy to a beta branch (e.g. 'prerelease') and promote it there instead."
+            exit 1
+          fi
+          echo "Will set live on: ${BRANCH:-<none — upload only>}"
 
       - name: Download release builds
         run: |
@@ -44,12 +70,33 @@ jobs:
             --repo "${{ github.repository }}" \
             -p 'poketrack-windows.zip' -p 'poketrack-macos.zip' -p 'poketrack-linux.zip' \
             -D dl
+          for f in poketrack-windows.zip poketrack-macos.zip poketrack-linux.zip; do
+            if [ ! -s "dl/$f" ]; then
+              echo "::error::$f is missing or empty on release ${{ steps.tag.outputs.tag }} — refusing to upload an incomplete build."
+              exit 1
+            fi
+          done
 
       - name: Unpack builds
         run: |
           unzip -o dl/poketrack-windows.zip -d content/windows
           unzip -o dl/poketrack-macos.zip -d content/macos
           unzip -o dl/poketrack-linux.zip -d content/linux
+          # The zips travel through GitHub and get unpacked on a different OS
+          # than they were made on; a depot that ships a non-executable binary
+          # installs fine and then silently won't launch, so set the bit
+          # explicitly rather than trusting the archive's stored mode.
+          chmod +x content/linux/poketrack
+          chmod +x content/macos/poketrack.app/Contents/MacOS/poketrack
+
+      # Cheap, and the single most useful thing to look at when a depot ships
+      # the wrong thing — the action itself prints no manifest.
+      - name: Show what will be uploaded
+        run: |
+          for d in windows macos linux; do
+            echo "── $d ──"
+            find "content/$d" -type f -printf '%M %10s %p\n' | head -40
+          done
 
       - name: Deploy to Steam
         uses: game-ci/steam-deploy@v3
@@ -64,7 +111,21 @@ jobs:
           depot3Path: linux
           releaseBranch: ${{ inputs.releaseBranch || 'prerelease' }}
 
+      # steamcmd's own logs say far more than the action's exit code does.
+      - name: Dump steamcmd logs on failure
+        if: failure()
+        run: |
+          echo "── build_output.log ──"
+          cat build_output.log 2>/dev/null || echo "(none)"
+          for f in $(find . -path ./content -prune -o -name '*.log' -print 2>/dev/null | head -20); do
+            echo "── $f ──"
+            tail -80 "$f"
+          done
+
   deploy-examples:
+    # Sequential, not parallel: both jobs log into Steam as the same build
+    # account, and concurrent steamcmd sessions invalidate each other.
+    needs: deploy
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'release')
     runs-on: ubuntu-latest
     env:
@@ -77,6 +138,10 @@ jobs:
           if [ -z "$TAG" ]; then
             TAG="${{ github.event.workflow_run.head_branch }}"
           fi
+          if [ -z "$TAG" ]; then
+            echo "::error::Could not determine a release tag to deploy."
+            exit 1
+          fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Download examples
@@ -86,15 +151,37 @@ jobs:
             --repo "${{ github.repository }}" \
             -p 'examples.zip' \
             -D dl
+          if [ ! -s dl/examples.zip ]; then
+            echo "::error::examples.zip is missing or empty on release ${{ steps.tag.outputs.tag }}."
+            exit 1
+          fi
           unzip -o dl/examples.zip -d content-examples
 
+      - name: Show what will be uploaded
+        run: find content-examples -type f -printf '%M %10s %p\n' | head -40
+
+      # NOTE: releaseBranch is deliberately empty. This used to say "default",
+      # which uploaded the build fine and then failed at set-live, because
+      # Steam refuses to set the default branch live from steamcmd — the
+      # upload log showed no error, so the job just looked broken. Upload
+      # only; promote in the Steamworks App Admin panel (see steam/README.md).
       - name: Deploy Example Beats to Steam
         uses: game-ci/steam-deploy@v3
         with:
           username: ${{ secrets.STEAM_USERNAME }}
           configVdf: ${{ secrets.STEAM_CONFIG_VDF }}
-          appId: '5043220'
+          appId: ${{ secrets.STEAM_EXAMPLES_APP_ID || '5043220' }}
           buildDescription: ${{ steps.tag.outputs.tag }}
           rootPath: content-examples
           depot1Path: .
-          releaseBranch: default
+          releaseBranch: ''
+
+      - name: Dump steamcmd logs on failure
+        if: failure()
+        run: |
+          echo "── build_output.log ──"
+          cat build_output.log 2>/dev/null || echo "(none)"
+          for f in $(find . -path ./content-examples -prune -o -name '*.log' -print 2>/dev/null | head -20); do
+            echo "── $f ──"
+            tail -80 "$f"
+          done
