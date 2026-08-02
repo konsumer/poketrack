@@ -48,6 +48,35 @@ string(REPLACE
   ""
   wcontent "${wcontent}")
 
+# TEMPORARY diagnostic: narrow down exactly which sub-call inside
+# InstanceGroup::setup() crashes with STATUS_ACCESS_VIOLATION on Windows CI
+# (module compile itself already proven fine standalone via
+# tools/wasmtime_smoke.c). Remove once found.
+string(REPLACE
+  "\tauto *error = wasmtime_module_new(globalWasmEngine, wasmBytes, wasmLength, &wtModule);\n\tif (error) {\n"
+  "\tstd::cerr << \"DIAG: before module_new\\n\"; std::cerr.flush();\n\tauto *error = wasmtime_module_new(globalWasmEngine, wasmBytes, wasmLength, &wtModule);\n\tstd::cerr << \"DIAG: after module_new\\n\"; std::cerr.flush();\n\tif (error) {\n"
+  wcontent "${wcontent}")
+
+string(REPLACE
+  "\t\twasm_exporttype_vec_t exportTypes;\n\t\twasmtime_module_exports(wtModule, &exportTypes);\n\t\t\n"
+  "\t\twasm_exporttype_vec_t exportTypes;\n\t\tstd::cerr << \"DIAG: before module_exports\\n\"; std::cerr.flush();\n\t\twasmtime_module_exports(wtModule, &exportTypes);\n\t\tstd::cerr << \"DIAG: after module_exports\\n\"; std::cerr.flush();\n\t\t\n"
+  wcontent "${wcontent}")
+
+string(REPLACE
+  "\t\twasm_exporttype_vec_delete(&exportTypes);\n\t}\n\tif (!foundClapEntry) return stopWithError(\"clap_entry not exported\");\n"
+  "\t\tstd::cerr << \"DIAG: after exports loop\\n\"; std::cerr.flush();\n\t\twasm_exporttype_vec_delete(&exportTypes);\n\t}\n\tif (!foundClapEntry) return stopWithError(\"clap_entry not exported\");\n"
+  wcontent "${wcontent}")
+
+string(REPLACE
+  "\t\twasm_importtype_vec_t importTypes;\n\t\twasmtime_module_imports(wtModule, &importTypes);\n\t\tfor (size_t i = 0; i < importTypes.size; ++i) {\n"
+  "\t\twasm_importtype_vec_t importTypes;\n\t\tstd::cerr << \"DIAG: before module_imports\\n\"; std::cerr.flush();\n\t\twasmtime_module_imports(wtModule, &importTypes);\n\t\tstd::cerr << \"DIAG: after module_imports\\n\"; std::cerr.flush();\n\t\tfor (size_t i = 0; i < importTypes.size; ++i) {\n"
+  wcontent "${wcontent}")
+
+string(REPLACE
+  "\t\twasm_importtype_vec_delete(&importTypes);\n\t}\n}\n"
+  "\t\tstd::cerr << \"DIAG: after imports loop\\n\"; std::cerr.flush();\n\t\twasm_importtype_vec_delete(&importTypes);\n\t}\n}\n"
+  wcontent "${wcontent}")
+
 file(WRITE "${wf}" "${wcontent}")
 
 # Windows only: link wasmtime.dll.lib (the DLL's import lib) instead of the
