@@ -242,6 +242,11 @@ string(REPLACE
   "\ttypename Arena::Scoped scoped() {\n\t\tstd::cerr << \"DIAG: scoped(): before getOrCreate\\n\"; std::cerr.flush();\n\t\tauto arena = getOrCreate();\n\t\tstd::cerr << \"DIAG: scoped(): got arena, constructing Scoped\\n\"; std::cerr.flush();\n\t\treturn {*arena, std::move(arena)};\n\t}\n"
   acontent "${acontent}")
 
+string(REPLACE
+  "arenaLock(arena.scopeMutex) {}\n"
+  "arenaLock(arena.scopeMutex) { std::cerr << \"DIAG: Scoped ctor body reached\\n\"; std::cerr.flush(); }\n"
+  acontent "${acontent}")
+
 file(WRITE "${af}" "${acontent}")
 
 # Windows only: link wasmtime.dll.lib (the DLL's import lib) instead of the
