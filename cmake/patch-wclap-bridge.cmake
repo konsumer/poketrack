@@ -109,6 +109,25 @@ string(REPLACE
   "\tstd::cerr << \"DIAG: after function table loop, foundTable=\" << foundTable << \"\\n\"; std::cerr.flush();\n\tif (!foundTable) return stopWithError(\"couldn't find function table in WCLAP\");\n\treturn true;\n}\n"
   wcontent "${wcontent}")
 
+# setup() (store/linker/WASI/instantiate/exports) is now proven fully clean —
+# the crash must be later, in wasiInit() (calls _initialize() — the actual
+# first execution of the plugin's own JIT'd code) or the clap_entry.init()
+# call after it, both invoked from WclapModule's constructor.
+string(REPLACE
+  "bool wclap_wasmtime::InstanceImpl::wasiInit() {\n"
+  "bool wclap_wasmtime::InstanceImpl::wasiInit() {\n\tstd::cerr << \"DIAG: wasiInit begin\\n\"; std::cerr.flush();\n"
+  wcontent "${wcontent}")
+
+string(REPLACE
+  "\t\tsetWasmDeadline();\n\t\twasm_trap_t *trap = nullptr;\n\t\tauto error = wasmtime_func_call(wtContext, &item.of.func, nullptr, 0, nullptr, 0, &trap);\n"
+  "\t\tsetWasmDeadline();\n\t\twasm_trap_t *trap = nullptr;\n\t\tstd::cerr << \"DIAG: before _initialize call\\n\"; std::cerr.flush();\n\t\tauto error = wasmtime_func_call(wtContext, &item.of.func, nullptr, 0, nullptr, 0, &trap);\n\t\tstd::cerr << \"DIAG: after _initialize call\\n\"; std::cerr.flush();\n"
+  wcontent "${wcontent}")
+
+string(REPLACE
+  "\tif (!updateClapEntry()) return false;\n\n\treturn true;\n}\n"
+  "\tstd::cerr << \"DIAG: no _initialize export (or done), before 2nd updateClapEntry\\n\"; std::cerr.flush();\n\tif (!updateClapEntry()) return false;\n\tstd::cerr << \"DIAG: wasiInit end\\n\"; std::cerr.flush();\n\n\treturn true;\n}\n"
+  wcontent "${wcontent}")
+
 file(WRITE "${wf}" "${wcontent}")
 
 # Windows only: link wasmtime.dll.lib (the DLL's import lib) instead of the
