@@ -623,22 +623,31 @@ static void test_chopper_repeats_at_tempo_derived_length(void) {
   g_unit_samples_per_line = 0;
 }
 
+// Prints before each test runs, so a hard crash (which loses any buffered
+// stdout) still tells you which test it died in from the last line printed.
+#define RUN(fn)                \
+  do {                         \
+    printf("-- " #fn "\n");    \
+    fn();                      \
+  } while (0)
+
 int main(void) {
-  SetTraceLogLevel(LOG_ERROR);  // silence raylib INFO spam
+  setvbuf(stdout, NULL, _IONBF, 0);  // unbuffered: a crash must not eat RUN()'s output
+  SetTraceLogLevel(LOG_ERROR);       // silence raylib INFO spam
   unit_dsp_init();
 
-  test_registry();
-  test_song_roundtrip();
-  test_instrument_roundtrip();
-  test_recursive_find();
-  test_wav_export();
-  test_render_smoke();
-  test_chopper_repeats_at_tempo_derived_length();
-  test_clap_plugin_pd();
-  test_multiple_wclap_teardown_does_not_dangle();
-  test_clap_plugin_pd_default_params_are_audible();
-  test_clap_param_mapping_reaches_shared_instance();
-  test_clap_plugin_pd_supersaw_polyphony();
+  RUN(test_registry);
+  RUN(test_song_roundtrip);
+  RUN(test_instrument_roundtrip);
+  RUN(test_recursive_find);
+  RUN(test_wav_export);
+  RUN(test_render_smoke);
+  RUN(test_chopper_repeats_at_tempo_derived_length);
+  RUN(test_clap_plugin_pd);
+  RUN(test_multiple_wclap_teardown_does_not_dangle);
+  RUN(test_clap_plugin_pd_default_params_are_audible);
+  RUN(test_clap_param_mapping_reaches_shared_instance);
+  RUN(test_clap_plugin_pd_supersaw_polyphony);
 
   if (fails) {
     printf("%d FAILURE(S)\n", fails);
