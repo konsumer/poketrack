@@ -499,22 +499,30 @@ static void test_multiple_wclap_teardown_does_not_dangle(void) {
 
   ClapPlugin* p[3];
   for (int i = 0; i < n; i++) {
+    printf("   load[%d] %s\n", i, plugins[i]);
     p[i] = clap_host_load(plugins[i], NULL, 44100.0f, 512);
+    printf("   load[%d] returned %p\n", i, (void*)p[i]);
     CHECK(p[i] != NULL, "%s: load failed", plugins[i]);
     if (!p[i])
       return;
   }
   // Unload front-to-back: this is the order that used to corrupt the entries
   // still held by the not-yet-unloaded plugins.
-  for (int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++) {
+    printf("   unload[%d]\n", i);
     clap_host_unload(p[i]);
+    printf("   unload[%d] done\n", i);
+  }
 
   // Re-load afterwards to prove freed slots are genuinely reusable (the fix
   // marks slots free in place rather than compacting).
+  printf("   reload %s\n", plugins[0]);
   ClapPlugin* again = clap_host_load(plugins[0], NULL, 44100.0f, 512);
+  printf("   reload returned %p\n", (void*)again);
   CHECK(again != NULL, "reload after teardown failed — freed slot not reusable");
   if (again)
     clap_host_unload(again);
+  printf("   reload unload done\n");
 }
 
 // The whole point of CHOPPER is that its repeat length comes from the song
