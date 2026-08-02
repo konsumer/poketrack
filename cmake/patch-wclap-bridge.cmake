@@ -130,6 +130,46 @@ string(REPLACE
 
 file(WRITE "${wf}" "${wcontent}")
 
+# TEMPORARY diagnostic (continued): wasiInit()/_initialize() is proven clean
+# too — narrow into WclapModule's constructor itself: addHostFunctions,
+# mainThread->init(), bindGlobalArena() (copies host C++ structs into wasm
+# linear memory — genuine MSVC-vs-wasm-ABI struct-layout risk), and the
+# final clap_entry.init() call (included via ../wclap-module.h, included by
+# wclap-bridge.cpp which already has <iostream>).
+set(mf "source/_generic/wclap-module.h")
+if(NOT EXISTS "${mf}")
+  message(FATAL_ERROR "patch-wclap-bridge.cmake: ${mf} not found — wclap-bridge layout may have changed")
+endif()
+
+file(READ "${mf}" mcontent)
+
+string(REPLACE
+  "\t\tif (hasError) return; // base class failed\n\t\tif (!addHostFunctions(mainThread.get())) return;\n\t\t\n"
+  "\t\tstd::cerr << \"DIAG: WclapModule ctor begin\\n\"; std::cerr.flush();\n\t\tif (hasError) return; // base class failed\n\t\tstd::cerr << \"DIAG: before addHostFunctions\\n\"; std::cerr.flush();\n\t\tif (!addHostFunctions(mainThread.get())) return;\n\t\tstd::cerr << \"DIAG: after addHostFunctions\\n\"; std::cerr.flush();\n\t\t\n"
+  mcontent "${mcontent}")
+
+string(REPLACE
+  "\t\tmainThread->init();\n"
+  "\t\tstd::cerr << \"DIAG: before mainThread init\\n\"; std::cerr.flush();\n\t\tmainThread->init();\n\t\tstd::cerr << \"DIAG: after mainThread init\\n\"; std::cerr.flush();\n"
+  mcontent "${mcontent}")
+
+string(REPLACE
+  "\t\tbindGlobalArena();\n\t\t\n\t\tauto scoped = arenaPool.scoped();\n"
+  "\t\tstd::cerr << \"DIAG: before bindGlobalArena\\n\"; std::cerr.flush();\n\t\tbindGlobalArena();\n\t\tstd::cerr << \"DIAG: after bindGlobalArena\\n\"; std::cerr.flush();\n\t\t\n\t\tauto scoped = arenaPool.scoped();\n"
+  mcontent "${mcontent}")
+
+string(REPLACE
+  "\t\tif (!mainThread->call(entryPtr[&wclap_plugin_entry::init], pathStr)) {\n"
+  "\t\tstd::cerr << \"DIAG: before clap_entry.init call\\n\"; std::cerr.flush();\n\t\tif (!mainThread->call(entryPtr[&wclap_plugin_entry::init], pathStr)) {\n"
+  mcontent "${mcontent}")
+
+string(REPLACE
+  "\t\t\n\t\thasError = false;\n\t}\n"
+  "\t\tstd::cerr << \"DIAG: after clap_entry.init call\\n\"; std::cerr.flush();\n\t\t\n\t\thasError = false;\n\t\tstd::cerr << \"DIAG: WclapModule ctor end\\n\"; std::cerr.flush();\n\t}\n"
+  mcontent "${mcontent}")
+
+file(WRITE "${mf}" "${mcontent}")
+
 # Windows only: link wasmtime.dll.lib (the DLL's import lib) instead of the
 # static wasmtime.lib. wasm.h/wasi.h unconditionally declare every export as
 # __declspec(dllimport) on Windows; combined with the STATIC .lib that
