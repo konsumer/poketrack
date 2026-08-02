@@ -303,7 +303,13 @@ void screen_instrument_update(UIState* ui) {
       int total = def->dev_picker_count(state);
       PickerResult r = list_picker_nav(&ui->dev_picker_row, total);
       if (r == PICKER_CONFIRMED) {
+        // state may be the live chan_states/shared_states instance the audio
+        // callback thread is rendering right now (e.g. CLAP's shared
+        // instance) — dev_picker_set can free and replace its plugin, so it
+        // must not run concurrently with audio_fill_buffer.
+        audio_lock(ui->engine);
         def->dev_picker_set(state, ui->dev_picker_row);
+        audio_unlock(ui->engine);
         if (def->sync_to_data)
           def->sync_to_data(state, sl->data, sizeof(sl->data));
         audio_rebuild_instrument(ui->engine, (uint8_t)ui->ctx_instrument);
@@ -320,7 +326,12 @@ void screen_instrument_update(UIState* ui) {
       PickerResult r = list_picker_nav(&ui->clap_picker_row, total);
       if (r == PICKER_CONFIRMED) {
         int before = def->dyn_num_params ? def->dyn_num_params(state) : 0;
+        // Same live-instance hazard as the device picker above: state's
+        // mappings[] may be the array the audio thread is iterating in
+        // clap_unit_render right now.
+        audio_lock(ui->engine);
         def->picker_add(state, ui->clap_picker_row);
+        audio_unlock(ui->engine);
         if (def->sync_to_data)
           def->sync_to_data(state, sl->data, sizeof(sl->data));
         int after = def->dyn_num_params ? def->dyn_num_params(state) : 0;

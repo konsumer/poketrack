@@ -104,6 +104,14 @@ void audio_midi_kill_all(AudioEngine* eng);
 
 void audio_fill_buffer(AudioEngine* eng, float* out, uint32_t frames);
 
+// Raw access to the engine lock, for call sites outside audio.c that mutate
+// a live UnitState* pulled straight from chan_states/preview_states/
+// shared_states (e.g. a picker-confirm handler calling dev_picker_set on the
+// instrument's actual live state) — the audio callback thread
+// (audio_fill_buffer) may be rendering that same instance concurrently.
+void audio_lock(AudioEngine* eng);
+void audio_unlock(AudioEngine* eng);
+
 // Call from the main thread each frame to deliver deferred plugin work (CLAP on_main_thread)
 void audio_do_main_thread_work(AudioEngine* eng);
 

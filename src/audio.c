@@ -1021,6 +1021,9 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
       g_sidechain_rms[i] = (float)sqrt(sc_energy[i] / (double)frames);
 }
 
+void audio_lock(AudioEngine* eng) { AUDIO_LOCK(eng); }
+void audio_unlock(AudioEngine* eng) { AUDIO_UNLOCK(eng); }
+
 void audio_fill_buffer(AudioEngine* eng, float* out, uint32_t frames) {
   AUDIO_LOCK(eng);
   // During an offline WAV render the export thread drives the engine directly;
