@@ -128,6 +128,22 @@ string(REPLACE
   "\tstd::cerr << \"DIAG: no _initialize export (or done), before 2nd updateClapEntry\\n\"; std::cerr.flush();\n\tif (!updateClapEntry()) return false;\n\tstd::cerr << \"DIAG: wasiInit end\\n\"; std::cerr.flush();\n\n\treturn true;\n}\n"
   wcontent "${wcontent}")
 
+# bindGlobalArena()'s FIRST action (arenaPool.scoped(), before any
+# copyAcross) is where it crashes — that's the arena's first allocateBlock(),
+# which calls the plugin's own exported malloc() via wtMalloc(). _initialize()
+# already proved wasmtime_func_call works on this Windows CI env, so this
+# narrows it to something specific about calling malloc() (deadline/epoch
+# state, argument marshalling, or the malloc export itself).
+string(REPLACE
+  "uint64_t wclap_wasmtime::InstanceImpl::wtMalloc(size_t bytes) {\n\tstd::lock_guard<std::recursive_mutex> lock(callMutex);\n"
+  "uint64_t wclap_wasmtime::InstanceImpl::wtMalloc(size_t bytes) {\n\tstd::cerr << \"DIAG: wtMalloc begin, bytes=\" << bytes << \"\\n\"; std::cerr.flush();\n\tstd::lock_guard<std::recursive_mutex> lock(callMutex);\n\tstd::cerr << \"DIAG: wtMalloc got callMutex\\n\"; std::cerr.flush();\n"
+  wcontent "${wcontent}")
+
+string(REPLACE
+  "\t\twasm_trap_t *trap = nullptr;\n\t\tauto error = wasmtime_func_call(wtContext, &wtMallocFunc, args, 1, results, 1, &trap);\n"
+  "\t\twasm_trap_t *trap = nullptr;\n\t\tstd::cerr << \"DIAG: before malloc func_call\\n\"; std::cerr.flush();\n\t\tauto error = wasmtime_func_call(wtContext, &wtMallocFunc, args, 1, results, 1, &trap);\n\t\tstd::cerr << \"DIAG: after malloc func_call\\n\"; std::cerr.flush();\n"
+  wcontent "${wcontent}")
+
 file(WRITE "${wf}" "${wcontent}")
 
 # TEMPORARY diagnostic (continued): wasiInit()/_initialize() is proven clean
