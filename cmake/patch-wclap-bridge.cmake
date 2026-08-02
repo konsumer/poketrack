@@ -239,7 +239,7 @@ string(REPLACE
 
 string(REPLACE
   "\ttypename Arena::Scoped scoped() {\n\t\tauto arena = getOrCreate();\n\t\treturn {*arena, std::move(arena)};\n\t}\n"
-  "\ttypename Arena::Scoped scoped() {\n\t\tstd::cerr << \"DIAG: scoped(): before getOrCreate\\n\"; std::cerr.flush();\n\t\tauto arena = getOrCreate();\n\t\tstd::cerr << \"DIAG: scoped(): got arena, constructing Scoped\\n\"; std::cerr.flush();\n\t\treturn {*arena, std::move(arena)};\n\t}\n"
+  "\ttypename Arena::Scoped scoped() {\n\t\tstd::cerr << \"DIAG: scoped(): before getOrCreate\\n\"; std::cerr.flush();\n\t\tauto arena = getOrCreate();\n\t\tstd::cerr << \"DIAG: scoped(): got arena, constructing Scoped\\n\"; std::cerr.flush();\n\t\t// Explicitly sequence the dereference before the move (was `return\n\t\t// {*arena, std::move(arena)};`) -- still an unnamed prvalue construction\n\t\t// so guaranteed copy elision (Scoped has no copy/move ctor) still\n\t\t// applies, but removes any reliance on braced-init-list evaluation\n\t\t// order between the two elements.\n\t\tArena &arenaRef = *arena;\n\t\tstd::cerr << \"DIAG: scoped(): dereferenced, constructing return value\\n\"; std::cerr.flush();\n\t\treturn {arenaRef, std::move(arena)};\n\t}\n"
   acontent "${acontent}")
 
 string(REPLACE
