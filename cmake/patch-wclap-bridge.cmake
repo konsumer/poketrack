@@ -168,6 +168,21 @@ string(REPLACE
   "\t\tstd::cerr << \"DIAG: after clap_entry.init call\\n\"; std::cerr.flush();\n\t\t\n\t\thasError = false;\n\t\tstd::cerr << \"DIAG: WclapModule ctor end\\n\"; std::cerr.flush();\n\t}\n"
   mcontent "${mcontent}")
 
+string(REPLACE
+  "\tbool bindGlobalArena() {\n\t\tauto scoped = arenaPool.scoped();\n\t\t\n\t\t// The global arena holds all the extensions, for the lifetime of the module\n\t\thostAmbisonicPtr = scoped.copyAcross(hostAmbisonic);\n\t\thostAudioPortsConfigPtr = scoped.copyAcross(hostAudioPortsConfig);\n\t\thostAudioPortsPtr = scoped.copyAcross(hostAudioPorts);\n"
+  "\tbool bindGlobalArena() {\n\t\tstd::cerr << \"DIAG: bindGlobalArena begin\\n\"; std::cerr.flush();\n\t\tauto scoped = arenaPool.scoped();\n\t\tstd::cerr << \"DIAG: arena scoped ok\\n\"; std::cerr.flush();\n\t\t\n\t\t// The global arena holds all the extensions, for the lifetime of the module\n\t\thostAmbisonicPtr = scoped.copyAcross(hostAmbisonic);\n\t\tstd::cerr << \"DIAG: after copy 1\\n\"; std::cerr.flush();\n\t\thostAudioPortsConfigPtr = scoped.copyAcross(hostAudioPortsConfig);\n\t\thostAudioPortsPtr = scoped.copyAcross(hostAudioPorts);\n\t\tstd::cerr << \"DIAG: after copy 3\\n\"; std::cerr.flush();\n"
+  mcontent "${mcontent}")
+
+string(REPLACE
+  "\t\thostTimerSupportPtr = scoped.copyAcross(hostTimerSupport);\n\t\t// need to be able to point to these constants\n"
+  "\t\thostTimerSupportPtr = scoped.copyAcross(hostTimerSupport);\n\t\tstd::cerr << \"DIAG: after copy ~15\\n\"; std::cerr.flush();\n\t\t// need to be able to point to these constants\n"
+  mcontent "${mcontent}")
+
+string(REPLACE
+  "\t\thostVoiceInfoPtr = scoped.copyAcross(hostVoiceInfo);\n\t\t\n\t\thostWebviewPtr = scoped.copyAcross(hostWebview);\n\t\t\n\t\tglobalArena = scoped.commit();\n\t\treturn true;\n\t}\n"
+  "\t\thostVoiceInfoPtr = scoped.copyAcross(hostVoiceInfo);\n\t\tstd::cerr << \"DIAG: after copy ~20 (voiceinfo)\\n\"; std::cerr.flush();\n\t\t\n\t\thostWebviewPtr = scoped.copyAcross(hostWebview);\n\t\tstd::cerr << \"DIAG: after webview copy\\n\"; std::cerr.flush();\n\t\t\n\t\tglobalArena = scoped.commit();\n\t\tstd::cerr << \"DIAG: bindGlobalArena commit done\\n\"; std::cerr.flush();\n\t\treturn true;\n\t}\n"
+  mcontent "${mcontent}")
+
 file(WRITE "${mf}" "${mcontent}")
 
 # Windows only: link wasmtime.dll.lib (the DLL's import lib) instead of the
