@@ -10,19 +10,6 @@
 #include "clap_host.h"
 #include "wclap-bridge.h"
 
-#if defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOGDI
-#define NOGDI
-#endif
-#ifndef NOUSER
-#define NOUSER
-#endif
-#include <windows.h>
-#endif
-
 // Per-WCLAP reference count so wclap_open/wclap_close are called once per file.
 typedef struct LibEntry {
   char path[512];
@@ -37,11 +24,7 @@ static bool s_bridge_inited = false;
 
 static LibEntry* lib_acquire(const char* path) {
   if (!s_bridge_inited) {
-    fprintf(stderr, "DIAG: before wclap_global_init\n");
-    fflush(stderr);
     wclap_global_init(0);
-    fprintf(stderr, "DIAG: after wclap_global_init\n");
-    fflush(stderr);
     s_bridge_inited = true;
   }
   for (int i = 0; i < s_num_libs; i++) {
@@ -60,23 +43,7 @@ static LibEntry* lib_acquire(const char* path) {
   }
   if (!free_slot && s_num_libs >= MAX_LOADED_LIBS)
     return NULL;
-  fprintf(stderr, "DIAG: before wclap_open %s\n", path);
-  fflush(stderr);
-  void* wclap = NULL;
-#if defined(_WIN32)
-  __try {
-    wclap = wclap_open(path);
-  } __except (fprintf(stderr, "DIAG: SEH exception in wclap_open: code=0x%08lX\n",
-                       (unsigned long)GetExceptionCode()),
-              fflush(stderr),
-              EXCEPTION_EXECUTE_HANDLER) {
-    return NULL;
-  }
-#else
-  wclap = wclap_open(path);
-#endif
-  fprintf(stderr, "DIAG: after wclap_open, result=%p\n", wclap);
-  fflush(stderr);
+  void* wclap = wclap_open(path);
   if (!wclap)
     return NULL;
   char err[256];

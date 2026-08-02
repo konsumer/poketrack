@@ -484,13 +484,9 @@ static void test_clap_plugin_pd_supersaw_polyphony(void) {
 // is exactly what a real song with several plugin instruments does, and what
 // audio_set_save_dir()'s full teardown after every save triggers.
 static void test_multiple_wclap_teardown_does_not_dangle(void) {
-  // Order matters right now: reordered (pd-osc first, karp second) as a
-  // diagnostic to isolate whether a Windows CI crash here is specific to
-  // karp.wclap.wasm (AssemblyScript-built) or universal to any first
-  // wclap_open() call on Windows. Restore original order once resolved.
   const char* plugins[] = {
-      "../examples/plugins/pd-osc.wclap.wasm",
       "../examples/plugins/karp.wclap.wasm",
+      "../examples/plugins/pd-osc.wclap.wasm",
       "../examples/plugins/pd-supersaw.wclap.wasm",
   };
   const int n = 3;
@@ -503,30 +499,22 @@ static void test_multiple_wclap_teardown_does_not_dangle(void) {
 
   ClapPlugin* p[3];
   for (int i = 0; i < n; i++) {
-    printf("   load[%d] %s\n", i, plugins[i]);
     p[i] = clap_host_load(plugins[i], NULL, 44100.0f, 512);
-    printf("   load[%d] returned %p\n", i, (void*)p[i]);
     CHECK(p[i] != NULL, "%s: load failed", plugins[i]);
     if (!p[i])
       return;
   }
   // Unload front-to-back: this is the order that used to corrupt the entries
   // still held by the not-yet-unloaded plugins.
-  for (int i = 0; i < n; i++) {
-    printf("   unload[%d]\n", i);
+  for (int i = 0; i < n; i++)
     clap_host_unload(p[i]);
-    printf("   unload[%d] done\n", i);
-  }
 
   // Re-load afterwards to prove freed slots are genuinely reusable (the fix
   // marks slots free in place rather than compacting).
-  printf("   reload %s\n", plugins[0]);
   ClapPlugin* again = clap_host_load(plugins[0], NULL, 44100.0f, 512);
-  printf("   reload returned %p\n", (void*)again);
   CHECK(again != NULL, "reload after teardown failed — freed slot not reusable");
   if (again)
     clap_host_unload(again);
-  printf("   reload unload done\n");
 }
 
 // The whole point of CHOPPER is that its repeat length comes from the song

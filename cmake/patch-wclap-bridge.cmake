@@ -49,3 +49,28 @@ string(REPLACE
   wcontent "${wcontent}")
 
 file(WRITE "${wf}" "${wcontent}")
+
+# Windows only: link wasmtime.dll.lib (the DLL's import lib) instead of the
+# static wasmtime.lib. wasm.h/wasi.h unconditionally declare every export as
+# __declspec(dllimport) on Windows; combined with the STATIC .lib that
+# produces a build that links fine (blanking WASM_API_EXTERN/WASI_API_EXTERN
+# papers over the mismatch at compile time) but crashes with
+# STATUS_ACCESS_VIOLATION on the very first real call into the library at
+# runtime — reproduced both locally and on Windows CI, same failure mode
+# reported in https://github.com/ashtonmeuser/godot-wasm/issues/65.
+# wasmtime.dll.lib ships in the same release zip as wasmtime.lib already
+# fetched, so this needs no new download — just linking the other file in it,
+# and (via CMakeLists.txt) copying wasmtime.dll next to the built .exe.
+set(wtf "wasmtime-fetched.cmake")
+if(NOT EXISTS "${wtf}")
+  message(FATAL_ERROR "patch-wclap-bridge.cmake: ${wtf} not found — wclap-bridge layout may have changed")
+endif()
+
+file(READ "${wtf}" wtcontent)
+
+string(REPLACE
+  "\ttarget_link_libraries(wasmtime INTERFACE \"\${wasmtime-c-api_SOURCE_DIR}/lib/wasmtime.lib\")\n\t# as suggested in wasmtime.h for static linking on Windows\n\ttarget_compile_definitions(wasmtime INTERFACE WASM_API_EXTERN= WASI_API_EXTERN=)\n"
+  "\ttarget_link_libraries(wasmtime INTERFACE \"\${wasmtime-c-api_SOURCE_DIR}/lib/wasmtime.dll.lib\")\n"
+  wtcontent "${wtcontent}")
+
+file(WRITE "${wtf}" "${wtcontent}")

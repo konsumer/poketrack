@@ -67,6 +67,21 @@ if(NOT EMSCRIPTEN)
     target_include_directories(wclap-bridge PRIVATE ${CMAKE_SOURCE_DIR}/src/vendor/webview-gui-stub)
 endif()
 
+# Windows only: wasmtime is dynamically linked there (see
+# cmake/patch-wclap-bridge.cmake — static linking crashes with
+# STATUS_ACCESS_VIOLATION on the first real Wasmtime call), so wasmtime.dll
+# must sit next to any .exe that links wclap-bridge or the OS loader can't
+# find it at startup.
+function(copy_wasmtime_dll target)
+    if(WIN32 AND NOT EMSCRIPTEN)
+        add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${wasmtime-c-api_SOURCE_DIR}/lib/wasmtime.dll"
+                "$<TARGET_FILE_DIR:${target}>"
+        )
+    endif()
+endfunction()
+
 # TinySoundFont (single-header SF2 player)
 set(TSF_HEADER "${CMAKE_BINARY_DIR}/tsf_include/tsf.h")
 if(NOT EXISTS "${TSF_HEADER}")
@@ -171,6 +186,7 @@ if(WIN32)
     # no matter which translation unit pulls in <windows.h> first (lock.h's
     # CRITICAL_SECTION and dir.h's FindFirstFile are the only ones left).
     target_compile_definitions(${PROJECT_NAME} PRIVATE WIN32_LEAN_AND_MEAN NOGDI NOUSER)
+    copy_wasmtime_dll(${PROJECT_NAME})
 endif()
 
 if(EMSCRIPTEN)
@@ -250,6 +266,7 @@ else()
     if(WIN32)
         target_link_libraries(poketrack_tests PRIVATE winmm)
         target_compile_definitions(poketrack_tests PRIVATE _USE_MATH_DEFINES WIN32_LEAN_AND_MEAN NOGDI NOUSER)
+        copy_wasmtime_dll(poketrack_tests)
     endif()
     if(APPLE)
         target_link_libraries(poketrack_tests PRIVATE "-framework CoreMIDI" "-framework CoreFoundation")
@@ -282,6 +299,7 @@ else()
     if(WIN32)
         target_link_libraries(theme_shot PRIVATE winmm)
         target_compile_definitions(theme_shot PRIVATE _USE_MATH_DEFINES WIN32_LEAN_AND_MEAN NOGDI NOUSER)
+        copy_wasmtime_dll(theme_shot)
     endif()
     if(APPLE)
         target_link_libraries(theme_shot PRIVATE "-framework CoreMIDI" "-framework CoreFoundation")

@@ -108,8 +108,12 @@ jobs:
         run: |
           # MSVC (multi-config) generator puts the binary under build/Release/,
           # not build/ directly like the single-config Unix generators.
+          # wasmtime.dll must ship alongside the .exe: Wasmtime is dynamically
+          # linked on Windows (see cmake/patch-wclap-bridge.cmake), so the OS
+          # loader needs it in the same directory at startup.
           cp build/Release/poketrack.exe poketrack.exe
-          Compress-Archive -Path poketrack.exe -DestinationPath ${{ matrix.name }}.zip
+          cp build/Release/wasmtime.dll wasmtime.dll
+          Compress-Archive -Path poketrack.exe,wasmtime.dll -DestinationPath ${{ matrix.name }}.zip
 
       - name: Upload to release
         if: github.event_name == 'release'
