@@ -75,6 +75,22 @@ jobs:
         # multi-config generator, defaults to Debug otherwise); harmless
         # no-op for the single-config Unix Makefiles generator elsewhere.
 
+      - name: Build tests
+        run: cmake --build build --config Release --target poketrack_tests --parallel
+        # poketrack_tests is EXCLUDE_FROM_ALL, so the main Build step above
+        # doesn't produce it — same target `make test` builds locally.
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        run: cd build; ./Release/poketrack_tests.exe
+        # Run from build/ (not build/Release/) so the tests' "../examples/..."
+        # and "../plugins/..." relative paths resolve the same as they do on
+        # the single-config generators below.
+
+      - name: Run tests (non-Windows)
+        if: runner.os != 'Windows'
+        run: cd build && ./poketrack_tests
+
       - name: Zip artifact (Linux)
         if: runner.os == 'Linux'
         run: |
