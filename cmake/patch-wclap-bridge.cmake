@@ -77,6 +77,20 @@ string(REPLACE
   "\t\tstd::cerr << \"DIAG: after imports loop\\n\"; std::cerr.flush();\n\t\twasm_importtype_vec_delete(&importTypes);\n\t}\n}\n"
   wcontent "${wcontent}")
 
+# InstanceGroup::setup() (module compile) is proven clean by the markers
+# above — narrow down further into InstanceImpl::setup() (creates the
+# store/linker/WASI config and instantiates the module), called from
+# WclapModuleBase's constructor via InstanceGroup::startInstance().
+string(REPLACE
+  "bool wclap_wasmtime::InstanceImpl::setup() {\n\tif (group.hasError()) return false;\n"
+  "bool wclap_wasmtime::InstanceImpl::setup() {\n\tstd::cerr << \"DIAG: InstanceImpl::setup begin\\n\"; std::cerr.flush();\n\tif (group.hasError()) return false;\n"
+  wcontent "${wcontent}")
+
+string(REPLACE
+  "\t\tsetWasmDeadline();\n\t\twasm_trap_t *trap = nullptr;\n\t\tauto *error = wasmtime_linker_instantiate(wtLinker, wtContext, group.wtModule, &wtInstance, &trap);\n"
+  "\t\tsetWasmDeadline();\n\t\twasm_trap_t *trap = nullptr;\n\t\tstd::cerr << \"DIAG: before linker_instantiate\\n\"; std::cerr.flush();\n\t\tauto *error = wasmtime_linker_instantiate(wtLinker, wtContext, group.wtModule, &wtInstance, &trap);\n\t\tstd::cerr << \"DIAG: after linker_instantiate\\n\"; std::cerr.flush();\n"
+  wcontent "${wcontent}")
+
 file(WRITE "${wf}" "${wcontent}")
 
 # Windows only: link wasmtime.dll.lib (the DLL's import lib) instead of the
