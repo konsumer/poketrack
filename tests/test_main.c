@@ -517,6 +517,112 @@ static void test_multiple_wclap_teardown_does_not_dangle(void) {
     clap_host_unload(again);
 }
 
+// The whole point of CHOPPER is that its repeat length comes from the song
+// BPM, so verify the actual period of the looped slice rather than just that
+// it makes finite noise (test_render_smoke already covers that). 1/8 note at
+// 120 BPM = 16 lines / 8 = 2 lines.
+static void test_chopper_repeats_at_tempo_derived_length(void) {
+  const UnitDef* d = unit_find("chopper");
+  CHECK(d != NULL, "chopper unit not registered");
+  if (!d)
+    return;
+
+  const uint32_t spl = 5512;  // one pattern line at 120 BPM, 44.1kHz
+  g_unit_samples_per_line = spl;
+  UnitState* st = d->create(44100.0f);
+  CHECK(st != NULL, "chopper: create failed");
+  if (!st)
+    return;
+
+  uint8_t p[UNIT_MAX_PARAMS];
+  memcpy(p, d->param_defaults, UNIT_MAX_PARAMS);  // ON=0 MODE=EVEN SIZE=1/8 SYNC=BEAT
+
+  enum { BLK = 512 };
+  static float in_l[BLK], in_r[BLK], out_l[BLK], out_r[BLK];
+
+  // Prime the capture buffer with a ramp that never repeats within a slice,
+  // so periodicity in the output can only come from looping (not from the
+  // input happening to be periodic). Bypassed, so this also checks ON=0.
+  long t = 0;
+  bool passthrough_ok = true;
+  for (int b = 0; b < 80; b++) {
+    for (int i = 0; i < BLK; i++)
+      in_l[i] = in_r[i] = (float)((t++ % 40009)) * 0.00001f;
+    d->render(st, p, in_l, in_r, out_l, out_r, BLK);
+    for (int i = 0; i < BLK; i++)
+      if (out_l[i] != in_l[i])
+        passthrough_ok = false;
+  }
+  CHECK(passthrough_ok, "chopper: ON=0 must pass audio through untouched");
+
+  // Engage, feeding silence: anything that comes out now must be the
+  // captured slice replaying.
+  p[0] = 1;
+  const int expect = (int)(spl * 16 / 8);
+  static float cap[40000];
+  int n = 0;
+  while (n + BLK <= (int)(sizeof(cap) / sizeof(cap[0])) && n < 3 * expect) {
+    memset(in_l, 0, sizeof(in_l));
+    memset(in_r, 0, sizeof(in_r));
+    d->render(st, p, in_l, in_r, out_l, out_r, BLK);
+    for (int i = 0; i < BLK; i++)
+      cap[n++] = out_l[i];
+  }
+
+  double energy = 0;
+  for (int i = 0; i < n; i++)
+    energy += cap[i] * cap[i];
+  CHECK(energy > 1e-6, "chopper: engaged output is silent — slice never captured");
+
+  int mismatches = 0;
+  for (int i = 0; i + expect < n; i++)
+    if (cap[i] != cap[i + expect])
+      mismatches++;
+  CHECK(mismatches == 0,
+        "chopper: output not periodic at %d samples (1/8 @120BPM) — %d/%d samples differ",
+        expect, mismatches, n - expect);
+
+  // A wrong-but-plausible period must NOT also match, otherwise the check
+  // above would pass for a stuck/DC output.
+  int off_by_matches = 0;
+  for (int i = 0; i + expect / 2 < n; i++)
+    if (cap[i] == cap[i + expect / 2])
+      off_by_matches++;
+  CHECK(off_by_matches < (n - expect / 2),
+        "chopper: output is periodic at half the expected length too — looks constant, not chopped");
+
+  // SYNC=LINE subdivides one line instead of a whole note, so the same
+  // divisor must give a 16x shorter slice.
+  d->kill(st);
+  p[3] = 1;
+  for (int b = 0; b < 80; b++) {
+    for (int i = 0; i < BLK; i++)
+      in_l[i] = in_r[i] = (float)((t++ % 40009)) * 0.00001f;
+    uint8_t off[UNIT_MAX_PARAMS];
+    memcpy(off, p, sizeof(off));
+    off[0] = 0;
+    d->render(st, off, in_l, in_r, out_l, out_r, BLK);
+  }
+  const int expect_line = (int)(spl / 8);
+  n = 0;
+  while (n + BLK <= (int)(sizeof(cap) / sizeof(cap[0])) && n < 3 * expect_line) {
+    memset(in_l, 0, sizeof(in_l));
+    memset(in_r, 0, sizeof(in_r));
+    d->render(st, p, in_l, in_r, out_l, out_r, BLK);
+    for (int i = 0; i < BLK; i++)
+      cap[n++] = out_l[i];
+  }
+  int line_mismatches = 0;
+  for (int i = 0; i + expect_line < n; i++)
+    if (cap[i] != cap[i + expect_line])
+      line_mismatches++;
+  CHECK(line_mismatches == 0,
+        "chopper: SYNC=LINE not periodic at %d samples — %d differ", expect_line, line_mismatches);
+
+  d->destroy(st);
+  g_unit_samples_per_line = 0;
+}
+
 int main(void) {
   SetTraceLogLevel(LOG_ERROR);  // silence raylib INFO spam
   unit_dsp_init();
@@ -527,6 +633,7 @@ int main(void) {
   test_recursive_find();
   test_wav_export();
   test_render_smoke();
+  test_chopper_repeats_at_tempo_derived_length();
   test_clap_plugin_pd();
   test_multiple_wclap_teardown_does_not_dangle();
   test_clap_plugin_pd_default_params_are_audible();

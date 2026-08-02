@@ -16,6 +16,9 @@
 // Per-instrument RMS for sidechain ducking (NUM_INSTRUMENTS=16)
 float g_sidechain_rms[NUM_INSTRUMENTS] = {0};
 
+// Tempo, published to units that need to be BPM-relative (see unit.h).
+uint32_t g_unit_samples_per_line = 0;
+
 static void midi_voice_destroy(AudioEngine* eng, int v);
 void audio_midi_kill_all(AudioEngine* eng);
 
@@ -842,6 +845,7 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
   audio_process_midi_in(eng);
   memset(out, 0, frames * 2 * sizeof(float));
   eng->samples_per_tick = calc_samples_per_tick(eng->song->bpm);
+  g_unit_samples_per_line = eng->samples_per_tick;
 
   // Interleaved render+tick for accurate timing
   float out_l[AUDIO_BLOCK_SIZE], out_r[AUDIO_BLOCK_SIZE];

@@ -114,6 +114,12 @@ void unit_dsp_init(void);
 // (CLAP mappings, MIDI CC slots) — for modulation units' render callbacks.
 void audio_mod_set_param(uint8_t inst_idx, uint8_t global_param, uint8_t val);
 
+// Samples per pattern line (== one tick == a 1/16 note) at the song's current
+// BPM, refreshed by the engine at the top of every render block. Units that
+// need to be tempo-relative read this instead of holding their own tempo.
+// A beat is 4 lines, a whole note 16. Zero until the first block renders.
+extern uint32_t g_unit_samples_per_line;
+
 // sin(2*pi*phase) for any phase (wraps, handles negatives). LUT + linear
 // interpolation, error < -100dB — replaces per-sample sinf in render loops.
 static inline float unit_sin(float phase) {

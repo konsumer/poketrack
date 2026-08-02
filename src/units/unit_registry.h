@@ -23,6 +23,7 @@ extern const UnitDef unit_tremolo;
 extern const UnitDef unit_pangain;
 extern const UnitDef unit_compressor;
 extern const UnitDef unit_ducker;
+extern const UnitDef unit_chopper;
 extern const UnitDef unit_midi;
 extern const UnitDef unit_lfo;
 

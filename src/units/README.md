@@ -221,6 +221,30 @@ Amplitude modulation (tremolo) or auto-pan.
 | SHAPE | Sine / Square / Saw / Tri | LFO waveform |
 | MODE | Trem / Pan / Both | Tremolo, auto-pan, or both |
 
+### CHOPPER
+
+Tempo-synced buffer repeat / beat-chop, modelled on Renoise's Repeater. While engaged it grabs the slice of audio that just went past and loops it, so the source stutters in time with the song instead of playing on. The repeat length is always derived from the song BPM, so it follows tempo changes automatically.
+
+| Param | Range | Notes |
+|-------|-------|-------|
+| ON | OFF / ON | Bypass vs chopping — automate this per step from the pattern |
+| MODE | EVEN / TRIP / DOT / FREE | Plain divisions, triplets (×2/3), dotted (×3/2), or a smooth unquantised sweep |
+| SIZE | 8/1 … 1/128 | Repeat length. Snapped in EVEN/TRIP/DOT; continuous in FREE |
+| SYNC | BEAT / LINE | What "1/1" means — see below |
+
+`SIZE` runs 8/1, 4/1, 2/1, 1/1, 1/2, 1/4 … 1/128. Values above 1/1 are the "every Nth" end.
+
+`SYNC` picks the unit that SIZE multiplies:
+
+- **BEAT** — one whole note (four beats). So `1/4` is a single beat, `1/1` a bar, `4/1` four bars.
+- **LINE** — one pattern line (a 1/16). So `1/1` is one line, `4/1` every fourth line, `1/2` half a line.
+
+`ON` is a separate param (rather than an "off" entry in MODE) precisely so it can be toggled per step from the pattern — that's the whole point of the effect. Sweeping `SIZE` in FREE mode from a pattern gives risers and glitch runs; changing SIZE while engaged always re-slices, so a swept SIZE stays useful.
+
+**Length limit.** A slice has to be buffered in full, and the buffer is four seconds per instance (there's one instance per lane/track playing the instrument, so it's the unit's main cost). LINE sync reaches every SIZE at any sane tempo. BEAT sync doesn't: at 120 BPM `2/1` is already 4s, so `2/1`, `4/1` and `8/1` all fold to the same length there — anything too long is halved until it fits, which keeps it on a musical division rather than an arbitrary cut. **Use LINE sync for long chops.**
+
+Unlike [DUCKER](#ducker), which only *watches* another instrument's level and writes a param, there's no audio routing between instruments — so CHOPPER can only chop its own chain.
+
 ### PAN/GAIN
 
 Simple stereo pan and gain trim. 0x80 is "no change" on both params.
