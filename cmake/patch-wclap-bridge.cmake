@@ -91,6 +91,24 @@ string(REPLACE
   "\t\tsetWasmDeadline();\n\t\twasm_trap_t *trap = nullptr;\n\t\tstd::cerr << \"DIAG: before linker_instantiate\\n\"; std::cerr.flush();\n\t\tauto *error = wasmtime_linker_instantiate(wtLinker, wtContext, group.wtModule, &wtInstance, &trap);\n\t\tstd::cerr << \"DIAG: after linker_instantiate\\n\"; std::cerr.flush();\n"
   wcontent "${wcontent}")
 
+# instantiate itself is proven clean too — narrow into the post-instantiate
+# export lookups (memory/clap_entry/malloc/function-table), still inside
+# InstanceImpl::setup().
+string(REPLACE
+  "\tif (!updateClapEntry()) return false;\n\n\tif (!wasmtime_instance_export_get(wtContext, &wtInstance, \"malloc\", 6, &item)) {\n"
+  "\tstd::cerr << \"DIAG: before updateClapEntry\\n\"; std::cerr.flush();\n\tif (!updateClapEntry()) return false;\n\tstd::cerr << \"DIAG: after updateClapEntry\\n\"; std::cerr.flush();\n\n\tif (!wasmtime_instance_export_get(wtContext, &wtInstance, \"malloc\", 6, &item)) {\n"
+  wcontent "${wcontent}")
+
+string(REPLACE
+  "\twasmtime_extern_delete(&item);\n\n\t// Look for the first function table\n\tsize_t exportIndex = 0;\n"
+  "\tstd::cerr << \"DIAG: after malloc lookup\\n\"; std::cerr.flush();\n\twasmtime_extern_delete(&item);\n\n\t// Look for the first function table\n\tsize_t exportIndex = 0;\n"
+  wcontent "${wcontent}")
+
+string(REPLACE
+  "\tif (!foundTable) return stopWithError(\"couldn't find function table in WCLAP\");\n\treturn true;\n}\n"
+  "\tstd::cerr << \"DIAG: after function table loop, foundTable=\" << foundTable << \"\\n\"; std::cerr.flush();\n\tif (!foundTable) return stopWithError(\"couldn't find function table in WCLAP\");\n\treturn true;\n}\n"
+  wcontent "${wcontent}")
+
 file(WRITE "${wf}" "${wcontent}")
 
 # Windows only: link wasmtime.dll.lib (the DLL's import lib) instead of the
