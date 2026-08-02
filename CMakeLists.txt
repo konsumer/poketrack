@@ -311,4 +311,17 @@ else()
     if(APPLE)
         target_link_libraries(theme_shot PRIVATE "-framework CoreMIDI" "-framework CoreFoundation")
     endif()
+
+    if(WIN32)
+        # Diagnostic only (not part of the normal build): calls the raw
+        # Wasmtime C API directly, bypassing wclap-bridge entirely, to tell
+        # apart "Wasmtime itself crashes here" from "wclap-bridge misuses
+        # the API". cmake --build build --target wasmtime_smoke
+        add_executable(wasmtime_smoke EXCLUDE_FROM_ALL tools/wasmtime_smoke.c)
+        target_include_directories(wasmtime_smoke PRIVATE "${wasmtime-c-api_SOURCE_DIR}/include")
+        target_link_libraries(wasmtime_smoke PRIVATE "${wasmtime-c-api_SOURCE_DIR}/lib/wasmtime.dll.lib")
+        target_link_libraries(wasmtime_smoke PRIVATE ws2_32.lib advapi32.lib userenv.lib ntdll.lib shell32.lib ole32.lib bcrypt.lib)
+        target_compile_definitions(wasmtime_smoke PRIVATE _USE_MATH_DEFINES WIN32_LEAN_AND_MEAN NOGDI NOUSER)
+        copy_wasmtime_dll(wasmtime_smoke)
+    endif()
 endif()
