@@ -26,11 +26,34 @@ int main(int argc, char** argv) {
   printf("smoke: read %zu bytes from %s\n", nread, path);
   fflush(stdout);
 
-  printf("smoke: wasm_engine_new\n");
+  // Mirrors wclap-bridge's InstanceGroup::globalInit() exactly: a config
+  // with the on-disk compilation cache enabled (wasmtime_config_cache_config_load),
+  // rather than the smoke test's earlier plain wasm_engine_new(). Testing
+  // whether THIS is what differs from a bare engine.
+  printf("smoke: wasm_config_new\n");
   fflush(stdout);
-  wasm_engine_t* engine = wasm_engine_new();
+  wasm_config_t* config = wasm_config_new();
+  if (!config) {
+    fprintf(stderr, "smoke: wasm_config_new failed\n");
+    return 1;
+  }
+  printf("smoke: wasmtime_config_cache_config_load\n");
+  fflush(stdout);
+  wasmtime_error_t* cache_err = wasmtime_config_cache_config_load(config, NULL);
+  printf("smoke: cache_config_load returned err=%p\n", (void*)cache_err);
+  fflush(stdout);
+  if (cache_err) {
+    wasm_byte_vec_t msg;
+    wasmtime_error_message(cache_err, &msg);
+    fprintf(stderr, "smoke: cache_config_load error: %.*s\n", (int)msg.size, msg.data);
+    wasmtime_error_delete(cache_err);
+  }
+
+  printf("smoke: wasm_engine_new_with_config\n");
+  fflush(stdout);
+  wasm_engine_t* engine = wasm_engine_new_with_config(config);
   if (!engine) {
-    fprintf(stderr, "smoke: wasm_engine_new failed\n");
+    fprintf(stderr, "smoke: wasm_engine_new_with_config failed\n");
     return 1;
   }
   printf("smoke: engine ok\n");
