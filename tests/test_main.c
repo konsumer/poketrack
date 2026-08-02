@@ -484,9 +484,13 @@ static void test_clap_plugin_pd_supersaw_polyphony(void) {
 // is exactly what a real song with several plugin instruments does, and what
 // audio_set_save_dir()'s full teardown after every save triggers.
 static void test_multiple_wclap_teardown_does_not_dangle(void) {
+  // Order matters right now: reordered (pd-osc first, karp second) as a
+  // diagnostic to isolate whether a Windows CI crash here is specific to
+  // karp.wclap.wasm (AssemblyScript-built) or universal to any first
+  // wclap_open() call on Windows. Restore original order once resolved.
   const char* plugins[] = {
-      "../examples/plugins/karp.wclap.wasm",
       "../examples/plugins/pd-osc.wclap.wasm",
+      "../examples/plugins/karp.wclap.wasm",
       "../examples/plugins/pd-supersaw.wclap.wasm",
   };
   const int n = 3;
