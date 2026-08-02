@@ -144,6 +144,11 @@ string(REPLACE
   "\t\twasm_trap_t *trap = nullptr;\n\t\tstd::cerr << \"DIAG: before malloc func_call\\n\"; std::cerr.flush();\n\t\tauto error = wasmtime_func_call(wtContext, &wtMallocFunc, args, 1, results, 1, &trap);\n\t\tstd::cerr << \"DIAG: after malloc func_call\\n\"; std::cerr.flush();\n"
   wcontent "${wcontent}")
 
+string(REPLACE
+  "\tif (group.is64()) {\n\t\tif (results[0].kind != WASMTIME_I64) return 0;\n\t\treturn results[0].of.i64;\n\t} else {\n\t\tif (results[0].kind != WASMTIME_I32) return 0;\n\t\treturn results[0].of.i32;\n\t}\n}\n"
+  "\tstd::cerr << \"DIAG: wtMalloc about to return, results[0].kind=\" << results[0].kind << \"\\n\"; std::cerr.flush();\n\tif (group.is64()) {\n\t\tif (results[0].kind != WASMTIME_I64) return 0;\n\t\treturn results[0].of.i64;\n\t} else {\n\t\tif (results[0].kind != WASMTIME_I32) return 0;\n\t\treturn results[0].of.i32;\n\t}\n}\n"
+  wcontent "${wcontent}")
+
 file(WRITE "${wf}" "${wcontent}")
 
 # TEMPORARY diagnostic (continued): wasiInit()/_initialize() is proven clean
@@ -200,6 +205,44 @@ string(REPLACE
   mcontent "${mcontent}")
 
 file(WRITE "${mf}" "${mcontent}")
+
+# TEMPORARY diagnostic (continued): wtMalloc()'s wasmtime_func_call is proven
+# clean — narrow into what happens right after, on the HOST side: wrapping
+# the returned pointer, and constructing the MemoryArena/Scoped objects
+# (modules/wclap-cpp, shared by all wclap-bridge consumers).
+set(af "modules/wclap-cpp/include/wclap/memory-arena.hpp")
+if(NOT EXISTS "${af}")
+  message(FATAL_ERROR "patch-wclap-bridge.cmake: ${af} not found — wclap-bridge layout may have changed")
+endif()
+
+file(READ "${af}" acontent)
+
+string(REPLACE
+  "#include <mutex>\n"
+  "#include <iostream>\n#include <mutex>\n"
+  acontent "${acontent}")
+
+string(REPLACE
+  "\tMemoryArena(ArenaPool &pool, Instance *instance, Size size=16384) : pool(pool), instance(instance) {\n\t\tallocateBlock(size);\n\t\tif (start) ok = true;\n\t}\n"
+  "\tMemoryArena(ArenaPool &pool, Instance *instance, Size size=16384) : pool(pool), instance(instance) {\n\t\tstd::cerr << \"DIAG: MemoryArena ctor: before allocateBlock\\n\"; std::cerr.flush();\n\t\tallocateBlock(size);\n\t\tstd::cerr << \"DIAG: MemoryArena ctor: after allocateBlock, start=\" << start << \"\\n\"; std::cerr.flush();\n\t\tif (start) ok = true;\n\t}\n"
+  acontent "${acontent}")
+
+string(REPLACE
+  "\t\tend = start + size;\n\t\tcleanStart = start;\n\t}\n"
+  "\t\tend = start + size;\n\t\tcleanStart = start;\n\t\tstd::cerr << \"DIAG: allocateBlock done\\n\"; std::cerr.flush();\n\t}\n"
+  acontent "${acontent}")
+
+string(REPLACE
+  "\tArenaPtr getOrCreate() {\n\t\t{\n\t\t\tauto lock = readLock();\n\t\t\tif (arenaPool.empty()) {\n\t\t\t\treturn ArenaPtr{new Arena(*this, instance)};\n\t\t\t}\n\t\t}\n"
+  "\tArenaPtr getOrCreate() {\n\t\t{\n\t\t\tauto lock = readLock();\n\t\t\tif (arenaPool.empty()) {\n\t\t\t\tstd::cerr << \"DIAG: getOrCreate: constructing new Arena\\n\"; std::cerr.flush();\n\t\t\t\tauto *newArena = new Arena(*this, instance);\n\t\t\t\tstd::cerr << \"DIAG: getOrCreate: new Arena constructed ok\\n\"; std::cerr.flush();\n\t\t\t\treturn ArenaPtr{newArena};\n\t\t\t}\n\t\t}\n"
+  acontent "${acontent}")
+
+string(REPLACE
+  "\ttypename Arena::Scoped scoped() {\n\t\tauto arena = getOrCreate();\n\t\treturn {*arena, std::move(arena)};\n\t}\n"
+  "\ttypename Arena::Scoped scoped() {\n\t\tstd::cerr << \"DIAG: scoped(): before getOrCreate\\n\"; std::cerr.flush();\n\t\tauto arena = getOrCreate();\n\t\tstd::cerr << \"DIAG: scoped(): got arena, constructing Scoped\\n\"; std::cerr.flush();\n\t\treturn {*arena, std::move(arena)};\n\t}\n"
+  acontent "${acontent}")
+
+file(WRITE "${af}" "${acontent}")
 
 # Windows only: link wasmtime.dll.lib (the DLL's import lib) instead of the
 # static wasmtime.lib. wasm.h/wasi.h unconditionally declare every export as
