@@ -24,7 +24,11 @@ static bool s_bridge_inited = false;
 
 static LibEntry* lib_acquire(const char* path) {
   if (!s_bridge_inited) {
+    fprintf(stderr, "DIAG: before wclap_global_init\n");
+    fflush(stderr);
     wclap_global_init(0);
+    fprintf(stderr, "DIAG: after wclap_global_init\n");
+    fflush(stderr);
     s_bridge_inited = true;
   }
   for (int i = 0; i < s_num_libs; i++) {
@@ -43,7 +47,11 @@ static LibEntry* lib_acquire(const char* path) {
   }
   if (!free_slot && s_num_libs >= MAX_LOADED_LIBS)
     return NULL;
+  fprintf(stderr, "DIAG: before wclap_open %s\n", path);
+  fflush(stderr);
   void* wclap = wclap_open(path);
+  fprintf(stderr, "DIAG: after wclap_open, result=%p\n", wclap);
+  fflush(stderr);
   if (!wclap)
     return NULL;
   char err[256];
