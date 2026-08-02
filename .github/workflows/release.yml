@@ -80,16 +80,6 @@ jobs:
         # poketrack_tests is EXCLUDE_FROM_ALL, so the main Build step above
         # doesn't produce it — same target `make test` builds locally.
 
-      - name: Build wasmtime smoke test (Windows)
-        if: runner.os == 'Windows'
-        run: cmake --build build --config Release --target wasmtime_smoke --parallel
-
-      - name: Run wasmtime smoke test (Windows)
-        if: runner.os == 'Windows'
-        run: cd build; ./Release/wasmtime_smoke.exe ../examples/plugins/karp.wclap.wasm
-        # Diagnostic: raw Wasmtime C API, no wclap-bridge involved. Tells
-        # apart "Wasmtime itself crashes here" from "wclap-bridge misuses it".
-
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
         run: cd build; ./Release/poketrack_tests.exe
