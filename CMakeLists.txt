@@ -65,6 +65,13 @@ if(NOT EMSCRIPTEN)
     # Real webview-gui module was dropped by the patch above; give wclap-bridge's
     # own sources the no-op stand-in on its include path instead.
     target_include_directories(wclap-bridge PRIVATE ${CMAKE_SOURCE_DIR}/src/vendor/webview-gui-stub)
+    if(WIN32)
+        # wasmtime-c-api is fetched from inside wclap-bridge's own CMakeLists
+        # (via add_subdirectory, one scope deeper), so its *_SOURCE_DIR isn't
+        # a normal variable here yet — FetchContent_GetProperties re-reads it
+        # from FetchContent's global bookkeeping into this scope.
+        FetchContent_GetProperties(wasmtime-c-api)
+    endif()
 endif()
 
 # Windows only: wasmtime is dynamically linked there (see
