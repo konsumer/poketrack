@@ -105,7 +105,9 @@ bool audio_is_playing(const AudioEngine* eng);
 void audio_toggle_mute(AudioEngine* eng, int ch);
 bool audio_is_muted(const AudioEngine* eng, int ch);
 
-// Thread-safe snapshot of a lane's scrolling waveform, for UI drawing.
+// Best-effort snapshot of a lane's scrolling waveform, for UI drawing.
+// Deliberately does NOT take the engine lock (called every UI frame; see
+// audio.c for why) — cosmetic data only, a torn read is never unsafe.
 void audio_copy_scope(AudioEngine* eng, int ch, ChannelScope* out);
 
 // Preview a note through an instrument (for live editing feedback)

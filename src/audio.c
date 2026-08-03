@@ -571,10 +571,14 @@ void audio_toggle_mute(AudioEngine* eng, int ch) {
 
 bool audio_is_muted(const AudioEngine* eng, int ch) { return eng->mute[ch]; }
 
+// Deliberately lock-free: this is drawn every UI frame regardless of what
+// else is happening, and taking the engine lock that often turned out to
+// starve the main thread against a busy audio callback (see the freeze this
+// was added to fix). The scope is cosmetic only — same tradeoff already made
+// for g_sidechain_rms — so a rare torn read just means one frame's waveform
+// looks briefly off, never a crash or a stall.
 void audio_copy_scope(AudioEngine* eng, int ch, ChannelScope* out) {
-  AUDIO_LOCK(eng);
   *out = eng->scope[ch];
-  AUDIO_UNLOCK(eng);
 }
 
 void audio_set_save_dir(AudioEngine* eng, const char* save_file_path) {
@@ -913,7 +917,18 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
       }
     }
 
-    uint32_t until = eng->samples_per_tick - eng->sample_acc;
+    // While playing, sub-slice this block at the next tick boundary so ticks
+    // fire at the right sample. While stopped, there's no tick to align to —
+    // consume the rest of the block in one step. This distinction matters:
+    // sample_acc == samples_per_tick exactly is a normal, recurring state
+    // while playing (it just means a block boundary landed on a tick
+    // boundary), but if playback stops right then (sample_acc is untouched
+    // by audio_stop()), falling through to `samples_per_tick - sample_acc`
+    // unconditionally computes 0 — count stays 0, pos never advances, and
+    // this loop spins forever while holding the engine lock, since nothing
+    // below runs (or can run, from another thread) to change eng->playing
+    // back. See the freeze this was written to fix.
+    uint32_t until = eng->playing ? (eng->samples_per_tick - eng->sample_acc) : (frames - pos);
     uint32_t count = frames - pos;
     if (count > until)
       count = until;
