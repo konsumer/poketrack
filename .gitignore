@@ -13,3 +13,4 @@ target/
 /webroot/tts/robotalk.js
 /webroot/tts/robotalk_bg.wasm
 /webroot/poketrack.mjs
+/examples/plugins/*.wasm

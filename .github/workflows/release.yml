@@ -133,10 +133,27 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Install pd2wclap toolchain (pdast, wasi-sdk)
+        run: |
+          git clone --depth 1 https://github.com/konsumer/pdast /tmp/pdast
+          cargo install --path /tmp/pdast/pd2ast
+          cargo install --path /tmp/pdast/pdast2wclap
+          curl -sL -o /tmp/wasi-sdk.tar.gz https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-33/wasi-sdk-33.0-x86_64-linux.tar.gz
+          tar xzf /tmp/wasi-sdk.tar.gz -C /tmp
+          echo "WASI_SDK_PATH=/tmp/wasi-sdk-33.0-x86_64-linux" >> "$GITHUB_ENV"
+        # pd2ast/pdast2wclap aren't published crates (no version to pin), and
+        # the Makefile's own local dev instructions likewise just clone
+        # main — matching that same convention here. build.sh fetches its
+        # own CLAP headers on first run, so nothing else to set up for it.
+
+      - name: Build example plugins
+        run: make plugins
+        # Builds karplus (npm/AssemblyScript) + robotalk (cargo) + the 3
+        # pd2wclap demo patches into examples/plugins/ — none of that is
+        # checked into git any more (see .gitignore).
+
       - name: Zip examples
         run: cd examples && zip -r ../examples.zip .
-        # examples/plugins/*.wclap.wasm is checked in (built via `make plugins`),
-        # so this is a plain zip — no build toolchain needed here.
 
       - name: Upload to release
         if: github.event_name == 'release'
