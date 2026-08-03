@@ -62,6 +62,11 @@ typedef struct {
 
   uint8_t last_note;     // last note entered in pattern screen
   uint8_t last_pattern;  // last pattern index entered in song screen
+
+  // True once the current BTN_PLAY hold has already been used for something
+  // else (mute chord, play-from-cursor) — suppresses the release-triggered
+  // play/stop toggle so a mute tap doesn't also start/stop playback.
+  bool play_chord_used;
 } UIState;
 
 void ui_init(UIState* ui, TrackerSong* song, AudioEngine* engine);

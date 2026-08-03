@@ -15,6 +15,15 @@ typedef struct {
   uint16_t pattern_step;  // shared across all tracks of the lane's current pattern
 } ChannelCursor;
 
+// Rolling min/max envelope of a lane's mixed output, one (min,max) pair pushed
+// per audio_fill_buffer call. Used by the song screen to draw a small
+// scrolling waveform per arrangement lane. Index 0 = oldest.
+#define CHANNEL_SCOPE_SAMPLES 32
+typedef struct {
+  float mn[CHANNEL_SCOPE_SAMPLES];
+  float mx[CHANNEL_SCOPE_SAMPLES];
+} ChannelScope;
+
 typedef struct {
   TrackerSong* song;
   char save_dir[512];  // directory of loaded save file, for relative path resolution
@@ -31,6 +40,8 @@ typedef struct {
   uint8_t loop_pattern_idx;    // pattern index to loop (when pattern_loop)
   uint32_t loop_channel_mask;  // bitmask: channels that use loop_pattern_idx
   ChannelCursor cursors[SONG_CHANNELS];
+  bool mute[SONG_CHANNELS];      // live performance mute, per arrangement lane (not saved)
+  ChannelScope scope[SONG_CHANNELS];
   uint64_t tick_counter;
   uint32_t samples_per_tick;
   uint32_t sample_acc;
@@ -87,6 +98,15 @@ void audio_stop(AudioEngine* eng);
 // true on success. Live playback is muted for the duration of the render.
 bool audio_render_wav(AudioEngine* eng, const char* path);
 bool audio_is_playing(const AudioEngine* eng);
+
+// Live performance mute, per arrangement lane (0..SONG_CHANNELS-1). Muted
+// lanes still tick/trigger notes (so unmuting stays in sync) but their audio
+// is excluded from the mix and from audio_render_wav.
+void audio_toggle_mute(AudioEngine* eng, int ch);
+bool audio_is_muted(const AudioEngine* eng, int ch);
+
+// Thread-safe snapshot of a lane's scrolling waveform, for UI drawing.
+void audio_copy_scope(AudioEngine* eng, int ch, ChannelScope* out);
 
 // Preview a note through an instrument (for live editing feedback)
 // Destroy live states for inst_idx so they rebuild cleanly after slot changes

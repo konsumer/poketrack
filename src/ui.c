@@ -173,21 +173,45 @@ void ui_update(UIState* ui) {
   file_browser_tick();
 
   if (!file_browser_active()) {
-    // START = play/stop; pattern screen loops current pattern only
-    if (input_pressed(BTN_PLAY) && !input_held(BTN_SCREEN)) {
-      if (audio_is_playing(ui->engine)) {
-        audio_stop(ui->engine);
-      } else if (ui->screen == SCREEN_PATTERN) {
-        audio_play_pattern(ui->engine, (uint8_t)ui->ctx_pattern);
-      } else {
-        audio_play(ui->engine);
-      }
-    }
+    // hold START (+ SELECT) + direction = play from cursor row (consumes
+    // this START hold so the release below doesn't also toggle play/stop)
     if (input_pressed(BTN_PLAY) && input_held(BTN_SCREEN) && !audio_is_playing(ui->engine)) {
       if (ui->screen == SCREEN_SONG)
         audio_play_from(ui->engine, (uint16_t)ui->song_row);
       else
         audio_play(ui->engine);
+      ui->play_chord_used = true;
+    }
+
+    // hold START + dpad = toggle mute on an arrangement lane (song screen
+    // lanes are fixed at 4, one per dpad direction, in BTN_UP/DOWN/LEFT/RIGHT
+    // enum order). Also consumes this START hold.
+    _Static_assert(SONG_CHANNELS == 4, "dpad-to-lane mute mapping assumes 4 lanes");
+    if (input_held(BTN_PLAY) && !input_held(BTN_SCREEN)) {
+      static const TrackerButton DPAD[4] = {BTN_UP, BTN_DOWN, BTN_LEFT, BTN_RIGHT};
+      for (int ch = 0; ch < 4; ch++) {
+        if (input_pressed(DPAD[ch])) {
+          audio_toggle_mute(ui->engine, ch);
+          ui->play_chord_used = true;
+        }
+      }
+    }
+
+    // START tap (no chord used during the hold) = play/stop; pattern screen
+    // loops current pattern only. Fires on release, not press, so a mute
+    // chord (above) gets first refusal — a plain tap still feels instant
+    // since release follows press within a frame or two.
+    if (input_released(BTN_PLAY)) {
+      if (!ui->play_chord_used) {
+        if (audio_is_playing(ui->engine)) {
+          audio_stop(ui->engine);
+        } else if (ui->screen == SCREEN_PATTERN) {
+          audio_play_pattern(ui->engine, (uint8_t)ui->ctx_pattern);
+        } else {
+          audio_play(ui->engine);
+        }
+      }
+      ui->play_chord_used = false;
     }
 
     // SELECT + direction = switch screen (takes priority, no A held)
@@ -293,6 +317,8 @@ static void draw_status(UIState* ui) {
     hint = "hold{OK}+dpad: edit   {NO}: clear/back   {PREV} prev  {NEXT} next   {PLAY}: play/stop";
   } else if (ui->screen == SCREEN_INSTRUMENT) {
     hint = "hold{OK}+dpad: edit   {NO}: clear/back   {PREV} prev  {NEXT} next   {PLAY}: play/stop";
+  } else if (ui->screen == SCREEN_SONG) {
+    hint = "hold{OK}+dpad: edit   hold{PLAY}+dpad: mute   {NO}: clear   {PLAY}: play/stop";
   } else {
     hint = "hold{OK}+dpad: edit   {NO}: clear/back   {PLAY}: play/stop";
   }

@@ -563,6 +563,20 @@ void audio_stop(AudioEngine* eng) {
 
 bool audio_is_playing(const AudioEngine* eng) { return eng->playing; }
 
+void audio_toggle_mute(AudioEngine* eng, int ch) {
+  AUDIO_LOCK(eng);
+  eng->mute[ch] = !eng->mute[ch];
+  AUDIO_UNLOCK(eng);
+}
+
+bool audio_is_muted(const AudioEngine* eng, int ch) { return eng->mute[ch]; }
+
+void audio_copy_scope(AudioEngine* eng, int ch, ChannelScope* out) {
+  AUDIO_LOCK(eng);
+  *out = eng->scope[ch];
+  AUDIO_UNLOCK(eng);
+}
+
 void audio_set_save_dir(AudioEngine* eng, const char* save_file_path) {
   AUDIO_LOCK(eng);
   path_dir_of(save_file_path, eng->save_dir, sizeof(eng->save_dir));
@@ -855,6 +869,11 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
   // Per-instrument energy accumulated across the whole fill → sidechain RMS at end.
   double sc_energy[NUM_INSTRUMENTS] = {0};
 
+  // Per-lane min/max envelope accumulated across the whole fill → one scope
+  // point pushed per lane at the end (stays 0,0 — flat — while stopped or muted).
+  float lane_mn[SONG_CHANNELS] = {0};
+  float lane_mx[SONG_CHANNELS] = {0};
+
   uint32_t pos = 0;
   while (pos < frames) {
     if (eng->playing) {
@@ -904,9 +923,27 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
     float blk_r[AUDIO_BLOCK_SIZE] = {0};
 
     if (eng->playing) {
-      for (int ch = 0; ch < SONG_CHANNELS; ch++)
+      for (int ch = 0; ch < SONG_CHANNELS; ch++) {
+        float lane_l[AUDIO_BLOCK_SIZE] = {0};
+        float lane_r[AUDIO_BLOCK_SIZE] = {0};
         for (int tr = 0; tr < PATTERN_TRACKS; tr++)
-          render_channel(eng, ch, tr, blk_l, blk_r, count, sc_energy);
+          render_channel(eng, ch, tr, lane_l, lane_r, count, sc_energy);
+
+        for (uint32_t f = 0; f < count; f++) {
+          float v = (lane_l[f] + lane_r[f]) * 0.5f;
+          if (v < lane_mn[ch])
+            lane_mn[ch] = v;
+          if (v > lane_mx[ch])
+            lane_mx[ch] = v;
+        }
+
+        if (!eng->mute[ch]) {
+          for (uint32_t f = 0; f < count; f++) {
+            blk_l[f] += lane_l[f];
+            blk_r[f] += lane_r[f];
+          }
+        }
+      }
     }
 
     // Preview channel
@@ -1019,6 +1056,18 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
   if (frames > 0)
     for (int i = 0; i < NUM_INSTRUMENTS; i++)
       g_sidechain_rms[i] = (float)sqrt(sc_energy[i] / (double)frames);
+
+  // Push one scope point per lane (flat 0,0 when muted, so the song screen
+  // waveform visibly goes silent instead of showing audio nobody hears).
+  for (int ch = 0; ch < SONG_CHANNELS; ch++) {
+    float mn = eng->mute[ch] ? 0.0f : lane_mn[ch];
+    float mx = eng->mute[ch] ? 0.0f : lane_mx[ch];
+    ChannelScope* sc = &eng->scope[ch];
+    memmove(sc->mn, sc->mn + 1, (CHANNEL_SCOPE_SAMPLES - 1) * sizeof(float));
+    memmove(sc->mx, sc->mx + 1, (CHANNEL_SCOPE_SAMPLES - 1) * sizeof(float));
+    sc->mn[CHANNEL_SCOPE_SAMPLES - 1] = mn;
+    sc->mx[CHANNEL_SCOPE_SAMPLES - 1] = mx;
+  }
 }
 
 void audio_lock(AudioEngine* eng) { AUDIO_LOCK(eng); }

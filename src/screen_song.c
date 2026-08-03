@@ -125,6 +125,22 @@ void screen_song_update(UIState* ui) {
     ui->ctx_pattern = pi;
 }
 
+// Small scrolling min/max waveform for one lane, drawn as a vertical bar per
+// scope sample (classic zoomed-out waveform look) inside a header cell.
+static void draw_channel_scope(int x, int y, int w, int h, const ChannelScope* sc, Color col) {
+  float half = h * 0.5f;
+  float cy = y + half;
+  float step = (float)w / CHANNEL_SCOPE_SAMPLES;
+  for (int i = 0; i < CHANNEL_SCOPE_SAMPLES; i++) {
+    int y0 = (int)(cy - sc->mx[i] * half);
+    int y1 = (int)(cy - sc->mn[i] * half);
+    if (y1 <= y0)
+      y1 = y0 + 1;
+    int xi = x + (int)(i * step);
+    DrawLine(xi, y0, xi, y1, col);
+  }
+}
+
 void screen_song_draw(UIState* ui) {
   TrackerSong* song = ui->song;
   bool in_footer = (ui->song_row == (int)song->song_len);
@@ -138,8 +154,17 @@ void screen_song_draw(UIState* ui) {
       break;
     int x = SONG_LABEL_W + i * CELL_W;
     bool cur_ch = (ch == ui->song_col);
-    DrawText(TextFormat("%X", ch), x + 2, SONG_HEADER_Y + (CH_H - FONT_S) / 2, FONT_S,
-             cur_ch ? C_TITLE : CH_COLORS[ch]);
+    bool muted = audio_is_muted(ui->engine, ch);
+    Color lbl_col = muted ? C_DIM : (cur_ch ? C_TITLE : CH_COLORS[ch]);
+    DrawText(TextFormat("%X", ch), x + 2, SONG_HEADER_Y + (CH_H - FONT_S) / 2, FONT_S, lbl_col);
+
+    int sx = x + 14;
+    int sw = CELL_W - 16;
+    if (sw > 4) {
+      ChannelScope sc;
+      audio_copy_scope(ui->engine, ch, &sc);
+      draw_channel_scope(sx, SONG_HEADER_Y + 1, sw, CH_H - 2, &sc, muted ? C_DIM : CH_COLORS[ch]);
+    }
   }
   if (ui->song_col_scroll > 0)
     DrawText("<", SONG_LABEL_W - 8, SONG_HEADER_Y + (CH_H - FONT_S) / 2, FONT_S, C_DIM);
