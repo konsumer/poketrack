@@ -35,6 +35,7 @@ It may seem a bit inscrutable at first, but input is meant to be consistent and 
 | A + ↑/↓ | Set pattern number in cell |
 | B | Clear cell |
 | SELECT + START | Play from current row |
+| hold START + ↑/↓/←/→ | Toggle mute on lane 0/1/2/3 (live performance; not saved with the song) |
 
 **Pattern**
 
