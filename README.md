@@ -117,10 +117,6 @@ Here are some videos:
 
 I use `make` to record common tasks (and `cmake` to actually build) so you can run `make` to get documentation.
 
-## todo
+## join us
 
-- "bundle" a save for distribution, that creates a zip with song + all referenced files
-- web: some WCLAP plugins (e.g. `signalsmith-clap-cpp.wasm`) declare shared/thread-capable memory and hang on load — needs real Worker-based multi-agent threading in the web CLAP host, not just single-threaded WASI. Native (Wasmtime) already handles this fine.
-- use steam input API to make it easier to use on steam?
-- multiple languages
-
+If you have anyhting you want to talk about on Discord, [join us](https://discord.gg/3PXnP5cgCY)!
