@@ -10,6 +10,16 @@
 // forward table calls to a single JS dispatch function. Struct field offsets
 // below are dumped directly from wclap-generic.hpp (see offsets.cpp in the
 // implementation notes) — this only supports the wclap32 (32-bit) ABI.
+//
+// Threading: some wasi-sdk builds (e.g. signalsmith-clap-cpp, built with the
+// `-pthread` wasi-sdk toolchain) import `wasi."thread-spawn"` and spawn real
+// threads during `_initialize()` or plugin init. A single-threaded host can't
+// satisfy that — the plugin blocks forever waiting for a thread that never
+// runs, which is the "hangs on load" failure this file works around. See
+// $WCLAP_MAKE_HOST_ENV / $WCLAP_THREADS / $WCLAP_THREAD_WORKER_SRC below,
+// and plugins/README.md for the browser requirements (COOP/COEP — worked
+// around on GitHub Pages by webroot/coi-serviceworker.js) and the
+// wasi-threads ABI this implements.
 mergeInto(LibraryManager.library, {
   $WCLAP_OFF: {
     entry: { init: 12, get_factory: 20 },
@@ -33,7 +43,308 @@ mergeInto(LibraryManager.library, {
   },
   $WCLAP_INSTANCES: [null], // index 0 reserved (== NULL handle)
 
-  wclap_web_load__deps: ['$WCLAP_OFF', '$WCLAP_INSTANCES'],
+  // Host-bridge shim (get_extension/request_restart/request_process/request_callback/
+  // params_rescan/params_clear/params_request_flush/host_log), compiled from a tiny
+  // fixed .wat that forwards table calls to a single JS `dispatch` import. Shared by
+  // the main thread instantiation and every worker thread instantiation of the same
+  // plugin module, so a function-table index built on one thread means the same thing
+  // on every other thread (see $WCLAP_THREAD_WORKER_SRC for why that alignment holds).
+  // NOTE: value must be a function (not a bare string) — Emscripten's JS-library
+  // preprocessor splices bare-string `$name` values in as raw source rather than
+  // treating them as string literals, which would corrupt this base64 blob.
+  $WCLAP_SHIM_B64: function () {
+    return 'AGFzbQEAAAABHgVgBH9/f38Bf2ACf38Bf2ABfwBgAn9/AGADf39/AAIQAQNlbnYIZGlzcGF0Y2gAAAMJCAECAgIDBAIEB4kBCA1nZXRfZXh0ZW5zaW9uAAEPcmVxdWVzdF9yZXN0YXJ0AAIPcmVxdWVzdF9wcm9jZXNzAAMQcmVxdWVzdF9jYWxsYmFjawAEDXBhcmFtc19yZXNjYW4ABQxwYXJhbXNfY2xlYXIABhRwYXJhbXNfcmVxdWVzdF9mbHVzaAAHCGhvc3RfbG9nAAgKcAgMAEEAIAAgAUEAEAALDQBBASAAQQBBABAAGgsNAEECIABBAEEAEAAaCw0AQQMgAEEAQQAQABoLDQBBBCAAIAFBABAAGgsNAEEFIAAgASACEAAaCw0AQQYgAEEAQQAQABoLDQBBByAAIAEgAhAAGgs=';
+  },
+
+  // Standalone bootstrap for a wasi-threads worker thread. Loaded as a Blob URL by
+  // $WCLAP_THREADS.spawn(). Each thread gets its own instantiation of the SAME
+  // WebAssembly.Module, sharing the plugin's linear memory (a shared
+  // WebAssembly.Memory, structured-cloned in) but with its own private function
+  // table — deterministic because table contents come entirely from the module's
+  // active element segments, fixed at instantiation time, so every instantiation of
+  // the same module lays its table out identically (including the +8 host-bridge
+  // shim slots we append right after instantiate, at the same base offset every
+  // time). Per the wasi-threads convention, secondary threads must NOT re-run
+  // `_initialize` (global ctors already ran on the spawning thread and that state
+  // lives in the now-shared memory) — they call `wasi_thread_start(tid, arg)`
+  // directly.
+  // NOTE: value must be a function returning the source string (not a bare
+  // template literal) — see the note on $WCLAP_SHIM_B64 above for why.
+  $WCLAP_THREAD_WORKER_SRC: function () {
+    return `
+self.onmessage = function (e) {
+  var msg = e.data;
+  var mem = msg.memory;
+  var module = msg.module;
+
+  function u8 () { return new Uint8Array(mem.buffer); }
+  function readCStr (ptr) {
+    if (!ptr) return '';
+    var b = u8(), end = ptr, limit = Math.min(b.length, ptr + 65536);
+    while (end < limit && b[end] !== 0) end++;
+    // .slice() (not .subarray()) — TextDecoder refuses a view directly over a
+    // SharedArrayBuffer-backed memory (throws "must not be shared"); a copy is fine.
+    return new TextDecoder().decode(b.slice(ptr, end));
+  }
+
+  var exp;
+  function malloc (n) { return exp.malloc(n); }
+  function writeCStr (str) {
+    var utf8 = new TextEncoder().encode(str + '\\0');
+    var ptr = malloc(utf8.length);
+    u8().set(utf8, ptr);
+    return ptr;
+  }
+
+  var hostFnIdx = {};
+  function dispatch (id, a, b, c) {
+    switch (id) {
+      case 0: { // get_extension — pure function of table indices, safe to recompute per-thread
+        var extId = readCStr(a);
+        if (extId === 'clap.params') {
+          var p = malloc(24);
+          new DataView(mem.buffer).setUint32(p + 0, hostFnIdx.params_rescan, true);
+          new DataView(mem.buffer).setUint32(p + 4, hostFnIdx.params_clear, true);
+          new DataView(mem.buffer).setUint32(p + 8, hostFnIdx.params_request_flush, true);
+          return p;
+        }
+        if (extId === 'clap.log') {
+          var lp = malloc(4);
+          new DataView(mem.buffer).setUint32(lp, hostFnIdx.host_log, true);
+          return lp;
+        }
+        return 0;
+      }
+      case 3: self.postMessage({ type: 'request-callback' }); return 0; // request_callback
+      case 7: console.log('[WCLAP thread ' + msg.threadId + ']', readCStr(c)); return 0; // log
+      default: return 0;
+    }
+  }
+
+  function threadSpawn (startArg) {
+    var tid = Atomics.add(new Int32Array(msg.tidBuf), 0, 1) + 1;
+    try {
+      var w = new Worker(msg.workerUrl);
+      w.onerror = function (err) { console.error('[WCLAP] thread', tid, 'worker error:', err.message); };
+      w.onmessage = function (ev) {
+        if (ev.data && ev.data.type === 'thread-error') console.error('[WCLAP] thread', ev.data.threadId, 'failed:', ev.data.error);
+      };
+      w.postMessage(Object.assign({}, msg, { threadId: tid, startArg: startArg }));
+    } catch (err) {
+      console.error('[WCLAP] nested thread-spawn failed:', err);
+      return -1;
+    }
+    return tid;
+  }
+
+  var raw;
+  try {
+    var importObj = {
+      env: { memory: mem },
+      wasi_snapshot_preview1: {
+        fd_write: function (fd, iovs, iovsLen, nwritten) {
+          var total = 0, out = '';
+          var view = new DataView(mem.buffer);
+          for (var i = 0; i < iovsLen; i++) {
+            var base = view.getUint32(iovs + i * 8, true);
+            var len = view.getUint32(iovs + i * 8 + 4, true);
+            out += new TextDecoder().decode(u8().slice(base, base + len));
+            total += len;
+          }
+          console.log(out.replace(/\\n$/, ''));
+          view.setUint32(nwritten, total, true);
+          return 0;
+        },
+        proc_exit: function () { throw new Error('wclap thread called proc_exit'); },
+        environ_sizes_get: function (cPtr, bPtr) {
+          var v = new DataView(mem.buffer); v.setUint32(cPtr, 0, true); v.setUint32(bPtr, 0, true); return 0;
+        },
+        environ_get: function () { return 0; },
+        clock_time_get: function (id, precision, outPtr) {
+          new DataView(mem.buffer).setBigUint64(outPtr, BigInt(Math.floor(performance.now() * 1e6)), true); return 0;
+        },
+        fd_close: function () { return 8; },
+        fd_fdstat_get: function () { return 8; },
+        fd_prestat_get: function () { return 8; },
+        fd_prestat_dir_name: function () { return 8; },
+        fd_read: function () { return 8; },
+        fd_seek: function () { return 8; },
+        sched_yield: function () { return 0; },
+        random_get: function (ptr, len) {
+          var b = u8(); for (var i = 0; i < len; i++) b[ptr + i] = (Math.random() * 256) | 0; return 0;
+        },
+      },
+      wasi: { 'thread-spawn': threadSpawn },
+    };
+    raw = new WebAssembly.Instance(module, importObj);
+  } catch (err) {
+    console.error('[WCLAP] thread', msg.threadId, 'instantiate failed:', err);
+    self.postMessage({ type: 'thread-error', threadId: msg.threadId, error: String(err) });
+    return;
+  }
+  exp = raw.exports;
+
+  if (msg.shimB64) {
+    var table = exp.table || exp.__indirect_function_table;
+    var shimBytes = Uint8Array.from(atob(msg.shimB64), function (c) { return c.charCodeAt(0); });
+    var shimInst = new WebAssembly.Instance(new WebAssembly.Module(shimBytes), { env: { dispatch: dispatch } });
+    var base = table.length;
+    table.grow(8);
+    ['get_extension', 'request_restart', 'request_process', 'request_callback',
+     'params_rescan', 'params_clear', 'params_request_flush', 'host_log'].forEach(function (n, i) {
+      table.set(base + i, shimInst.exports[n]);
+      hostFnIdx[n] = base + i;
+    });
+  }
+
+  try {
+    exp.wasi_thread_start(msg.threadId, msg.startArg);
+  } catch (err) {
+    console.error('[WCLAP] thread', msg.threadId, 'crashed:', err);
+    self.postMessage({ type: 'thread-error', threadId: msg.threadId, error: String(err) });
+    return;
+  }
+  self.postMessage({ type: 'thread-exit', threadId: msg.threadId });
+  close();
+};
+`;
+  },
+
+  $WCLAP_THREADS__deps: ['$WCLAP_THREAD_WORKER_SRC'],
+  $WCLAP_THREADS: {
+    _workerUrl: null,
+    getWorkerUrl: function () {
+      if (!WCLAP_THREADS._workerUrl) {
+        var blob = new Blob([WCLAP_THREAD_WORKER_SRC()], { type: 'application/javascript' });
+        WCLAP_THREADS._workerUrl = URL.createObjectURL(blob);
+      }
+      return WCLAP_THREADS._workerUrl;
+    },
+    // Spawns a real thread for a wasi-threads plugin. `shimB64` may be '' when no
+    // CLAP host struct exists yet (e.g. during wclap_web_list_plugins, before any
+    // plugin is created) — the spawned thread then gets no host-bridge table
+    // entries, which is fine since it has no host pointer to call them through.
+    spawn: function (module, mem, tidBuf, shimB64, tid, startArg, workersOut) {
+      var url = WCLAP_THREADS.getWorkerUrl();
+      var w = new Worker(url);
+      w.onerror = function (err) { console.error('[WCLAP] thread', tid, 'worker error:', err.message); };
+      w.onmessage = function (ev) {
+        if (ev.data && ev.data.type === 'thread-error') console.error('[WCLAP] thread', ev.data.threadId, 'failed:', ev.data.error);
+      };
+      w.postMessage({ module: module, memory: mem, tidBuf: tidBuf, shimB64: shimB64, workerUrl: url, threadId: tid, startArg: startArg });
+      workersOut.push(w);
+    },
+  },
+
+  // Builds the import object needed to instantiate a plugin module: detects whether
+  // it needs shared memory / real threads (wasi-threads: imports `wasi."thread-spawn"`,
+  // exports `wasi_thread_start`) and wires up worker-backed thread spawning if so.
+  //
+  // A shared `env.memory` import alone doesn't require cross-origin isolation — Chrome
+  // happily constructs and uses a shared WebAssembly.Memory within a single thread
+  // without it (this is the "-pthread toolchain used, but the plugin never actually
+  // spawns a thread" case the wasi-sdk C++ builds hit). Cross-origin isolation is only
+  // required to transfer that memory to a Worker (`postMessage` throws a synchronous
+  // DataCloneError without it) and to construct the SharedArrayBuffer we use for tid
+  // bookkeeping — i.e. only plugins that actually import `wasi."thread-spawn"` need it.
+  // Returns null (after logging why) in that case, so a plugin whose thread-spawn we
+  // can't ever satisfy fails the load up front instead of instantiating into a state
+  // where it silently can't get the threads it's about to wait on.
+  $WCLAP_MAKE_HOST_ENV__deps: ['$WCLAP_THREADS'],
+  $WCLAP_MAKE_HOST_ENV: function (module, shimB64) {
+    var needsMemImport = WebAssembly.Module.imports(module).some(function (imp) {
+      return imp.module === 'env' && imp.kind === 'memory';
+    });
+    var needsThreads = WebAssembly.Module.imports(module).some(function (imp) {
+      return imp.module === 'wasi' && imp.name === 'thread-spawn';
+    });
+
+    if (needsThreads && !globalThis.crossOriginIsolated) {
+      console.error('[wclap] plugin declares real threads (imports wasi."thread-spawn"), ' +
+        'but this page is not cross-origin isolated (COOP/COEP unavailable) — threads ' +
+        'cannot be spawned, so the plugin cannot load. See plugins/README.md.');
+      return null;
+    }
+
+    var mem = null;
+    function u8 () { return new Uint8Array(mem.buffer); }
+
+    var envImports = {};
+    if (needsMemImport) envImports.memory = new WebAssembly.Memory({ initial: 256, maximum: 16384, shared: true });
+
+    var wasiImports = {
+      fd_write: function (fd, iovs, iovsLen, nwritten) {
+        var total = 0, out = '';
+        var view = new DataView(mem.buffer);
+        for (var i = 0; i < iovsLen; i++) {
+          var base = view.getUint32(iovs + i * 8, true);
+          var len = view.getUint32(iovs + i * 8 + 4, true);
+          // .slice() — TextDecoder (used inside UTF8ArrayToString for strings >16
+          // bytes) refuses a view directly over a SharedArrayBuffer-backed memory.
+          out += UTF8ArrayToString(u8().slice(base, base + len), 0, len);
+          total += len;
+        }
+        console.log(out.replace(/\n$/, ''));
+        view.setUint32(nwritten, total, true);
+        return 0;
+      },
+      proc_exit: function () { throw new Error('wclap plugin called proc_exit'); },
+      environ_sizes_get: function (countPtr, bufSizePtr) {
+        new DataView(mem.buffer).setUint32(countPtr, 0, true);
+        new DataView(mem.buffer).setUint32(bufSizePtr, 0, true);
+        return 0;
+      },
+      environ_get: function () { return 0; },
+      clock_time_get: function (id, precision, outPtr) {
+        new DataView(mem.buffer).setBigUint64(outPtr, BigInt(Math.floor(performance.now() * 1e6)), true);
+        return 0;
+      },
+      fd_close: function () { return 8; },
+      fd_fdstat_get: function () { return 8; },
+      fd_prestat_get: function () { return 8; },
+      fd_prestat_dir_name: function () { return 8; },
+      fd_read: function () { return 8; },
+      fd_seek: function () { return 8; },
+      sched_yield: function () { return 0; },
+      random_get: function (ptr, len) {
+        var bytes = u8();
+        for (var i = 0; i < len; i++) bytes[ptr + i] = (Math.random() * 256) | 0;
+        return 0;
+      },
+    };
+
+    var workers = [];
+    var threadImports = null;
+    if (needsThreads) {
+      var tidBuf = new SharedArrayBuffer(4);
+      var tidArr = new Int32Array(tidBuf);
+      threadImports = {
+        // wasi-threads: returns the new tid, or a negative value on failure — a
+        // well-behaved plugin checks this rather than assuming success, so prefer
+        // reporting failure here over letting a spawn error abort the whole load.
+        'thread-spawn': function (startArg) {
+          var tid = Atomics.add(tidArr, 0, 1) + 1;
+          try {
+            WCLAP_THREADS.spawn(module, mem, tidBuf, shimB64 || '', tid, startArg, workers);
+          } catch (err) {
+            console.error('[wclap] thread-spawn failed:', err);
+            return -1;
+          }
+          return tid;
+        },
+      };
+    }
+
+    return {
+      envImports: envImports,
+      wasiImports: wasiImports,
+      threadImports: threadImports,
+      workers: workers,
+      setMem: function (m) { mem = m; },
+    };
+  },
+
+  wclap_web_load__deps: ['$WCLAP_OFF', '$WCLAP_INSTANCES', '$WCLAP_MAKE_HOST_ENV', '$WCLAP_SHIM_B64'],
   wclap_web_load: function (pathPtr, pluginIdPtr, sampleRate, blockSize, outNamePtr, outNameSz, outIsInstrumentPtr) {
     var path = UTF8ToString(pathPtr);
     var wantedId = pluginIdPtr ? UTF8ToString(pluginIdPtr) : null;
@@ -62,7 +373,10 @@ mergeInto(LibraryManager.library, {
       // not hang the host waiting for a null terminator that's never there.
       var b = u8(), end = ptr, limit = Math.min(b.length, ptr + 65536);
       while (end < limit && b[end] !== 0) end++;
-      return UTF8ArrayToString(b, ptr, end - ptr);
+      // .slice() — TextDecoder (used inside UTF8ArrayToString for strings >16
+      // bytes) refuses a view directly over a SharedArrayBuffer-backed memory,
+      // which every plugin id/name read here can be for a threading-capable plugin.
+      return UTF8ArrayToString(b.slice(ptr, end), 0, end - ptr);
     }
     function writeCStr(str) {
       var utf8 = new TextEncoder().encode(str + '\0');
@@ -75,6 +389,10 @@ mergeInto(LibraryManager.library, {
     var inst;
     try {
       var module = new WebAssembly.Module(bytes);
+
+      var hostEnv = WCLAP_MAKE_HOST_ENV(module, WCLAP_SHIM_B64());
+      if (!hostEnv) return 0; // logged inside — needs shared memory but not cross-origin isolated
+
       var pendingMainThread = false;
       var hostFnIdx = {};
       function dispatch(id, a, b, c) {
@@ -101,66 +419,18 @@ mergeInto(LibraryManager.library, {
         }
       }
 
-      // Different toolchains need different imports: AssemblyScript exports
-      // its own memory and only needs fd_write/proc_exit; wasi-sdk C++
-      // builds (e.g. signalsmith) import a *shared* memory (built with
-      // multithreading support even though we never spawn threads) and
-      // call into the full WASI preview1 surface during libc init.
-      var envImports = {};
-      var needsMemImport = WebAssembly.Module.imports(module).some(function (imp) {
-        return imp.module === 'env' && imp.kind === 'memory';
-      });
-      if (needsMemImport)
-        envImports.memory = new WebAssembly.Memory({ initial: 256, maximum: 16384, shared: true });
-
       var raw = new WebAssembly.Instance(module, {
-        env: envImports,
-        wasi_snapshot_preview1: {
-          fd_write: function (fd, iovs, iovsLen, nwritten) {
-            var total = 0, out = '';
-            var view = new DataView(mem.buffer);
-            for (var i = 0; i < iovsLen; i++) {
-              var base = view.getUint32(iovs + i * 8, true);
-              var len = view.getUint32(iovs + i * 8 + 4, true);
-              out += UTF8ArrayToString(u8(), base, len);
-              total += len;
-            }
-            console.log(out.replace(/\n$/, ''));
-            view.setUint32(nwritten, total, true);
-            return 0;
-          },
-          proc_exit: function () { throw new Error('wclap plugin called proc_exit'); },
-          environ_sizes_get: function (countPtr, bufSizePtr) {
-            new DataView(mem.buffer).setUint32(countPtr, 0, true);
-            new DataView(mem.buffer).setUint32(bufSizePtr, 0, true);
-            return 0;
-          },
-          environ_get: function () { return 0; },
-          clock_time_get: function (id, precision, outPtr) {
-            new DataView(mem.buffer).setBigUint64(outPtr, BigInt(Math.floor(performance.now() * 1e6)), true);
-            return 0;
-          },
-          fd_close: function () { return 8; },
-          fd_fdstat_get: function () { return 8; },
-          fd_prestat_get: function () { return 8; },
-          fd_prestat_dir_name: function () { return 8; },
-          fd_read: function () { return 8; },
-          fd_seek: function () { return 8; },
-          sched_yield: function () { return 0; },
-          random_get: function (ptr, len) {
-            var bytes = u8();
-            for (var i = 0; i < len; i++) bytes[ptr + i] = (Math.random() * 256) | 0;
-            return 0;
-          },
-        },
+        env: hostEnv.envImports,
+        wasi_snapshot_preview1: hostEnv.wasiImports,
+        wasi: hostEnv.threadImports || {},
       });
       exp = raw.exports;
-      mem = exp.memory;
+      mem = hostEnv.envImports.memory || exp.memory;
+      hostEnv.setMem(mem);
       table = exp.table || exp.__indirect_function_table;
       if (exp._initialize) exp._initialize();
 
-      var shimB64 = 'AGFzbQEAAAABHgVgBH9/f38Bf2ACf38Bf2ABfwBgAn9/AGADf39/AAIQAQNlbnYIZGlzcGF0Y2gAAAMJCAECAgIDBAIEB4kBCA1nZXRfZXh0ZW5zaW9uAAEPcmVxdWVzdF9yZXN0YXJ0AAIPcmVxdWVzdF9wcm9jZXNzAAMQcmVxdWVzdF9jYWxsYmFjawAEDXBhcmFtc19yZXNjYW4ABQxwYXJhbXNfY2xlYXIABhRwYXJhbXNfcmVxdWVzdF9mbHVzaAAHCGhvc3RfbG9nAAgKcAgMAEEAIAAgAUEAEAALDQBBASAAQQBBABAAGgsNAEECIABBAEEAEAAaCw0AQQMgAEEAQQAQABoLDQBBBCAAIAFBABAAGgsNAEEFIAAgASACEAAaCw0AQQYgAEEAQQAQABoLDQBBByAAIAEgAhAAGgs=';
-      var shimBytes = Uint8Array.from(atob(shimB64), function (c) { return c.charCodeAt(0); });
+      var shimBytes = Uint8Array.from(atob(WCLAP_SHIM_B64()), function (c) { return c.charCodeAt(0); });
       var shimInst = new WebAssembly.Instance(new WebAssembly.Module(shimBytes), { env: { dispatch: dispatch } });
       var base = table.length;
       table.grow(8);
@@ -306,6 +576,7 @@ mergeInto(LibraryManager.library, {
         NOTE_POOL: NOTE_POOL, PARAM_POOL: PARAM_POOL,
         noteWriteIdx: 0, paramWriteIdx: 0,
         pendingNotes: pendingNotes, pendingParams: pendingParams,
+        workers: hostEnv.workers,
       };
     } catch (e) {
       console.error('wclap: load failed:', e);
@@ -322,10 +593,13 @@ mergeInto(LibraryManager.library, {
   wclap_web_unload__deps: ['$WCLAP_INSTANCES'],
   wclap_web_unload: function (handle) {
     if (!handle || !WCLAP_INSTANCES[handle]) return;
+    var inst = WCLAP_INSTANCES[handle];
+    // .terminate() also tears down any nested workers a thread itself spawned.
+    if (inst.workers) inst.workers.forEach(function (w) { w.terminate(); });
     WCLAP_INSTANCES[handle] = null;
   },
 
-  wclap_web_list_plugins__deps: ['$WCLAP_OFF'],
+  wclap_web_list_plugins__deps: ['$WCLAP_OFF', '$WCLAP_MAKE_HOST_ENV'],
   wclap_web_list_plugins: function (pathPtr, outIdsPtr, outNamesPtr, idNameSz, maxCount) {
     var path = UTF8ToString(pathPtr);
     var bytes;
@@ -333,52 +607,28 @@ mergeInto(LibraryManager.library, {
     var O = WCLAP_OFF;
     try {
       var mod = new WebAssembly.Module(bytes);
+
+      // No CLAP host struct exists yet at listing time, so threads spawned during
+      // _initialize() get no host-bridge shim (empty shimB64) — nothing valid for
+      // them to call back into anyway.
+      var hostEnv = WCLAP_MAKE_HOST_ENV(mod, '');
+      if (!hostEnv) return 0;
+
       var mem, table, exp;
       function u8() { return new Uint8Array(mem.buffer); }
       function readCStr(ptr) {
         if (!ptr) return '';
         var b = u8(), end = ptr, limit = Math.min(b.length, ptr + 65536);
         while (end < limit && b[end] !== 0) end++;
-        return UTF8ArrayToString(b, ptr, end - ptr);
+        return UTF8ArrayToString(b.slice(ptr, end), 0, end - ptr); // .slice(): see wclap_web_load's readCStr
       }
-      var envImports = {};
-      var needsMemImport = WebAssembly.Module.imports(mod).some(function (imp) {
-        return imp.module === 'env' && imp.kind === 'memory';
-      });
-      if (needsMemImport)
-        envImports.memory = new WebAssembly.Memory({ initial: 256, maximum: 16384, shared: true });
       var raw = new WebAssembly.Instance(mod, {
-        env: envImports,
-        wasi_snapshot_preview1: {
-          fd_write: function (fd, iovs, iovsLen, nwritten) {
-            new DataView(mem.buffer).setUint32(nwritten, 0, true); return 0;
-          },
-          proc_exit: function () {},
-          environ_sizes_get: function (countPtr, bufSizePtr) {
-            new DataView(mem.buffer).setUint32(countPtr, 0, true);
-            new DataView(mem.buffer).setUint32(bufSizePtr, 0, true);
-            return 0;
-          },
-          environ_get: function () { return 0; },
-          clock_time_get: function (id, precision, outPtr) {
-            new DataView(mem.buffer).setBigUint64(outPtr, BigInt(Math.floor(performance.now() * 1e6)), true);
-            return 0;
-          },
-          fd_close: function () { return 8; },
-          fd_fdstat_get: function () { return 8; },
-          fd_prestat_get: function () { return 8; },
-          fd_prestat_dir_name: function () { return 8; },
-          fd_read: function () { return 8; },
-          fd_seek: function () { return 8; },
-          sched_yield: function () { return 0; },
-          random_get: function (ptr, len) {
-            var bytes = u8();
-            for (var i = 0; i < len; i++) bytes[ptr + i] = (Math.random() * 256) | 0;
-            return 0;
-          },
-        },
+        env: hostEnv.envImports,
+        wasi_snapshot_preview1: hostEnv.wasiImports,
+        wasi: hostEnv.threadImports || {},
       });
-      exp = raw.exports; mem = exp.memory; table = exp.table || exp.__indirect_function_table;
+      exp = raw.exports; mem = hostEnv.envImports.memory || exp.memory; hostEnv.setMem(mem);
+      table = exp.table || exp.__indirect_function_table;
       if (exp._initialize) exp._initialize();
       var dvg = function (o) { return new DataView(mem.buffer).getUint32(o, true); };
       var entryPtr = exp.clap_entry.value;
@@ -390,18 +640,22 @@ mergeInto(LibraryManager.library, {
         u8().set(utf8, ptr);
         return ptr;
       }
-      if (!table.get(initIdx)(writeCStr(path))) return 0;
-      var factoryPtr = table.get(getFactoryIdx)(writeCStr('clap.plugin-factory'));
-      if (!factoryPtr) return 0;
-      var getCountIdx = dvg(factoryPtr + O.factory.get_plugin_count);
-      var getDescIdx = dvg(factoryPtr + O.factory.get_plugin_descriptor);
-      var count = table.get(getCountIdx)(factoryPtr);
-      var n = Math.min(count, maxCount);
-      for (var i = 0; i < n; i++) {
-        var d = table.get(getDescIdx)(factoryPtr, i);
-        stringToUTF8(readCStr(dvg(d + O.descriptor.id)), outIdsPtr + i * idNameSz, idNameSz);
-        stringToUTF8(readCStr(dvg(d + O.descriptor.name)), outNamesPtr + i * idNameSz, idNameSz);
+      var n = 0;
+      if (table.get(initIdx)(writeCStr(path))) {
+        var factoryPtr = table.get(getFactoryIdx)(writeCStr('clap.plugin-factory'));
+        if (factoryPtr) {
+          var getCountIdx = dvg(factoryPtr + O.factory.get_plugin_count);
+          var getDescIdx = dvg(factoryPtr + O.factory.get_plugin_descriptor);
+          var count = table.get(getCountIdx)(factoryPtr);
+          n = Math.min(count, maxCount);
+          for (var i = 0; i < n; i++) {
+            var d = table.get(getDescIdx)(factoryPtr, i);
+            stringToUTF8(readCStr(dvg(d + O.descriptor.id)), outIdsPtr + i * idNameSz, idNameSz);
+            stringToUTF8(readCStr(dvg(d + O.descriptor.name)), outNamesPtr + i * idNameSz, idNameSz);
+          }
+        }
       }
+      hostEnv.workers.forEach(function (w) { w.terminate(); });
       return n;
     } catch (e) {
       console.error('wclap_web_list_plugins failed:', e);
