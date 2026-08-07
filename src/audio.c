@@ -1055,6 +1055,30 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
         blk_l[f] += pl[f];
         blk_r[f] += pr[f];
       }
+
+      // render_channel() never touches shared instruments, so their lane's
+      // song-view scope would otherwise stay flat even while audibly
+      // playing. Feed it here for every lane currently playing this
+      // instrument (mirrors the per-lane min/max loop above).
+      if (eng->playing) {
+        for (int ch = 0; ch < SONG_CHANNELS; ch++) {
+          bool lane_uses_inst = false;
+          for (int tr = 0; tr < PATTERN_TRACKS; tr++)
+            if (eng->active_inst[ch][tr] == i) {
+              lane_uses_inst = true;
+              break;
+            }
+          if (!lane_uses_inst)
+            continue;
+          for (uint32_t f = 0; f < count; f++) {
+            float v = (pl[f] + pr[f]) * 0.5f;
+            if (v < lane_mn[ch])
+              lane_mn[ch] = v;
+            if (v > lane_mx[ch])
+              lane_mx[ch] = v;
+          }
+        }
+      }
     }
 
     for (uint32_t f = 0; f < count; f++) {
