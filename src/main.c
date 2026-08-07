@@ -53,10 +53,14 @@ int main(int argc, char** argv) {
   static TrackerSong song;
 
 #ifndef __EMSCRIPTEN__
+  bool start_fullscreen = false;
+  const char* theme_path = NULL;
+  const char* wav_out_path = NULL;
+  const char* song_path = "song.rpt";
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
       printf(
-        "usage: poketrack [options]\n"
+        "usage: poketrack [options] [song.rpt]\n"
         "\n"
         "  -f, --fullscreen      Start in fullscreen\n"
         "  --theme <file.ptt>    Load a theme at launch\n"
@@ -64,34 +68,59 @@ int main(int argc, char** argv) {
         "                        cursor moves over pattern cells\n"
         "  --width <px>          Window width (default 480)\n"
         "  --height <px>         Window height (default 320)\n"
+        "  --wav <out.wav>       Render the song to a WAV file and exit, instead of\n"
+        "                        opening the UI\n"
         "  -h, --help            Show this help and exit\n"
         "\n"
-        "poketrack loads song.rpt and theme.ptt from the current directory, if present.\n"
+        "poketrack loads song.rpt and theme.ptt from the current directory by default;\n"
+        "pass a path to load a different song, eg: poketrack --wav out.wav other.rpt\n"
       );
       return 0;
+    } else if (strcmp(argv[i], "--fullscreen") == 0 || strcmp(argv[i], "-f") == 0) {
+      start_fullscreen = true;
+    } else if (strcmp(argv[i], "--theme") == 0 && i + 1 < argc) {
+      theme_path = argv[++i];
+    } else if (strcmp(argv[i], "--no-preview") == 0) {
+      g_preview_disabled = true;
+    } else if (strcmp(argv[i], "--width") == 0 && i + 1 < argc) {
+      WIN_W = atoi(argv[++i]);
+    } else if (strcmp(argv[i], "--height") == 0 && i + 1 < argc) {
+      WIN_H = atoi(argv[++i]);
+    } else if (strcmp(argv[i], "--wav") == 0 && i + 1 < argc) {
+      wav_out_path = argv[++i];
+    } else if (argv[i][0] != '-') {
+      song_path = argv[i];
     }
   }
+
+  if (wav_out_path) {
+    // Headless render: no window, audio device, theme, or MIDI needed.
+    tracker_init(&song);
+    audio_init(&g_engine, &song);
+    if (!tracker_load(&song, song_path)) {
+      fprintf(stderr, "poketrack: couldn't load song \"%s\"\n", song_path);
+      audio_shutdown(&g_engine);
+      return 1;
+    }
+    bool ok = audio_render_wav(&g_engine, wav_out_path);
+    audio_shutdown(&g_engine);
+    if (!ok) {
+      fprintf(stderr, "poketrack: failed to render \"%s\"\n", wav_out_path);
+      return 1;
+    }
+    printf("wrote %s\n", wav_out_path);
+    return 0;
+  }
+#else
+  const char* song_path = "song.rpt";
+  (void)argc;
+  (void)argv;
 #endif
 
   theme_load_default("theme.ptt");  // like song.rpt, loaded from the start directory if present
-
 #ifndef __EMSCRIPTEN__
-  bool start_fullscreen = false;
-  for (int i = 1; i < argc; i++) {
-    if (strcmp(argv[i], "--fullscreen") == 0 || strcmp(argv[i], "-f") == 0)
-      start_fullscreen = true;
-    else if (strcmp(argv[i], "--theme") == 0 && i + 1 < argc)
-      theme_load(argv[++i]);
-    else if (strcmp(argv[i], "--no-preview") == 0)
-      g_preview_disabled = true;
-    else if (strcmp(argv[i], "--width") == 0 && i + 1 < argc)
-      WIN_W = atoi(argv[++i]);
-    else if (strcmp(argv[i], "--height") == 0 && i + 1 < argc)
-      WIN_H = atoi(argv[++i]);
-  }
-#else
-  (void)argc;
-  (void)argv;
+  if (theme_path)
+    theme_load(theme_path);
 #endif
 
   midi_in_global_init();
@@ -100,8 +129,8 @@ int main(int argc, char** argv) {
 #endif
   tracker_init(&song);
   audio_init(&g_engine, &song);
-  tracker_load(&song, "song.rpt");
-  audio_set_save_dir(&g_engine, "song.rpt");
+  tracker_load(&song, song_path);
+  audio_set_save_dir(&g_engine, song_path);
 
   ui_init(&g_ui, &song, &g_engine);
 
