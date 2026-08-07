@@ -172,6 +172,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Send Discord Embed
+        if: github.event_name == 'release'
         uses: SethCohen/github-releases-to-discord@v1.20.0
         with:
           webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
