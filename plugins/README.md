@@ -16,7 +16,9 @@ Here are some examples hosted elsewhere:
 - [signalsmith-clap-cpp](https://github.com/geraintluff/signalsmith-clap-cpp) — Signalsmith's C++ CLAP examples, built via WASI-SDK
 - [WebCLAP/examples](https://github.com/WebCLAP/examples).
 
-Keep in mind that the standard is not 100% solid, so you may find plugins that won't work. They need to be without threading, and use wasm32 (not wasm64.)
+Keep in mind that the standard is not 100% solid, so you may find plugins that won't work. They need to use wasm32 (not wasm64.)
+
+Plugins built with a `-pthread` wasi-sdk toolchain (declaring shared/thread-capable memory, e.g. [signalsmith-clap-cpp](https://github.com/geraintluff/signalsmith-clap-cpp)) load fine on native; on web they're backed by real Web Workers (one per spawned thread), which requires the page to be [cross-origin isolated](https://developer.mozilla.org/en-US/docs/Web/API/crossOriginIsolated) (`SharedArrayBuffer` needs it). poketrack's own web build works around GitHub Pages not letting you set the `Cross-Origin-Opener-Policy`/`Cross-Origin-Embedder-Policy` headers this needs, via a service worker (`webroot/coi-serviceworker.js`) that injects them itself — the first page load registers it and reloads once. If you're self-hosting the web build behind a server that already sets those headers, the service worker just no-ops. Without cross-origin isolation (e.g. it's blocked, or third-party cookies/service workers are disabled), a plugin that actually spawns threads fails to load with a console error instead of hanging; plugins that only *link against* a `-pthread` toolchain without ever spawning a thread work regardless.
 
 I made some complete examples:
 
