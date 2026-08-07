@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -50,6 +51,27 @@ static void main_loop(void) {
 
 int main(int argc, char** argv) {
   static TrackerSong song;
+
+#ifndef __EMSCRIPTEN__
+  for (int i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+      printf(
+        "usage: poketrack [options]\n"
+        "\n"
+        "  -f, --fullscreen      Start in fullscreen\n"
+        "  --theme <file.ptt>    Load a theme at launch\n"
+        "  --no-preview          Disable the note preview that normally fires as the\n"
+        "                        cursor moves over pattern cells\n"
+        "  --width <px>          Window width (default 480)\n"
+        "  --height <px>         Window height (default 320)\n"
+        "  -h, --help            Show this help and exit\n"
+        "\n"
+        "poketrack loads song.rpt and theme.ptt from the current directory, if present.\n"
+      );
+      return 0;
+    }
+  }
+#endif
 
   theme_load_default("theme.ptt");  // like song.rpt, loaded from the start directory if present
 
