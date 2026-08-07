@@ -19,6 +19,7 @@ permissions:
 
 jobs:
   build:
+    needs: examples
     strategy:
       fail-fast: false
       matrix:
@@ -91,17 +92,37 @@ jobs:
         if: runner.os != 'Windows'
         run: cd build && ./poketrack_tests
 
+      # examples/ ships as a sibling of the binary in every platform zip (not
+      # just a standalone download) so it's part of the same install
+      # directory Steam updates on every release — see the file browser's
+      # GetWorkingDirectory() root in src/file_browser.c. The plugins in it
+      # are WASM (wasi-sdk), so one Linux build covers every platform; no
+      # need to rebuild per-OS.
+      - name: Download examples
+        uses: actions/download-artifact@v7
+        with:
+          name: examples
+          path: dl-examples
+
+      - name: Unpack examples (non-Windows)
+        if: runner.os != 'Windows'
+        run: unzip -o dl-examples/examples.zip -d examples
+
+      - name: Unpack examples (Windows)
+        if: runner.os == 'Windows'
+        run: Expand-Archive -Path dl-examples/examples.zip -DestinationPath examples -Force
+
       - name: Zip artifact (Linux)
         if: runner.os == 'Linux'
         run: |
           cp build/poketrack poketrack
-          zip ${{ matrix.name }}.zip poketrack
+          zip -r ${{ matrix.name }}.zip poketrack examples
 
       - name: Zip artifact (macOS)
         if: runner.os == 'macOS'
         run: |
           cp -R build/poketrack.app poketrack.app
-          zip -r ${{ matrix.name }}.zip poketrack.app
+          zip -r ${{ matrix.name }}.zip poketrack.app examples
 
       - name: Zip artifact (Windows)
         if: runner.os == 'Windows'
@@ -113,7 +134,7 @@ jobs:
           # loader needs it in the same directory at startup.
           cp build/Release/poketrack.exe poketrack.exe
           cp build/Release/wasmtime.dll wasmtime.dll
-          Compress-Archive -Path poketrack.exe,wasmtime.dll -DestinationPath ${{ matrix.name }}.zip
+          Compress-Archive -Path poketrack.exe,wasmtime.dll,examples -DestinationPath ${{ matrix.name }}.zip
 
       - name: Upload to release
         if: github.event_name == 'release'
@@ -161,8 +182,10 @@ jobs:
         with:
           files: examples.zip
 
+      # Always uploaded (not just for non-release events, unlike the other
+      # jobs' artifact steps): the build job downloads this to fold examples/
+      # into every platform zip, release or not.
       - name: Upload artifact
-        if: github.event_name != 'release'
         uses: actions/upload-artifact@v7
         with:
           name: examples
