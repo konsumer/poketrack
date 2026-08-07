@@ -98,6 +98,8 @@ The UI is themable at launch: `poketrack --theme ~/cyber.ptt`. See [THEMES](./TH
 
 ### CLI flags
 
+`poketrack [options] [song.rpt]` — loads `song.rpt`/`theme.ptt` from the current directory by default; pass a path to load a different song.
+
 | Flag | Purpose |
 |---|---|
 | `-f`, `--fullscreen` | Start in fullscreen |
@@ -105,6 +107,8 @@ The UI is themable at launch: `poketrack --theme ~/cyber.ptt`. See [THEMES](./TH
 | `--no-preview` | Disable the note preview that normally fires as the cursor moves over pattern cells — useful when editing sequences live, where you don't want every input-move to also trigger a note |
 | `--width <px>` | Window width (default 480) |
 | `--height <px>` | Window height (default 320) |
+| `--wav <out.wav>` | Render the song to a WAV file and exit, instead of opening the UI, eg: `poketrack --wav song.wav song.rpt` |
+| `-h`, `--help` | Print this table and exit |
 
 
 ### videos
