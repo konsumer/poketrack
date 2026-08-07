@@ -74,3 +74,7 @@ plugins: ## Build bundled example WCLAP plugins into examples/plugins/
 		cp plugins/pd2wclap/build/pd-osc.wasm examples/plugins/pd-osc.wclap.wasm && \
 		cp plugins/pd2wclap/build/pd-vcf.wasm examples/plugins/pd-vcf.wclap.wasm \
 	) || echo "skipping pd2wclap demos (see plugins/pd2wclap/README.md#install) — pd2ast/pdast2wclap/wasi-sdk not found"
+	[ -x "$${WASI_SDK_PATH:-/opt/wasi-sdk}/bin/clang" ] && ( \
+		plugins/pthread-synth/build.sh && \
+		cp plugins/pthread-synth/build/pthread-synth.wasm examples/plugins/pthread-synth.wclap.wasm \
+	) || echo "skipping pthread-synth demo (see plugins/pthread-synth/README.md#building) — wasi-sdk not found"
