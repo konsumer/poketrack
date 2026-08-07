@@ -21,6 +21,7 @@ Keep in mind that the standard is not 100% solid, so you may find plugins that w
 I made some complete examples:
 
 - **[karplus](karplus)** — a Karplus-Strong plucked string, written against [as-clap](https://github.com/WebCLAP/as-clap) (AssemblyScript).
+- **[subsynth](subsynth)** — an analog-style subtractive synth (oscillator → resonant filter with its own envelope → amp envelope), written against [as-clap](https://github.com/WebCLAP/as-clap) (AssemblyScript).
 - **[robotalk](robotalk)** — a playable text-to-speech instrument (37 phonemes: vowels, diphthongs, liquids, nasals, fricatives, stops), written against [clack](https://github.com/prokopyl/clack) (Rust).
 - **[pd2wclap](pd2wclap)** — Uses [pdast](https://github.com/konsumer/pdast) to convert puredata patches into full WCLAP plugins
 
