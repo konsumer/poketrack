@@ -25,14 +25,12 @@ its own VDF internally from the `appId`/`depotNPath` workflow inputs, so
 there's nothing to hand-edit; the App ID and depot IDs only need to exist
 as repo secrets/workflow inputs, not as checked-in files.
 
-`examples/` (songs, themes, sf2, plugins) ships inside each platform zip
-as a sibling of the binary — `release.yml`'s `build` job folds it in before
-zipping — so it's part of the same install directory Steam updates on
-every release. There used to be a second Steam app ("Example Beats", App
-ID 5043220) that shipped examples on their own, deployed by a separate
-`deploy-examples` job; that's gone. If examples aren't showing up after an
-update, it's almost certainly the ordinary "forgot to promote the build"
-issue below, not a separate-app problem.
+The workflow runs two jobs, `deploy` (the app) then `deploy-examples` (the
+Example Beats app, App ID 5043220). They're **sequential on purpose**: both
+log in as the same Steam build account, and Steam only keeps one steamcmd
+session per account, so running them together made them knock each other
+over. A repo-level `concurrency: steam-deploy` group stops two releases
+overlapping for the same reason.
 
 ## Publishing: prerelease → promote
 
@@ -64,8 +62,9 @@ whole build and then die at the set-live step.
 
 That failure mode is worth recognising, because it's silent: the upload
 succeeds, the log shows no error, and the job just goes red at the end.
-The old `deploy-examples` job hit this on every run before it was folded
-into the main app (see above).
+`deploy-examples` used to pass `releaseBranch: default` and failed exactly
+this way on every run. It now uploads with `releaseBranch: ''` (upload
+only, set nothing live) and is promoted by hand like the main app.
 
 ### Deploying somewhere other than prerelease
 
@@ -101,19 +100,20 @@ exist is another "uploaded fine, then failed" case.
    ```
    (macOS steamcmd keeps this at `~/Library/Application Support/Steam/config/config.vdf`.)
 6. Add repo secrets: `STEAM_USERNAME`, `STEAM_CONFIG_VDF` (contents of
-   `config_base64.txt`), `STEAM_APP_ID`.
+   `config_base64.txt`), `STEAM_APP_ID`. Optionally
+   `STEAM_EXAMPLES_APP_ID` to override the Example Beats App ID.
 7. Rotate `STEAM_CONFIG_VDF` if it's ever exposed — it's a live login session.
 
 ### When a deploy fails
 
-The `deploy` job dumps `build_output.log` and any other steamcmd logs on
-failure, which say far more than the action's exit code does. Common
-causes, in rough order of likelihood:
+Both jobs dump `build_output.log` and any other steamcmd logs on failure,
+which say far more than the action's exit code does. Common causes, in
+rough order of likelihood:
 
 | Symptom | Cause |
 |---|---|
 | Upload succeeds, job fails at the end | Set-live target is `default`, or a beta branch that doesn't exist |
 | `Failed to commit build ... : Failure` | Same as above, or the build account lacks "Publish App Changes" |
-| Overlapping steamcmd sessions, no clear error | Two workflow runs raced — should be prevented now by the concurrency group |
+| Two jobs fail together, no clear error | Overlapping steamcmd sessions — should be prevented now by `needs:` + the concurrency group |
 | `Build for depot NNNN failed` | Depot IDs don't match `appId+1/2/3` |
 | Login fails | `STEAM_CONFIG_VDF` expired or was rotated — regenerate it (step 5) |
