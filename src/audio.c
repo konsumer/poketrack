@@ -19,6 +19,9 @@ float g_sidechain_rms[NUM_INSTRUMENTS] = {0};
 // Tempo, published to units that need to be BPM-relative (see unit.h).
 uint32_t g_unit_samples_per_line = 0;
 
+// Bumped on every play-start (see unit.h).
+uint32_t g_unit_play_epoch = 0;
+
 static void midi_voice_destroy(AudioEngine* eng, int v);
 void audio_midi_kill_all(AudioEngine* eng);
 
@@ -490,6 +493,7 @@ void audio_shutdown(AudioEngine* eng) {
 // Shared by all three entry points below and by the offline WAV render; the
 // caller holds the lock and sets eng->playing once it has finished setting up.
 static void playback_reset(AudioEngine* eng, uint16_t start_row) {
+  g_unit_play_epoch++;
   audio_preview_kill(eng);
   for (int ch = 0; ch < SONG_CHANNELS; ch++) {
     eng->cursors[ch].song_row = start_row;

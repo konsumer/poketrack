@@ -120,6 +120,14 @@ void audio_mod_set_param(uint8_t inst_idx, uint8_t global_param, uint8_t val);
 // A beat is 4 lines, a whole note 16. Zero until the first block renders.
 extern uint32_t g_unit_samples_per_line;
 
+// Bumped by the engine every time playback (re)starts from the top —
+// audio_play(), audio_play_pattern(), audio_render_wav() — so tempo-synced
+// units can tell "this render is right after a play-start" apart from
+// "playback has been running for a while" and snap their phase back onto the
+// bar grid. Compare against a value cached in the unit's own state; a
+// mismatch means playback (re)started since the last render call.
+extern uint32_t g_unit_play_epoch;
+
 // sin(2*pi*phase) for any phase (wraps, handles negatives). LUT + linear
 // interpolation, error < -100dB — replaces per-sample sinf in render loops.
 static inline float unit_sin(float phase) {
