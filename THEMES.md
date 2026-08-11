@@ -73,13 +73,16 @@ cp examples/theme.ptt theme.ptt
 | `wavetable.ptt` | near-black, warm orange/teal | <img src="./art/themes/wavetable.png" width="160" alt="wavetable theme" /> |
 | `greeny.ptt` | teal background, lime/hot-pink accents | <img src="./art/themes/greeny.png" width="160" alt="greeny theme" /> |
 | `dosedit.ptt` | hand-tuned EGA blue "MS-DOS Editor" look | <img src="./art/themes/dosedit.png" width="160" alt="dosedit theme" /> |
-| `m4r10.ptt` | hand-tuned Super Mario Bros. (NES) sky-blue + coin-yellow | <img src="./art/themes/m4r10.png" width="160" alt="m4r10 theme" /> |
+| `m4r10-1-1.ptt` | hand-tuned Super Mario Bros. (NES) World 1-1 — sky-blue overworld | <img src="./art/themes/m4r10-1-1.png" width="160" alt="m4r10-1-1 theme" /> |
+| `m4r10-1-2.ptt` | hand-tuned Super Mario Bros. (NES) World 1-2 — black underground, electric blue | <img src="./art/themes/m4r10-1-2.png" width="160" alt="m4r10-1-2 theme" /> |
+| `m4r10-1-4.ptt` | hand-tuned Super Mario Bros. (NES) World 1-4 — black castle, stone + lava | <img src="./art/themes/m4r10-1-4.png" width="160" alt="m4r10-1-4 theme" /> |
+| `m4r10-2-2.ptt` | hand-tuned Super Mario Bros. (NES) World 2-2 — deep-blue underwater | <img src="./art/themes/m4r10-2-2.png" width="160" alt="m4r10-2-2 theme" /> |
 
 ```
 poketrack --theme examples/themes/cyber.ptt
 ```
 
-Every theme in the gallery except `cyber.ptt`, `dosedit.ptt`, and `m4r10.ptt` was generated with
+Every theme in the gallery except `cyber.ptt`, `dosedit.ptt`, and the `m4r10-*.ptt` set was generated with
 `scripts/lgpt_theme.py` from the example palettes at
 [sixey.es/sounds/piggythemes](https://sixey.es/sounds/piggythemes/) — see
 below for how to convert your own.
