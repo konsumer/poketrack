@@ -1,0 +1,44 @@
+# dosedit — the classic MS-DOS Editor "blue screen" look.
+# EGA blue background, light gray body text, cyan selection block,
+# and a track palette pulled straight from the 16-color CGA/EGA set
+# (with the two colors closest to the background nudged for visibility).
+
+hide_help=0
+
+bg=0000AA
+bg_alt=000088
+cursor=00AAAA
+cursor2=008888
+sep=3333CC
+text=AAAAAA
+dim=6666AA
+header=FFFFFF
+note=FFFF55
+note_off=FF5555
+vel=55FF55
+inst=55FFFF
+fx=FF55FF
+play=55FF55
+status=FFFFFF
+title=FFFFFF
+edit_tag=FFFF55
+fb_header=AAAAAA
+fb_dim=6666AA
+fb_input_bg=000000
+
+track0=FFFF55
+track1=FFFFFF
+track2=55FFFF
+track3=55FF55
+track4=FF5555
+track5=FF55FF
+track6=AAAAAA
+track7=AA5500
+track8=00AAAA
+track9=00AA00
+track10=AA00AA
+track11=AA0000
+track12=5555FF
+track13=555555
+track14=8888CC
+track15=3333AA

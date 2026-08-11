@@ -72,12 +72,13 @@ cp examples/theme.ptt theme.ptt
 | `808.ptt` | charcoal, orange + yellow accents | <img src="./art/themes/808.png" width="160" alt="808 theme" /> |
 | `wavetable.ptt` | near-black, warm orange/teal | <img src="./art/themes/wavetable.png" width="160" alt="wavetable theme" /> |
 | `greeny.ptt` | teal background, lime/hot-pink accents | <img src="./art/themes/greeny.png" width="160" alt="greeny theme" /> |
+| `dosedit.ptt` | hand-tuned EGA blue "MS-DOS Editor" look | <img src="./art/themes/dosedit.png" width="160" alt="dosedit theme" /> |
 
 ```
 poketrack --theme examples/themes/cyber.ptt
 ```
 
-Every theme in the gallery except `cyber.ptt` was generated with
+Every theme in the gallery except `cyber.ptt` and `dosedit.ptt` was generated with
 `scripts/lgpt_theme.py` from the example palettes at
 [sixey.es/sounds/piggythemes](https://sixey.es/sounds/piggythemes/) — see
 below for how to convert your own.
