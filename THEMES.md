@@ -73,12 +73,13 @@ cp examples/theme.ptt theme.ptt
 | `wavetable.ptt` | near-black, warm orange/teal | <img src="./art/themes/wavetable.png" width="160" alt="wavetable theme" /> |
 | `greeny.ptt` | teal background, lime/hot-pink accents | <img src="./art/themes/greeny.png" width="160" alt="greeny theme" /> |
 | `dosedit.ptt` | hand-tuned EGA blue "MS-DOS Editor" look | <img src="./art/themes/dosedit.png" width="160" alt="dosedit theme" /> |
+| `m4r10.ptt` | hand-tuned Super Mario Bros. (NES) sky-blue + coin-yellow | <img src="./art/themes/m4r10.png" width="160" alt="m4r10 theme" /> |
 
 ```
 poketrack --theme examples/themes/cyber.ptt
 ```
 
-Every theme in the gallery except `cyber.ptt` and `dosedit.ptt` was generated with
+Every theme in the gallery except `cyber.ptt`, `dosedit.ptt`, and `m4r10.ptt` was generated with
 `scripts/lgpt_theme.py` from the example palettes at
 [sixey.es/sounds/piggythemes](https://sixey.es/sounds/piggythemes/) — see
 below for how to convert your own.
