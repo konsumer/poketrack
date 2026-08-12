@@ -131,10 +131,11 @@ Tape-style delay with stereo spread.
 
 | Param | Range | Notes |
 |-------|-------|-------|
-| TIME | 4ms–1s | Delay time |
+| TIME | 4ms–1s | Delay time (used when SYNC=FREE) |
 | FEEDBACK | 0–95% | Echo repeat amount |
 | MIX | dry–wet | Blend with dry signal |
 | SPREAD | mono–ping-pong | L/R offset for stereo effect |
+| SYNC | FREE / 4/1 … 1/32 | Lock delay time to a note division of the song tempo instead of TIME. Long divisions clamp to the 1s buffer |
 
 ### DIST
 
@@ -292,10 +293,11 @@ Modulates a parameter on any instrument every render block.
 
 | Param | Range | Notes |
 |-------|-------|-------|
-| RATE | 0.1Hz–20Hz | LFO speed |
+| RATE | 0.1Hz–20Hz | LFO speed (used when SYNC=FREE) |
 | SHPE | Sine / Square / Saw / Tri | LFO waveform |
 | INST | 00–FF | Target instrument index (defaults to current) |
 | PARAM | 00–FF | Target param (global index across chain slots) |
 | CNTR | 00–FF | Center value for modulation (default 80) |
 | DPTH | 00–FF | Modulation depth added/subtracted from center |
 | ON | Off / On | Enable/disable |
+| SYNC | FREE / 4/1 … 1/32 | Lock the cycle to a note division of the song tempo instead of RATE |

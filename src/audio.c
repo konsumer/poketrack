@@ -1055,9 +1055,39 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
         float v = (pl[f] + pr[f]) * 0.5f;
         sc_energy[i] += (double)v * v;
       }
-      for (uint32_t f = 0; f < count; f++) {
-        blk_l[f] += pl[f];
-        blk_r[f] += pr[f];
+
+      // Which lanes are currently playing this instrument, and whether any
+      // of them is unmuted. A shared instance mixes every lane's voices into
+      // one stream (the plugin owns its own polyphony), so per-lane mute
+      // can't isolate just the muted lane's notes the way render_channel()
+      // does — the closest match to the "muted lane's audio excluded from
+      // the mix" contract (see audio_toggle_mute) is to only silence the
+      // instrument once EVERY lane using it is muted. An instrument with no
+      // lane using it right now (e.g. driven purely by live MIDI) is never
+      // gated by mute.
+      bool lane_uses_inst[SONG_CHANNELS] = {0};
+      bool any_lane_uses_inst = false, any_unmuted_lane_uses_inst = false;
+      if (eng->playing) {
+        for (int ch = 0; ch < SONG_CHANNELS; ch++) {
+          for (int tr = 0; tr < PATTERN_TRACKS; tr++)
+            if (eng->active_inst[ch][tr] == i) {
+              lane_uses_inst[ch] = true;
+              break;
+            }
+          if (lane_uses_inst[ch]) {
+            any_lane_uses_inst = true;
+            if (!eng->mute[ch])
+              any_unmuted_lane_uses_inst = true;
+          }
+        }
+      }
+      bool inst_muted = any_lane_uses_inst && !any_unmuted_lane_uses_inst;
+
+      if (!inst_muted) {
+        for (uint32_t f = 0; f < count; f++) {
+          blk_l[f] += pl[f];
+          blk_r[f] += pr[f];
+        }
       }
 
       // render_channel() never touches shared instruments, so their lane's
@@ -1066,13 +1096,7 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
       // instrument (mirrors the per-lane min/max loop above).
       if (eng->playing) {
         for (int ch = 0; ch < SONG_CHANNELS; ch++) {
-          bool lane_uses_inst = false;
-          for (int tr = 0; tr < PATTERN_TRACKS; tr++)
-            if (eng->active_inst[ch][tr] == i) {
-              lane_uses_inst = true;
-              break;
-            }
-          if (!lane_uses_inst)
+          if (!lane_uses_inst[ch])
             continue;
           for (uint32_t f = 0; f < count; f++) {
             float v = (pl[f] + pr[f]) * 0.5f;

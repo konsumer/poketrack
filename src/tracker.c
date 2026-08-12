@@ -151,6 +151,46 @@ Pattern* tracker_pattern(TrackerSong* song, uint8_t pi) {
   return song->pattern_data[pi];
 }
 
+// Last song row (&lt;= song_len-1) with a non-empty pattern cell in any lane.
+// Trailing rows within song_len that are all-empty don't get played, so they
+// don't count toward length either. Mirrors audio.c's song_last_row().
+static uint16_t song_last_row(TrackerSong* song) {
+  for (int row = song->song_len - 1; row > 0; row--)
+    for (int ch = 0; ch < SONG_CHANNELS; ch++)
+      if (song->patterns[ch][row] != TRACKER_EMPTY)
+        return (uint16_t)row;
+  return 0;
+}
+
+// How many ticks a song row lasts: the longest pattern placed on it across
+// all lanes (shorter patterns on the same row just loop within it). Mirrors
+// audio.c's row_max_len().
+static uint16_t row_max_len(TrackerSong* song, uint16_t song_row) {
+  uint16_t max = 1;
+  for (int ch = 0; ch < SONG_CHANNELS; ch++) {
+    uint8_t pi = song->patterns[ch][song_row];
+    if (pi != TRACKER_EMPTY) {
+      uint16_t l = tracker_pattern_peek(song, pi)->len;
+      if (l > max)
+        max = l;
+    }
+  }
+  return max;
+}
+
+// Total one-pass playback duration in seconds (ignores song->loop — a looped
+// song has no finite length, so callers wanting "one time through" use this
+// regardless of the loop flag). One tick = one pattern line = 15/bpm seconds
+// (4 ticks per beat, matching audio.c's calc_samples_per_tick).
+float tracker_song_length_seconds(TrackerSong* song) {
+  uint16_t bpm = song->bpm ? song->bpm : 120;
+  uint16_t last_row = song_last_row(song);
+  uint32_t total_lines = 0;
+  for (uint16_t row = 0; row <= last_row; row++)
+    total_lines += row_max_len(song, row);
+  return (float)total_lines * 15.0f / (float)bpm;
+}
+
 void tracker_free_patterns(TrackerSong* song) {
   for (int pi = 0; pi < NUM_PATTERNS; pi++) {
     free(song->pattern_data[pi]);

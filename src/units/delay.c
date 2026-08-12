@@ -1,9 +1,14 @@
 // Delay effect unit
-// P0 TIME:     00=4ms  FF=1s
+// P0 TIME:     00=4ms  FF=1s (used when SYNC=FREE)
 // P1 FEEDBACK: 00=0%   FF=95%
 // P2 MIX:      00=dry  FF=wet  7F=50/50
 // P3 SPREAD:   00=mono  FF=ping-pong (L/R offset)
-// P4-P7: unused
+// P4 SYNC:     FREE=use TIME, else lock the delay length to a note division
+//              of the song tempo, via g_unit_samples_per_line (see unit.h
+//              and lfo.c, which uses the same table). Long divisions get
+//              clamped to the 1s buffer, so e.g. 4/1, 2/1 and 1/1 all fold
+//              to the same 1s delay at normal tempos.
+// P5-P7: unused
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +24,13 @@ struct UnitState {
   float sample_rate;
 };
 
+// Index 0 is FREE (TIME param governs instead); the rest are multiples of a
+// whole note (bar), matching lfo.c's SYNC table.
+static const char* const delay_sync_names[] = {"FREE", "4/1", "2/1", "1/1", "1/2",
+                                               "1/4", "1/8", "1/16", "1/32"};
+static const float delay_sync_mult[] = {4, 2, 1, 0.5f, 0.25f, 0.125f, 0.0625f, 0.03125f};
+#define DELAY_NSYNC ((int)(sizeof(delay_sync_names) / sizeof(delay_sync_names[0])))
+
 static UnitState* delay_create(float sr) {
   UnitState* s = calloc(1, sizeof(*s));
   s->sample_rate = sr;
@@ -33,11 +45,21 @@ static void delay_kill(UnitState* s) {
 static void delay_render(UnitState* s, const uint8_t* p,
                          const float* in_l, const float* in_r,
                          float* out_l, float* out_r, uint32_t frames) {
-  float delay_secs = p2f(p[0], 0.004f, 1.0f);
   float feedback = p2f(p[1], 0.0f, 0.95f);
   float mix = p2f(p[2], 0.0f, 1.0f);
   float spread = p2f(p[3], 0.0f, 1.0f);
-  int delay_samp = (int)(delay_secs * s->sample_rate);
+
+  int sync = p[4] > DELAY_NSYNC - 1 ? DELAY_NSYNC - 1 : p[4];
+  int delay_samp;
+  uint32_t spl = g_unit_samples_per_line;
+  if (sync == 0 || !spl) {
+    // FREE (or tempo not known yet): plain seconds range.
+    float delay_secs = p2f(p[0], 0.004f, 1.0f);
+    delay_samp = (int)(delay_secs * s->sample_rate);
+  } else {
+    // One repeat every (whole-note-in-samples * multiplier).
+    delay_samp = (int)((float)spl * 16.0f * delay_sync_mult[sync - 1] + 0.5f);
+  }
   if (delay_samp < 1)
     delay_samp = 1;
   if (delay_samp >= DELAY_MAX)
@@ -65,9 +87,11 @@ const UnitDef unit_delay = {
     .id = "delay",
     .name = "DELAY",
     .is_source = false,
-    .num_params = 4,
-    .param_names = {"TIME", "FDBK", "MIX", "SPRD"},
-    .param_defaults = {64, 100, 80, 0},
+    .num_params = 5,
+    .param_names = {"TIME", "FDBK", "MIX", "SPRD", "SYNC"},
+    .param_defaults = {64, 100, 80, 0, 0},
+    .param_enums = {NULL, NULL, NULL, NULL, delay_sync_names},
+    .param_enum_count = {0, 0, 0, 0, DELAY_NSYNC},
     .create = delay_create,
     .destroy = delay_destroy,
     .kill = delay_kill,

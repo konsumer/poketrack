@@ -17,6 +17,7 @@ static MenuFileBrowserMode g_fb_mode = MENU_FB_NONE;
 
 typedef enum {
   MENU_BPM = 0,
+  MENU_LEN,
   MENU_SCALE_ROOT,
   MENU_SCALE,
   MENU_LOOP,
@@ -35,6 +36,7 @@ typedef enum {
 
 static const char* menu_labels[] = {
     "BPM",
+    "LEN",
     "KEY",
     "SCALE",
     "LOOP",
@@ -238,6 +240,12 @@ void screen_menu_draw(UIState* ui) {
         snprintf(val, sizeof(val), "%d", ui->song->bpm);
         DrawText(val, 100, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_TEXT);
         break;
+      case MENU_LEN: {
+        int total_sec = (int)(tracker_song_length_seconds(ui->song) + 0.5f);
+        snprintf(val, sizeof(val), "%02d:%02d", (total_sec / 60) % 60, total_sec % 60);
+        DrawText(val, 100, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_TEXT);
+        break;
+      }
       case MENU_SCALE_ROOT:
         DrawText(SCALE_ROOT_NAMES[ui->song->scale_root % 12],
                  100, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_TEXT);

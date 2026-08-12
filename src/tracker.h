@@ -91,6 +91,10 @@ Pattern* tracker_pattern_peek(TrackerSong* song, uint8_t pi);
 // Free all allocated patterns (before overwriting a song wholesale).
 void tracker_free_patterns(TrackerSong* song);
 
+// One-pass playback duration in seconds, from BPM and the arrangement
+// (ignores song->loop). For a UI length readout, not a hot path.
+float tracker_song_length_seconds(TrackerSong* song);
+
 #define NUM_SCALES 45
 
 typedef struct {
