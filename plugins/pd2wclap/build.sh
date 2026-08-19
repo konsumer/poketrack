@@ -28,6 +28,22 @@ if [ ! -x "$WASI_SDK_PATH/bin/clang" ]; then
   exit 1
 fi
 
+# Which WASI target this SDK can actually link against. Releases from wasi-sdk
+# 22 on use the wasm32-wasip1 triple, but older builds (notably the AUR
+# wasi-sdk-git package) only know the pre-rename wasm32-wasi and put their
+# libs and compiler-rt under that name — asking those for wasip1 fails with a
+# confusing "cannot open crt1-reactor.o / unable to find library -lc". Pick by
+# what the sysroot actually contains rather than by version-sniffing clang.
+WASI_SYSROOT="${WASI_SYSROOT:-$WASI_SDK_PATH/share/wasi-sysroot}"
+if [ -d "$WASI_SYSROOT/lib/wasm32-wasip1" ]; then
+  WASI_TARGET="${WASI_TARGET:-wasm32-wasip1}"
+elif [ -d "$WASI_SYSROOT/lib/wasm32-wasi" ]; then
+  WASI_TARGET="${WASI_TARGET:-wasm32-wasi}"
+else
+  echo "no WASI sysroot libs under $WASI_SYSROOT/lib (set WASI_SYSROOT) — see README.md#install" >&2
+  exit 1
+fi
+
 # CLAP headers: reuse poketrack's own CMake-fetched copy if present, else a
 # cached shallow clone under vendor/ (gitignored), else fetch one now.
 POKETRACK_FETCHED="$SCRIPT_DIR/../../build/_deps/wclap-bridge-src/modules/clap/include"
@@ -54,7 +70,8 @@ GEN_C="$OUT_DIR/$NAME.c"
 # not a bare binary name found only via $PATH.
 WASM_LD="${WASM_LD:-$(command -v wasm-ld || echo "$WASI_SDK_PATH/bin/wasm-ld")}"
 
-"$WASI_SDK_PATH/bin/clang" --target=wasm32-wasip1 -mexec-model=reactor -O2 \
+"$WASI_SDK_PATH/bin/clang" --target="$WASI_TARGET" --sysroot="$WASI_SYSROOT" \
+  -mexec-model=reactor -O2 \
   -fuse-ld="$WASM_LD" \
   -I"$CLAP_INCLUDE" -I"$SCRIPT_DIR" \
   -DPD_PLUGIN_ID="\"com.poketrack.clap.$NAME\"" -DPD_PLUGIN_NAME="\"$NAME (PD)\"" \
