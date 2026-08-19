@@ -14,7 +14,7 @@
 typedef struct {
   uint32_t id;
   double min_val, max_val, default_val;
-  bool is_bool, is_stepped;
+  bool is_bool, is_stepped, is_enum;
   char name[24];
 } ClapParamInfo;
 
@@ -23,7 +23,7 @@ typedef struct {
   uint8_t val;
   uint8_t last_sent;
   double min_val, max_val;
-  bool is_bool, is_stepped;
+  bool is_bool, is_stepped, is_enum;
   char name[24];
 } ClapMapping;
 
@@ -51,6 +51,56 @@ struct UnitState {
   char plugin_choice_names[MAX_CLAP_PLUGIN_CHOICES][128];
 };
 
+// The ADD-row control is always a raw 0-255 byte (same as every other unit's
+// params[]) — like pd2wclap's patches, it gets scaled to whatever range the
+// plugin's own param declares. For a *stepped* param (bool/stepped/enum —
+// a fixed, usually small, set of discrete values, e.g. a preset-select or a
+// waveform pick) that scaling needs to guarantee one byte bump moves one
+// step: proportionally spreading the full 0-255 byte range across a
+// narrower step range (the plain `(byte/255)*range` a continuous param
+// wants) means most single-step transitions only happen on every *other*
+// byte bump, which reads as "unresponsive" for something you're stepping
+// through one at a time. So stepped params instead map byte directly onto
+// steps from min (byte N == step N), clamping at the top if the param has
+// more than 256 steps — vs. non-stepped (genuinely continuous) params,
+// which keep the proportional scale since there's no "step" to land on.
+static bool clap_is_stepped_like(bool is_bool, bool is_stepped, bool is_enum) {
+  return is_bool || is_stepped || is_enum;
+}
+
+static double clap_byte_to_value(double min_val, double max_val, bool stepped_like, uint8_t byte) {
+  double range = max_val - min_val;
+  if (range <= 0)
+    return min_val;
+  if (stepped_like) {
+    double step = (double)byte;
+    if (step > range)
+      step = range;
+    return min_val + step;
+  }
+  return min_val + (byte / 255.0) * range;
+}
+
+static uint8_t clap_value_to_byte(double min_val, double max_val, bool stepped_like, double value) {
+  double range = max_val - min_val;
+  if (range <= 0)
+    return 0;
+  if (stepped_like) {
+    double step = value - min_val;
+    if (step < 0)
+      step = 0;
+    if (step > 255)
+      step = 255;
+    return (uint8_t)(step + 0.5);
+  }
+  double frac = (value - min_val) / range;
+  if (frac < 0)
+    frac = 0;
+  if (frac > 1)
+    frac = 1;
+  return (uint8_t)(frac * 255.0 + 0.5);
+}
+
 static UnitState* clap_unit_create(float sr) {
   UnitState* s = calloc(1, sizeof(*s));
   s->sample_rate = sr;
@@ -73,6 +123,7 @@ static void fill_mapping_from_cache(UnitState* s, uint32_t id, ClapMapping* m) {
   m->max_val = 1;
   m->is_bool = false;
   m->is_stepped = false;
+  m->is_enum = false;
   strncpy(m->name, "?", sizeof(m->name));
   for (int i = 0; i < s->total_params; i++) {
     ClapParamInfo* c = &s->param_cache[i];
@@ -81,10 +132,10 @@ static void fill_mapping_from_cache(UnitState* s, uint32_t id, ClapMapping* m) {
       m->max_val = c->max_val;
       m->is_bool = c->is_bool;
       m->is_stepped = c->is_stepped;
+      m->is_enum = c->is_enum;
       strncpy(m->name, c->name, sizeof(m->name) - 1);
-      double range = c->max_val - c->min_val;
-      if (range > 0)
-        m->val = (uint8_t)((c->default_val - c->min_val) / range * 255.0 + 0.5);
+      if (c->max_val > c->min_val)
+        m->val = clap_value_to_byte(c->min_val, c->max_val, clap_is_stepped_like(c->is_bool, c->is_stepped, c->is_enum), c->default_val);
       break;
     }
   }
@@ -125,6 +176,7 @@ static void clap_reload_plugin(UnitState* s) {
       bool stepped = clap_host_param_is_stepped(s->plugin, i);
       c->is_bool = stepped && (c->max_val - c->min_val) == 1.0;
       c->is_stepped = stepped && !c->is_bool;
+      c->is_enum = clap_host_param_is_enum(s->plugin, i);
     }
   }
 }
@@ -204,6 +256,12 @@ static void clap_unit_note_on(UnitState* s, uint8_t note, uint8_t vel, const uin
     return;
   if (s->active_note >= 0)
     clap_host_note_off(s->plugin, (uint8_t)s->active_note, 0);
+  // vel is poketrack's native 0-255 byte (screen_pattern.c defaults a fresh
+  // note to 0xFF); clap_host_note_on() divides by the real MIDI ceiling of
+  // 127 to get CLAP's nominal 0.0-1.0 velocity, so clamp here first — an
+  // unclamped 128-255 would otherwise reach every CLAP plugin as >1.0.
+  if (vel > 127)
+    vel = 127;
   clap_host_note_on(s->plugin, note, vel, 0);
   s->active_note = note;
 }
@@ -254,25 +312,38 @@ static uint8_t clap_get_param_default(UnitState* s, int idx) {
   // Re-derive default from param_cache
   for (int i = 0; i < s->total_params; i++) {
     if (s->param_cache[i].id == m->id) {
-      return (uint8_t)((s->param_cache[i].default_val - m->min_val) / range * 255.0 + 0.5);
+      return clap_value_to_byte(m->min_val, m->max_val, clap_is_stepped_like(m->is_bool, m->is_stepped, m->is_enum),
+                                s->param_cache[i].default_val);
     }
   }
   return 0x80;
 }
 
-static char s_fmt_buf[32];
+static char s_fmt_buf[64];
 static const char* clap_format_param_val(UnitState* s, int idx, uint8_t val) {
   if (idx < 0 || idx >= s->num_mappings)
     return NULL;
   ClapMapping* m = &s->mappings[idx];
   if (m->is_bool)
     return (val >= 128) ? "ON" : "OFF";
+  double scaled = clap_byte_to_value(m->min_val, m->max_val, clap_is_stepped_like(m->is_bool, m->is_stepped, m->is_enum), val);
+  // Prefer the plugin's own CLAP_EXT_PARAMS value_to_text (e.g. a synth
+  // naming a value — "JazzGuitar" for a preset-select param — instead of
+  // just showing the raw number) when it has one; fall back to a plain
+  // integer otherwise.
+  if (s->plugin && clap_host_param_value_to_text(s->plugin, m->id, scaled, s_fmt_buf, sizeof(s_fmt_buf)) && s_fmt_buf[0])
+    return s_fmt_buf;
   if (m->is_stepped) {
-    int actual = (int)(m->min_val + (val / 255.0) * (m->max_val - m->min_val) + 0.5);
-    snprintf(s_fmt_buf, sizeof(s_fmt_buf), "%d", actual);
+    snprintf(s_fmt_buf, sizeof(s_fmt_buf), "%d", (int)(scaled + 0.5));
     return s_fmt_buf;
   }
   return NULL;
+}
+
+static bool clap_dyn_param_is_enum(UnitState* s, int idx) {
+  if (idx < 0 || idx >= s->num_mappings)
+    return false;
+  return s->mappings[idx].is_enum;
 }
 
 static void clap_sync_to_data(UnitState* s, char* data_buf, size_t data_buf_sz) {
@@ -339,7 +410,7 @@ static void clap_unit_render(UnitState* s, const uint8_t* p,
   for (int i = 0; i < s->num_mappings; i++) {
     ClapMapping* m = &s->mappings[i];
     if (m->val != m->last_sent) {
-      double val = m->min_val + (m->val / 255.0) * (m->max_val - m->min_val);
+      double val = clap_byte_to_value(m->min_val, m->max_val, clap_is_stepped_like(m->is_bool, m->is_stepped, m->is_enum), m->val);
       clap_host_queue_param(s->plugin, m->id, val);
       m->last_sent = m->val;
     }
@@ -372,6 +443,7 @@ const UnitDef unit_clap = {
     .get_param_default = clap_get_param_default,
     .sync_to_data = clap_sync_to_data,
     .format_param_val = clap_format_param_val,
+    .dyn_param_is_enum = clap_dyn_param_is_enum,
     .picker_count = clap_picker_count,
     .picker_name = clap_picker_name,
     .picker_add = clap_picker_add,

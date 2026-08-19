@@ -45,6 +45,11 @@ typedef struct {
   // Return display string for a param value; NULL = use default %02X hex display.
   // "ON"/"OFF" → boolean toggle display (no bar). Any other string → stepped int display.
   const char* (*format_param_val)(UnitState* s, int idx, uint8_t val);
+  // Optional: true if format_param_val's text names the value (e.g. a synth's
+  // preset-select param naming the current preset) rather than just showing
+  // a formatted number — same effect as the static param_enums[] table has
+  // for built-in units: no slider bar, the name is shown alone. NULL = never.
+  bool (*dyn_param_is_enum)(UnitState* s, int idx);
 
   // Param picker (ADD row → opens overlay to add a mapped param slot)
   const char* picker_title;                                  // overlay header (NULL = "ADD PARAM")

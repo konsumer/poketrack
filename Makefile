@@ -60,11 +60,14 @@ plugins: ## Build bundled example WCLAP plugins into examples/plugins/
 	cd plugins/karplus && npm run asbuild:release
 	cd plugins/subsynth && [ -d node_modules ] || npm install
 	cd plugins/subsynth && npm run asbuild:release
+	cd plugins/juno1 && [ -d node_modules ] || npm install
+	cd plugins/juno1 && npm run asbuild:release
 	rustup target add wasm32-wasip1
 	cd plugins/robotalk && cargo build --target wasm32-wasip1 --release --lib
 	mkdir -p examples/plugins
 	cp plugins/karplus/build/release.wasm examples/plugins/karp.wclap.wasm
 	cp plugins/subsynth/build/release.wasm examples/plugins/subsynth.wclap.wasm
+	cp plugins/juno1/build/release.wasm examples/plugins/juno1.wclap.wasm
 	cp plugins/robotalk/target/wasm32-wasip1/release/robotalk.wasm examples/plugins/robotalk.wclap.wasm
 	command -v pd2ast >/dev/null && command -v pdast2wclap >/dev/null && [ -x "$${WASI_SDK_PATH:-/opt/wasi-sdk}/bin/clang" ] && ( \
 		plugins/pd2wclap/build.sh plugins/pd2wclap/patches/supersaw.pd pd-supersaw && \

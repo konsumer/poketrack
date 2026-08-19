@@ -24,6 +24,7 @@ extern int wclap_web_param_info(int handle, unsigned int idx, unsigned int* out_
                                 char* out_name, int out_name_sz,
                                 double* out_min, double* out_max, double* out_default);
 extern int wclap_web_param_flags(int handle, unsigned int idx, unsigned int* out_flags);
+extern int wclap_web_param_value_to_text(int handle, unsigned int param_id, double value, char* out, int out_sz);
 extern void wclap_web_do_main_thread_work(int handle);
 
 struct ClapPlugin {
@@ -105,10 +106,23 @@ bool clap_host_param_is_stepped(ClapPlugin* p, uint32_t idx) {
   return (flags & CLAP_PARAM_IS_STEPPED) != 0;
 }
 
+bool clap_host_param_is_enum(ClapPlugin* p, uint32_t idx) {
+  uint32_t flags = 0;
+  if (!clap_host_param_flags(p, idx, &flags))
+    return false;
+  return (flags & CLAP_PARAM_IS_ENUM) != 0;
+}
+
 void clap_host_queue_param(ClapPlugin* p, uint32_t param_id, double value) {
   if (!p)
     return;
   wclap_web_queue_param(p->handle, param_id, value);
+}
+
+bool clap_host_param_value_to_text(ClapPlugin* p, uint32_t param_id, double value, char* out, size_t out_sz) {
+  if (!p || !out || out_sz == 0)
+    return false;
+  return wclap_web_param_value_to_text(p->handle, param_id, value, out, (int)out_sz) != 0;
 }
 
 void clap_host_do_main_thread_work(ClapPlugin* p) {

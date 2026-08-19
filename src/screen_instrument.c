@@ -681,13 +681,19 @@ void screen_instrument_draw(UIState* ui) {
 
       const char* fmt = (def->format_param_val && cur_state) ? def->format_param_val(cur_state, pi, pv) : NULL;
       bool is_bool_disp = fmt && (strcmp(fmt, "ON") == 0 || strcmp(fmt, "OFF") == 0);
+      bool is_dyn_enum_disp = fmt && def->dyn_param_is_enum && cur_state && def->dyn_param_is_enum(cur_state, pi);
 
+      // Whenever the slider bar is hidden, the byte itself is the only
+      // place UNIT_MAX_PARAMS/fx automation values (00-FF) show up, so
+      // prefix the label with it rather than showing the name alone.
       if (is_enum) {
         uint8_t idx = pv % def->param_enum_count[pi];
-        DrawText(def->param_enums[pi][idx], PANEL_W + 72, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_VEL);
+        DrawText(TextFormat("%s %s", hex2(pv), def->param_enums[pi][idx]), PANEL_W + 72, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_VEL);
       } else if (fmt) {
-        DrawText(fmt, PANEL_W + 72, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_VEL);
-        if (!is_bool_disp) {
+        if (is_bool_disp || is_dyn_enum_disp) {
+          DrawText(TextFormat("%s %s", hex2(pv), fmt), PANEL_W + 72, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_VEL);
+        } else {
+          DrawText(fmt, PANEL_W + 72, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_VEL);
           float frac = pv / 255.0f;
           DrawRectangle(bar_x, y + 3, bar_w, CH_H - 6, C_DIM);
           DrawRectangle(bar_x, y + 3, (int)(frac * bar_w), CH_H - 6, cur ? C_NOTE : C_HEADER);

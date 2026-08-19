@@ -37,7 +37,7 @@ mergeInto(LibraryManager.library, {
     event_note: { size: 40, note_id: 16, port_index: 20, channel: 22, key: 24, velocity: 32 },
     event_param_value: { size: 48, param_id: 16, note_id: 24, port_index: 28, channel: 30, key: 32, value: 40 },
     param_info: { size: 1320, id: 0, flags: 4, name: 12, min_value: 1296, max_value: 1304, default_value: 1312 },
-    plugin_params: { count: 0, get_info: 4 },
+    plugin_params: { count: 0, get_info: 4, get_value: 8, value_to_text: 12 },
     plugin_note_ports: { count: 0, get: 4 },
     host_log: { size: 4, log: 0 },
   },
@@ -492,10 +492,13 @@ self.onmessage = function (e) {
 
       // param cache (mirrors native backend's UnitState.param_cache)
       var paramCache = [];
+      var pcValueToTextIdx = 0, vtScratchPtr = 0;
       var paramsExtPtr = table.get(pGetExtIdx)(pluginPtr, writeCStr('clap.params'));
       if (paramsExtPtr) {
         var pcCountIdx = dv.g32(paramsExtPtr + O.plugin_params.count);
         var pcGetInfoIdx = dv.g32(paramsExtPtr + O.plugin_params.get_info);
+        pcValueToTextIdx = dv.g32(paramsExtPtr + O.plugin_params.value_to_text);
+        if (pcValueToTextIdx) vtScratchPtr = malloc(256);
         var pcount = table.get(pcCountIdx)(pluginPtr);
         var infoPtr = malloc(O.param_info.size);
         for (var pi = 0; pi < pcount; pi++) {
@@ -567,6 +570,7 @@ self.onmessage = function (e) {
         pluginPtr: pluginPtr, pProcessIdx: dv.g32(pluginPtr + O.plugin.process),
         pOnMainThreadIdx: dv.g32(pluginPtr + O.plugin.on_main_thread),
         blockSize: blockSize, isInstrument: isInstrument, name: pluginName, paramCache: paramCache,
+        pcValueToTextIdx: pcValueToTextIdx, vtScratchPtr: vtScratchPtr,
         pendingMainThreadRef: function () { return pendingMainThread; },
         clearMainThread: function () { pendingMainThread = false; },
         outLPtr: outLPtr, outRPtr: outRPtr, inLPtr: inLPtr, inRPtr: inRPtr,
@@ -775,6 +779,23 @@ self.onmessage = function (e) {
     var inst = WCLAP_INSTANCES[handle];
     if (!inst || idx < 0 || idx >= inst.paramCache.length) return 0;
     HEAP32[outFlagsPtr >> 2] = inst.paramCache[idx].flags;
+    return 1;
+  },
+
+  wclap_web_param_value_to_text__deps: ['$WCLAP_INSTANCES'],
+  wclap_web_param_value_to_text: function (handle, paramId, value, outPtr, outSz) {
+    var inst = WCLAP_INSTANCES[handle];
+    if (!inst || !inst.pcValueToTextIdx || !inst.vtScratchPtr) return 0;
+    var ok = inst.table.get(inst.pcValueToTextIdx)(inst.pluginPtr, paramId, value, inst.vtScratchPtr, 256);
+    if (!ok) return 0;
+    // Read the plugin's (separate wasm memory) result, then re-encode it
+    // into this module's own memory at outPtr — same two-hop copy
+    // wclap_web_param_info does for cached names, just done live here since
+    // value_to_text's output depends on the current value, not just the id.
+    var b = new Uint8Array(inst.mem.buffer), end = inst.vtScratchPtr, limit = Math.min(b.length, end + 256);
+    while (end < limit && b[end] !== 0) end++;
+    var text = UTF8ArrayToString(b.slice(inst.vtScratchPtr, end), 0, end - inst.vtScratchPtr);
+    stringToUTF8(text, outPtr, outSz);
     return 1;
   },
 

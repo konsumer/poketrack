@@ -47,7 +47,16 @@ bool clap_host_param_info(ClapPlugin* p, uint32_t idx,
 bool clap_host_param_flags(ClapPlugin* p, uint32_t idx, uint32_t* out_flags);
 // Returns true if param is a stepped (integer) parameter
 bool clap_host_param_is_stepped(ClapPlugin* p, uint32_t idx);
+// Returns true if param is CLAP_PARAM_IS_ENUM (value_to_text names every
+// value in range, so it's a discrete choice rather than a continuous knob).
+bool clap_host_param_is_enum(ClapPlugin* p, uint32_t idx);
 // Queue a param value change for next process() call
 void clap_host_queue_param(ClapPlugin* p, uint32_t param_id, double value);
+// Asks the plugin to format a param value as display text (CLAP_EXT_PARAMS'
+// value_to_text) — e.g. a synth can name a value ("JazzGuitar") instead of
+// just a number. Writes into out (out_sz bytes) and returns true on success;
+// returns false (out left untouched) if the plugin doesn't support it or the
+// call fails, so callers should keep their own numeric fallback.
+bool clap_host_param_value_to_text(ClapPlugin* p, uint32_t param_id, double value, char* out, size_t out_sz);
 // Call from main thread each frame to deliver deferred on_main_thread() work
 void clap_host_do_main_thread_work(ClapPlugin* p);

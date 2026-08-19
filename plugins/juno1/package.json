@@ -1,0 +1,19 @@
+{
+  "name": "juno1-clap",
+  "version": "1.0.0",
+  "description": "Roland Juno-1/Alpha Juno DCO synth emulation — WCLAP instrument written in AssemblyScript",
+  "license": "SEE LICENSE IN README.md",
+  "type": "module",
+  "scripts": {
+    "asbuild:debug": "asc assembly/index.ts --target debug",
+    "asbuild:release": "asc assembly/index.ts --target release",
+    "asbuild": "npm run asbuild:debug && npm run asbuild:release",
+    "build": "npm run asbuild:release",
+    "presets": "node scripts/syx2presets.mjs"
+  },
+  "dependencies": {
+    "@assemblyscript/wasi-shim": "^0.1.0",
+    "as-clap": "github:WebCLAP/as-clap",
+    "assemblyscript": "^0.28.9"
+  }
+}

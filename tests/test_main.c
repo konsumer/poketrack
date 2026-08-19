@@ -364,6 +364,329 @@ static void test_clap_plugin_pd(void) {
   clap_host_unload(p);
 }
 
+// End-to-end check of the juno1 WCLAP instrument (plugins/juno1 — a
+// Roland Juno-1/Alpha Juno DCO synth ported from mikerodd/june-21, see
+// plugins/juno1/README.md), same real-Wasmtime-host path as
+// test_clap_plugin_pd: loads examples/plugins/juno1.wclap.wasm, checks its
+// 16 params are present with Patch first, that a few different factory
+// Patch values each produce distinct non-silent finite audio (i.e. the
+// bundled preset table decoded correctly and actually drives the engine),
+// and that releasing a note lets it decay to silence rather than hanging.
+static void test_clap_plugin_juno1(void) {
+  const char* path = "../examples/plugins/juno1.wclap.wasm";
+  if (!FileExists(path)) {
+    printf("SKIP test_clap_plugin_juno1: %s not built (see plugins/juno1/README.md)\n", path);
+    return;
+  }
+
+  ClapPlugin* p = clap_host_load(path, NULL, 44100.0f, 512);
+  CHECK(p != NULL, "juno1.wclap.wasm: load failed");
+  if (!p)
+    return;
+
+  CHECK(clap_host_is_instrument(p), "juno1.wclap.wasm: expected an instrument");
+
+  uint32_t total = clap_host_param_count(p);
+  CHECK(total == 37, "juno1.wclap.wasm: expected 37 params (Patch + 36 real hardware params), got %u", total);
+  uint32_t patch_id = 0;
+  char name[24];
+  double min = 0, max = 0, def = 0;
+  if (total > 0) {
+    clap_host_param_info(p, 0, &patch_id, name, sizeof(name), &min, &max, &def);
+    CHECK(strcmp(name, "Patch") == 0, "juno1.wclap.wasm: param 0 name %s, want Patch", name);
+    CHECK(max == 127, "juno1.wclap.wasm: Patch max %g, want 127 (its own natural range — 128 factory patches; poketrack's ADD row scales its raw byte into whatever range the param declares)", max);
+  }
+
+  enum { BLK = 512, BLOCKS = 8 };
+  static float out_l[BLK], out_r[BLK];
+
+  // A few spread-out factory patches should each sound distinct — compare
+  // total energy across patches as a coarse "not literally identical" check.
+  int patch_ids[] = {0, 20, 60, 100};
+  float patch_energy[4];
+  for (int pi = 0; pi < 4; pi++) {
+    clap_host_queue_param(p, patch_id, (double)patch_ids[pi]);
+    clap_host_note_on(p, 60, 100, 0);
+    bool all_finite = true;
+    float energy = 0.0f;
+    for (int blk = 0; blk < BLOCKS; blk++) {
+      clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+      for (int f = 0; f < BLK; f++) {
+        if (!isfinite(out_l[f]) || !isfinite(out_r[f]))
+          all_finite = false;
+        energy += out_l[f] * out_l[f] + out_r[f] * out_r[f];
+      }
+    }
+    CHECK(all_finite, "juno1.wclap.wasm: non-finite output on patch %d", patch_ids[pi]);
+    CHECK(energy > 1e-4f, "juno1.wclap.wasm: silent on patch %d", patch_ids[pi]);
+    patch_energy[pi] = energy;
+    clap_host_note_off(p, 60, 0);
+    // Let the voice fully release before the next patch's note-on.
+    for (int blk = 0; blk < BLOCKS * 4; blk++)
+      clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+  }
+  bool any_different = false;
+  for (int pi = 1; pi < 4; pi++) {
+    float ratio = patch_energy[pi] / patch_energy[0];
+    if (ratio < 0.8f || ratio > 1.25f)
+      any_different = true;
+  }
+  CHECK(any_different, "juno1.wclap.wasm: all sampled patches produced near-identical energy — preset table may not be wired up");
+
+  clap_host_unload(p);
+
+  // Note-off should let the voice decay to silence, not hang forever —
+  // fresh instance so nothing from the patch-comparison loop above bleeds
+  // in (its own release tails may still be well audible after only ~370ms).
+  ClapPlugin* p2 = clap_host_load(path, NULL, 44100.0f, 512);
+  CHECK(p2 != NULL, "juno1.wclap.wasm: reload failed");
+  if (!p2)
+    return;
+  clap_host_note_on(p2, 60, 100, 0);
+  for (int blk = 0; blk < BLOCKS; blk++)
+    clap_host_process(p2, NULL, NULL, out_l, out_r, BLK);
+  clap_host_note_off(p2, 60, 0);
+  for (int blk = 0; blk < 172; blk++)  // ~2s at 512/44100 — longest factory release tails clear well within this
+    clap_host_process(p2, NULL, NULL, out_l, out_r, BLK);
+  float released_energy = 0.0f;
+  for (int blk = 0; blk < BLOCKS; blk++) {
+    clap_host_process(p2, NULL, NULL, out_l, out_r, BLK);
+    for (int f = 0; f < BLK; f++)
+      released_energy += out_l[f] * out_l[f] + out_r[f] * out_r[f];
+  }
+  CHECK(released_energy < 1e-4f, "juno1.wclap.wasm: still loud (%g) well after note-off — envelope/voice not releasing", released_energy);
+
+  clap_host_unload(p2);
+}
+
+// Regression test for a real crash: poketrack's PatternStep.velocity is a
+// raw 0-255 byte, and screen_pattern.c defaults a freshly-entered note to
+// 0xFF (full) — but wclap_host_native.c's clap_host_note_on() normalizes
+// by /127.0, not /255.0, so CLAP's nominally-0.0-1.0 velocity comes out
+// above 1.0 (up to ~2.0) for a plain default note. juno1's default patch
+// ("PolySynth1", vcaEnv=2 "Dyn-Normal") indexes a 128-entry table with
+// round(velocity*127) — unclamped, that's index ~255, and AssemblyScript's
+// bounds checks stay on in release builds, so this trapped the wasm module
+// on essentially every normally-typed pattern note. This is likely what
+// "works in preview (moderate velocity) but breaks once you play a
+// pattern (default full-velocity notes)" actually was. Drives note_on with
+// the real uint8_t max (255) the same way real playback does, both
+// directly and through the actual clap unit + AudioEngine pattern-playback
+// path, and checks the plugin/engine survives and keeps producing audio.
+static void test_clap_plugin_juno1_full_velocity_note(void) {
+  const char* path = "../examples/plugins/juno1.wclap.wasm";
+  if (!FileExists(path)) {
+    printf("SKIP test_clap_plugin_juno1_full_velocity_note: %s not built\n", path);
+    return;
+  }
+
+  ClapPlugin* p = clap_host_load(path, NULL, 44100.0f, 512);
+  CHECK(p != NULL, "juno1.wclap.wasm: load failed");
+  if (p) {
+    clap_host_note_on(p, 60, 255, 0);  // full byte velocity, default patch (vcaEnv=2)
+    enum { BLK = 512, BLOCKS = 8 };
+    static float out_l[BLK], out_r[BLK];
+    bool all_finite = true;
+    float energy = 0.0f;
+    for (int blk = 0; blk < BLOCKS; blk++) {
+      clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+      for (int f = 0; f < BLK; f++) {
+        if (!isfinite(out_l[f]) || !isfinite(out_r[f]))
+          all_finite = false;
+        energy += out_l[f] * out_l[f] + out_r[f] * out_r[f];
+      }
+    }
+    CHECK(all_finite, "juno1.wclap.wasm: non-finite output with velocity=255");
+    CHECK(energy > 1e-4f, "juno1.wclap.wasm: silent with velocity=255 (default patch, vcaEnv=2)");
+    clap_host_unload(p);
+  }
+
+  // Same thing through the real pattern-playback path: a freshly-entered
+  // note (default velocity 0xFF, per screen_pattern.c) on the default patch.
+  static AudioEngine eng;
+  tracker_init(&song_a);
+  song_a.song_len = 1;
+  song_a.loop = false;
+  song_a.bpm = 120;
+  song_a.patterns[0][0] = 0;
+  ChainSlot* sl = &song_a.instruments[0].chain[0];
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "clap", 0);
+  strncpy(sl->data, path, sizeof(sl->data) - 1);
+  Pattern* pat = tracker_pattern(&song_a, 0);
+  CHECK(pat != NULL, "full-velocity: pattern alloc failed");
+  if (pat) {
+    pat->len = 4;
+    pat->steps[0][0] = (PatternStep){.note = 60, .velocity = 0xFF, .instrument = 0, .fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
+    audio_init(&eng, &song_a);
+    bool ok = audio_render_wav(&eng, "test_full_velocity.wav");
+    audio_shutdown(&eng);
+    CHECK(ok, "full-velocity: render failed");
+    if (ok) {
+      Wave w = LoadWave("test_full_velocity.wav");
+      const int16_t* pcm = (const int16_t*)w.data;
+      bool silent = true;
+      for (unsigned i = 0; pcm && i < w.frameCount * w.channels; i++)
+        if (pcm[i] != 0) { silent = false; break; }
+      CHECK(!silent, "full-velocity pattern render is all silence");
+      UnloadWave(w);
+      remove("test_full_velocity.wav");
+    }
+  }
+}
+
+// Checks clap_unit.c's format_param_val (the ADD-row value display in
+// screen_instrument.c) actually calls through to the plugin's own
+// CLAP_EXT_PARAMS value_to_text via the new clap_host_param_value_to_text,
+// instead of only ever showing a raw number — juno1's "Patch" param names
+// the currently-selected preset ("JazzGuitar"), which a plain int can't.
+// Also checks dyn_param_is_enum, which the UI uses to skip drawing the
+// slider bar over that name for CLAP_PARAM_IS_ENUM params like Patch.
+static void test_clap_format_param_val_uses_value_to_text(void) {
+  const char* path = "../examples/plugins/juno1.wclap.wasm";
+  if (!FileExists(path)) {
+    printf("SKIP test_clap_format_param_val_uses_value_to_text: %s not built\n", path);
+    return;
+  }
+
+  const UnitDef* def = unit_find("clap");
+  CHECK(def != NULL, "clap unit not registered");
+  if (!def)
+    return;
+
+  UnitState* s = def->create(44100.0f);
+  CHECK(s != NULL, "clap_unit_create failed");
+  if (!s)
+    return;
+  char data[640];
+  snprintf(data, sizeof(data), "%s\t\t", path);
+  def->set_data(s, data, "./");
+
+  CHECK(def->picker_count(s) == 37, "juno1 exposes %d params via picker, want 37", def->picker_count(s));
+  def->picker_add(s, 0);  // "Patch"
+  CHECK(def->dyn_num_params(s) == 1, "picker_add didn't map Patch");
+
+  // Patch declares its own natural range (0-127); clap_unit.c's
+  // clap_byte_to_value maps a stepped param's ADD-row byte directly onto
+  // steps from its min, so byte 1 lands on preset index 1 ("JazzGuitar").
+  const char* text = def->format_param_val(s, 0, 1);
+  CHECK(text != NULL, "format_param_val returned NULL for a value_to_text-capable param");
+  if (text)
+    CHECK(strcmp(text, "JazzGuitar") == 0, "format_param_val returned \"%s\", want \"JazzGuitar\"", text);
+
+  // Patch is CLAP_PARAM_IS_ENUM (every value gets a real name), so the UI
+  // should treat it like a built-in enum param and skip the slider bar.
+  CHECK(def->dyn_param_is_enum != NULL, "clap unit doesn't implement dyn_param_is_enum");
+  if (def->dyn_param_is_enum)
+    CHECK(def->dyn_param_is_enum(s, 0), "Patch not reported as enum -- slider bar would cover its name in the UI");
+
+  // The actual "1 bump = 1 step" property: for a stepped param whose whole
+  // range fits in a byte (128 patches here), clap_byte_to_value must map
+  // every single ADD-row byte 0..127 onto a genuinely different step —
+  // proportionally scaling the full 0-255 byte range across a 0-127 param
+  // (like a plain continuous knob would use) instead means most single
+  // bumps land on the same rounded step twice in a row.
+  // format_param_val returns a shared static buffer, so copy each result
+  // out before the next call overwrites it.
+  char prev[64] = {0};
+  const char* first = def->format_param_val(s, 0, 0);
+  snprintf(prev, sizeof(prev), "%s", first ? first : "");
+  for (int b = 1; b <= 127; b++) {
+    const char* now = def->format_param_val(s, 0, (uint8_t)b);
+    CHECK(now != NULL && strcmp(now, prev) != 0,
+          "Patch byte %d..%d didn't change preset (\"%s\" -> \"%s\") -- a single ADD-row bump should always move one patch",
+          b - 1, b, prev, now ? now : "(null)");
+    snprintf(prev, sizeof(prev), "%s", now ? now : "");
+  }
+
+  def->destroy(s);
+}
+
+// Regression test for "a statically ADD-mapped param plays in preview but
+// not once triggered via real pattern/MIDI playback" — mirrors
+// test_clap_param_mapping_reaches_shared_instance's real ADD flow
+// (ensure_preview, picker_add, sync_to_data, audio_rebuild_instrument) but
+// checks actual rendered audio from both the preview instance and the
+// separate shared instance real playback uses, not just that the mapping
+// array was copied over. Patch byte 2 ("Xylophone") is picked because it's
+// known-loud within a short window (patch 0's own attack ramp makes a tight
+// energy comparison noisier) — see plugins/juno1/vendor/FACTORYA.SYX.
+static void test_clap_juno1_static_mapping_reaches_shared_instance(void) {
+  const char* path = "../examples/plugins/juno1.wclap.wasm";
+  if (!FileExists(path)) {
+    printf("SKIP test_clap_juno1_static_mapping_reaches_shared_instance: %s not built\n", path);
+    return;
+  }
+
+  static AudioEngine eng;
+  tracker_init(&song_a);
+  ChainSlot* sl = &song_a.instruments[0].chain[0];
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "clap", 0);
+  strncpy(sl->data, path, sizeof(sl->data) - 1);
+  audio_init(&eng, &song_a);
+
+  const UnitDef* def = unit_find("clap");
+  CHECK(def != NULL, "clap unit not registered");
+  if (!def) {
+    audio_shutdown(&eng);
+    return;
+  }
+
+  audio_ensure_preview(&eng, 0);
+  UnitState* preview = eng.preview_states[0];
+  CHECK(preview != NULL, "preview_states[0] not created");
+  if (!preview) {
+    audio_shutdown(&eng);
+    return;
+  }
+  CHECK(def->picker_count(preview) == 37, "juno1 exposes %d params, want 37", def->picker_count(preview));
+  CHECK(strcmp(def->picker_name(preview, 0), "Patch") == 0,
+        "picker index 0 is %s, not Patch — adjust this test", def->picker_name(preview, 0));
+
+  def->picker_add(preview, 0);  // map "Patch"
+  CHECK(def->dyn_num_params(preview) == 1, "picker_add didn't add a mapping");
+
+  // Patch's ADD-row byte maps directly onto its 0-127 range (see
+  // clap_unit.c's clap_byte_to_value): byte 2 is preset index 2
+  // ("Xylophone") out of 128 factory patches.
+  def->set_param_val(preview, 0, 2);
+  def->sync_to_data(preview, sl->data, sizeof(sl->data));
+  audio_rebuild_instrument(&eng, 0);
+
+  enum { BLK = 512, BLOCKS = 8 };
+  static float blk[BLK * 2];
+
+  audio_preview_note(&eng, 0, 60);
+  double preview_energy = 0;
+  for (int b = 0; b < BLOCKS; b++) {
+    audio_fill_buffer(&eng, blk, BLK);
+    for (int f = 0; f < BLK * 2; f++)
+      preview_energy += (double)blk[f] * blk[f];
+  }
+  audio_preview_kill(&eng);
+  for (int b = 0; b < BLOCKS; b++)  // let the preview voice fully release
+    audio_fill_buffer(&eng, blk, BLK);
+  CHECK(preview_energy > 1e-4, "juno1: preview silent with Patch statically mapped to 'Xylophone' (energy=%g)", preview_energy);
+
+  // Now the real pattern/MIDI playback path — a separate wasm instance.
+  audio_midi_note_on(&eng, 0, 60);
+  UnitState* shared = eng.shared_states[0][0];
+  CHECK(shared != NULL, "shared_states[0][0] not created by note-on");
+  if (shared)
+    CHECK(def->dyn_num_params(shared) == 1 && def->get_param_val(shared, 0) == 2,
+          "shared instance's Patch mapping is %d params / val %d, want 1 / 2 — mapping never reached the playing instance",
+          def->dyn_num_params(shared), def->dyn_num_params(shared) > 0 ? def->get_param_val(shared, 0) : -1);
+  double shared_energy = 0;
+  for (int b = 0; b < BLOCKS; b++) {
+    audio_fill_buffer(&eng, blk, BLK);
+    for (int f = 0; f < BLK * 2; f++)
+      shared_energy += (double)blk[f] * blk[f];
+  }
+  CHECK(shared_energy > 1e-4, "juno1: SILENT via real playback (audio_midi_note_on) with Patch statically mapped to 'Xylophone' (energy=%g), even though preview played fine (energy=%g)", shared_energy, preview_energy);
+
+  audio_midi_note_off(&eng, 0, 60);
+  audio_shutdown(&eng);
+}
+
 // A freshly-added PLUGIN unit in poketrack never explicitly sets a param
 // before the first note — it plays with whatever default value the CLAP
 // host reports (which comes straight from each GUI slider's saved
@@ -720,6 +1043,10 @@ int main(void) {
   RUN(test_chopper_repeats_at_tempo_derived_length);
   RUN(test_route_send_bus);
   RUN(test_clap_plugin_pd);
+  RUN(test_clap_plugin_juno1);
+  RUN(test_clap_plugin_juno1_full_velocity_note);
+  RUN(test_clap_juno1_static_mapping_reaches_shared_instance);
+  RUN(test_clap_format_param_val_uses_value_to_text);
   RUN(test_multiple_wclap_teardown_does_not_dangle);
   RUN(test_clap_plugin_pd_default_params_are_audible);
   RUN(test_clap_param_mapping_reaches_shared_instance);

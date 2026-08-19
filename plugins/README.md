@@ -26,6 +26,7 @@ I made some complete examples:
 
 - **[karplus](karplus)** — a Karplus-Strong plucked string, written against [as-clap](https://github.com/WebCLAP/as-clap) (AssemblyScript).
 - **[subsynth](subsynth)** — an analog-style subtractive synth (oscillator → resonant filter with its own envelope → amp envelope), written against [as-clap](https://github.com/WebCLAP/as-clap) (AssemblyScript).
+- **[juno1](juno1)** — a Roland Juno-1/Alpha Juno DCO synth ported from [mikerodd/june-21](https://github.com/mikerodd/june-21)'s CSound engine, 128 real factory patches included, written against [as-clap](https://github.com/WebCLAP/as-clap) (AssemblyScript). Note: unlike the rest of poketrack, this one is GPL-3.0-or-later — see [its README](juno1/README.md#licensing).
 - **[robotalk](robotalk)** — a playable text-to-speech instrument (37 phonemes: vowels, diphthongs, liquids, nasals, fricatives, stops), written against [clack](https://github.com/prokopyl/clack) (Rust).
 - **[pd2wclap](pd2wclap)** — Uses [pdast](https://github.com/konsumer/pdast) to convert puredata patches into full WCLAP plugins
 - **[pthread-synth](pthread-synth)** — a monophonic sine synth written directly against CLAP's plain C API (no wrapper library), whose wavetable is filled by a real background thread — the C example, and a repro for the web threading support described above.

@@ -429,6 +429,15 @@ bool clap_host_param_is_stepped(ClapPlugin* p, uint32_t idx) {
   return (info.flags & CLAP_PARAM_IS_STEPPED) != 0;
 }
 
+bool clap_host_param_is_enum(ClapPlugin* p, uint32_t idx) {
+  if (!p || !p->params_ext)
+    return false;
+  clap_param_info_t info;
+  if (!p->params_ext->get_info(p->plugin, idx, &info))
+    return false;
+  return (info.flags & CLAP_PARAM_IS_ENUM) != 0;
+}
+
 bool clap_host_param_info(ClapPlugin* p, uint32_t idx,
                           uint32_t* out_id, char* out_name, size_t name_sz,
                           double* out_min, double* out_max, double* out_default) {
@@ -466,6 +475,13 @@ void clap_host_queue_param(ClapPlugin* p, uint32_t param_id, double value) {
   ev->port_index = -1;
   ev->channel = -1;
   ev->key = -1;
+}
+
+// [main-thread] — mirrors the CLAP_EXT_PARAMS restriction on value_to_text.
+bool clap_host_param_value_to_text(ClapPlugin* p, uint32_t param_id, double value, char* out, size_t out_sz) {
+  if (!p || !p->params_ext || !p->params_ext->value_to_text || !out || out_sz == 0)
+    return false;
+  return p->params_ext->value_to_text(p->plugin, (clap_id)param_id, value, out, (uint32_t)out_sz);
 }
 
 // Call this from the main thread each frame (not the audio thread).
