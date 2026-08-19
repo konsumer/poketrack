@@ -394,7 +394,7 @@ static void test_clap_plugin_juno1(void) {
   if (total > 0) {
     clap_host_param_info(p, 0, &patch_id, name, sizeof(name), &min, &max, &def);
     CHECK(strcmp(name, "Patch") == 0, "juno1.wclap.wasm: param 0 name %s, want Patch", name);
-    CHECK(max == 127, "juno1.wclap.wasm: Patch max %g, want 127 (its own natural range — 128 factory patches; poketrack's ADD row scales its raw byte into whatever range the param declares)", max);
+    CHECK(max == 255, "juno1.wclap.wasm: Patch max %g, want 255 (its own natural range — 256 bundled patches; poketrack's ADD row scales its raw byte into whatever range the param declares)", max);
   }
 
   enum { BLK = 512, BLOCKS = 8 };
@@ -580,17 +580,18 @@ static void test_clap_format_param_val_uses_value_to_text(void) {
     CHECK(def->dyn_param_is_enum(s, 0), "Patch not reported as enum -- slider bar would cover its name in the UI");
 
   // The actual "1 bump = 1 step" property: for a stepped param whose whole
-  // range fits in a byte (128 patches here), clap_byte_to_value must map
-  // every single ADD-row byte 0..127 onto a genuinely different step —
-  // proportionally scaling the full 0-255 byte range across a 0-127 param
-  // (like a plain continuous knob would use) instead means most single
-  // bumps land on the same rounded step twice in a row.
+  // range fits in a byte (256 bundled patches here, filling it exactly),
+  // clap_byte_to_value must map every single ADD-row byte 0..255 onto a
+  // genuinely different step — proportionally scaling the full 0-255 byte
+  // range across a narrower param range (like a plain continuous knob
+  // would use) instead means most single bumps land on the same rounded
+  // step twice in a row.
   // format_param_val returns a shared static buffer, so copy each result
   // out before the next call overwrites it.
   char prev[64] = {0};
   const char* first = def->format_param_val(s, 0, 0);
   snprintf(prev, sizeof(prev), "%s", first ? first : "");
-  for (int b = 1; b <= 127; b++) {
+  for (int b = 1; b <= 255; b++) {
     const char* now = def->format_param_val(s, 0, (uint8_t)b);
     CHECK(now != NULL && strcmp(now, prev) != 0,
           "Patch byte %d..%d didn't change preset (\"%s\" -> \"%s\") -- a single ADD-row bump should always move one patch",
@@ -645,9 +646,9 @@ static void test_clap_juno1_static_mapping_reaches_shared_instance(void) {
   def->picker_add(preview, 0);  // map "Patch"
   CHECK(def->dyn_num_params(preview) == 1, "picker_add didn't add a mapping");
 
-  // Patch's ADD-row byte maps directly onto its 0-127 range (see
+  // Patch's ADD-row byte maps directly onto its 0-255 range (see
   // clap_unit.c's clap_byte_to_value): byte 2 is preset index 2
-  // ("Xylophone") out of 128 factory patches.
+  // ("Xylophone") out of 256 bundled patches.
   def->set_param_val(preview, 0, 2);
   def->sync_to_data(preview, sl->data, sizeof(sl->data));
   audio_rebuild_instrument(&eng, 0);

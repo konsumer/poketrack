@@ -18,11 +18,12 @@ instead (PolyBLEP oscillators, a resonance-free 4-pole ladder lowpass feeding
 a resonant SVF bandpass, RBJ biquads, LFO-modulated delay-line chorus) —
 same *architecture*, different building blocks.
 
-128 real factory patches ship built in (`Patch`), decoded byte-for-byte from
-Roland Juno-1/Juno-2 SysEx bulk-dump banks using the format documented in
-june-21's `junosyxloader` (`src/plugins/junosyxloader/src/jsl.c`). See
-**Licensing** below — this is the one part of the plugin that isn't
-zlib-licensed like the rest of poketrack.
+256 real patches ship built in (`Patch`) — exactly filling the ADD row's
+0-255 byte range — decoded byte-for-byte from real Roland Juno-1/Juno-2
+SysEx bulk-dump banks using the format documented in june-21's
+`junosyxloader` (`src/plugins/junosyxloader/src/jsl.c`). See **Licensing**
+below — this is the one part of the plugin that isn't zlib-licensed like
+the rest of poketrack.
 
 ## Params: a full 1:1 mapping
 
@@ -50,7 +51,7 @@ you explicitly set it, then holds your value until the next `Patch` change.
 
 | Param | Range | Notes |
 |-------|-------|-------|
-| Patch | 0-127 | Recalls a full factory patch — resets every param below back to "follow the patch" |
+| Patch | 0-255 | Recalls a full patch — resets every param below back to "follow the patch" |
 | Pulse | Off/Square/Pulse75/PWM | |
 | Sawtooth | Off + 5 gated-combination variants | |
 | Sub | Off + 5 sub-oscillator variants | |
@@ -108,51 +109,55 @@ clone [WebCLAP/as-clap](https://github.com/WebCLAP/as-clap) and copy it into
 ### Regenerating the preset table
 
 `assembly/plugins/presets-data.ts` is generated from real Juno-1/Juno-2/
-MKS-50 (Alpha Juno) SysEx bulk-dump banks. Two equivalent converters ship in
-`scripts/` — pick whichever runtime you have handy:
+MKS-50 (Alpha Juno) SysEx bulk-dump banks by `scripts/syx2presets.mjs`:
 
 ```sh
-node   scripts/syx2presets.mjs bankA.syx [bankB.syx ...] > assembly/plugins/presets-data.ts
-python3 scripts/syx2presets.py bankA.syx [bankB.syx ...] -o assembly/plugins/presets-data.ts
+node scripts/syx2presets.mjs bankA.syx [bankB.syx ...] > assembly/plugins/presets-data.ts
 ```
 
-The checked-in version was generated from june-21's `FACTORYA.SYX` and
-`FACTORYB.SYX` (`vendor/`). You can point either script at any real
-Juno-1/Juno-2/MKS-50 bulk-dump file — your own patches, a different
-cartridge, banks found online (e.g. the collection at
-[llamamusic.com/mks50](https://llamamusic.com/mks50/mks-50_patches.html)).
-Multiple files are concatenated in the order given.
+The checked-in version was generated from all four banks in `vendor/`
+(`FACTORYA.SYX`, `FACTORYB.SYX`, `MIKEJUNO.SYX`, `JOHNSEXT.SYX` — 64
+patches each, 256 total, exactly filling `Patch`'s 0-255 ADD-row byte
+range — see **Licensing** for where each came from):
 
-The two converters differ slightly in how forgiving they are of files that
-aren't a clean, full 64-tone dump (partial banks, several dumps concatenated
-into one file, stray bytes around the SysEx data — common with banks that
-have been passed around online for 30+ years):
+```sh
+node scripts/syx2presets.mjs vendor/FACTORYA.SYX vendor/FACTORYB.SYX vendor/MIKEJUNO.SYX vendor/JOHNSEXT.SYX > assembly/plugins/presets-data.ts
+```
 
-- **`syx2presets.py`** scans the file for bulk-dump block headers
-  (`F0 41 37 00 23 20 01 00`) directly, decodes however many complete
-  4-tone blocks it actually finds, and skips any block that doesn't fit or
-  end cleanly (`0xF7`) with a warning on stderr rather than aborting the
-  whole run. Pass `-v` to see per-file patch counts. This is the one to
-  reach for when converting banks you didn't generate yourself.
-- **`syx2presets.mjs`** assumes the file is exactly the factory-bank shape
-  (16 blocks of 4 tones, 64 tones total, back-to-back) and reads it via a
-  fixed offset formula — faster to read, but it'll misbehave on anything
-  that isn't that exact shape.
+You can point it at any real Juno-1/Juno-2/MKS-50 bulk-dump file — your own
+patches, a different cartridge, banks found online (e.g. the collection at
+[llamamusic.com/mks50](https://llamamusic.com/mks50/mks-50_patches.html),
+where `MIKEJUNO.SYX`/`JOHNSEXT.SYX` came from). Multiple files are
+concatenated in the order given.
 
-Both produce byte-identical output on well-formed input (verified against
-`vendor/FACTORYA.SYX`/`FACTORYB.SYX`).
+The script assumes each file is exactly the factory-bank shape (16 blocks
+of 4 tones, 64 tones total, back-to-back) and reads it via a fixed offset
+formula, so it'll misbehave on a file that isn't that exact shape (a
+partial bank, several dumps concatenated into one file, stray bytes around
+the SysEx data). All four bundled `vendor/` banks are that exact shape.
 
 ## Licensing
 
 Almost all of poketrack is zlib-licensed (see the repo root `LICENSE`). This
-plugin is the exception: `assembly/plugins/tables.ts` and
-`assembly/plugins/presets-data.ts` are ported/decoded directly from
-[mikerodd/june-21](https://github.com/mikerodd/june-21), which is
-**GPL-3.0-or-later**. Both files carry that license in their own header, as
-poketrack's root `LICENSE` explicitly permits per-file overrides.
+plugin is the exception: `assembly/plugins/tables.ts` is ported directly
+from [mikerodd/june-21](https://github.com/mikerodd/june-21)
+(**GPL-3.0-or-later**), and `assembly/plugins/presets-data.ts` is decoded
+from four real Juno-1/Juno-2/MKS-50 SysEx banks (`vendor/`) of mixed
+provenance:
 
-Because those two files are compiled into `juno1.wclap.wasm`, **the compiled
-plugin binary should be treated as GPL-3.0-or-later for distribution**,
-distinct from the rest of poketrack. `scripts/syx2presets.mjs` and
+- `FACTORYA.SYX` / `FACTORYB.SYX` — the official factory ROM patches,
+  sourced from mikerodd/june-21, **GPL-3.0-or-later**.
+- `MIKEJUNO.SYX` / `JOHNSEXT.SYX` — user-contributed banks from the
+  [llamamusic.com MKS-50/Alpha Juno patch collection](https://llamamusic.com/mks50/mks-50_patches.html).
+  That archive carries no license or attribution file of its own; patch
+  sharing in this community has historically been informal/unrestricted
+  (the point of a public archive like that one), but this isn't a
+  documented grant. Treated as GPL-3.0-or-later here too, out of caution.
+
+All three files carry a GPL-3.0-or-later notice in their own header, as
+poketrack's root `LICENSE` explicitly permits per-file overrides. Because
+they're compiled into `juno1.wclap.wasm`, **the compiled plugin binary
+should be treated as GPL-3.0-or-later for distribution**, distinct from the
+rest of poketrack. `scripts/syx2presets.mjs` and
 `assembly/plugins/juno1.ts` (the engine itself) are original work and not
 GPL-encumbered on their own — only the bundled lookup/preset *data* is.
