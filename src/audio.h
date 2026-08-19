@@ -40,7 +40,7 @@ typedef struct {
   uint8_t loop_pattern_idx;    // pattern index to loop (when pattern_loop)
   uint32_t loop_channel_mask;  // bitmask: channels that use loop_pattern_idx
   ChannelCursor cursors[SONG_CHANNELS];
-  bool mute[SONG_CHANNELS];      // live performance mute, per arrangement lane (not saved)
+  bool mute[SONG_CHANNELS];  // live performance mute, per arrangement lane (not saved)
   ChannelScope scope[SONG_CHANNELS];
   uint64_t tick_counter;
   uint32_t samples_per_tick;
@@ -78,6 +78,17 @@ typedef struct {
   UnitState* shared_states[NUM_INSTRUMENTS][CHAIN_MAX];
   const UnitDef* shared_defs[NUM_INSTRUMENTS][CHAIN_MAX];
   bool shared_active[NUM_INSTRUMENTS];
+
+  // Send buses (ROUTE unit). Each instrument has one; a ROUTE unit adds its
+  // chain's audio into the destination instrument's bus, and the engine runs
+  // every fed bus through that instrument's EFFECT chain once per render
+  // sub-block. These are dedicated instances — source units are never
+  // created here, and a bus instrument can also be played normally without
+  // the two sharing state. Built lazily on first use, so the common case
+  // (no ROUTE anywhere) costs nothing. See audio_send_bus / flush_buses.
+  UnitState* bus_states[NUM_INSTRUMENTS][CHAIN_MAX];
+  const UnitDef* bus_defs[NUM_INSTRUMENTS][CHAIN_MAX];
+  bool bus_built[NUM_INSTRUMENTS];
 
   // Temp buffers for per-channel mixing
   float tmp_l[AUDIO_BLOCK_SIZE];

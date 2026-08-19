@@ -154,6 +154,7 @@ set(SOURCES
     src/units/pangain.c
     src/units/compressor.c
     src/units/ducker.c
+    src/units/route.c
     src/units/lfo.c
     src/units/unit_registry.c
 )

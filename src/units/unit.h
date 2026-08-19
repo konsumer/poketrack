@@ -114,6 +114,19 @@ void unit_dsp_init(void);
 // (CLAP mappings, MIDI CC slots) — for modulation units' render callbacks.
 void audio_mod_set_param(uint8_t inst_idx, uint8_t global_param, uint8_t val);
 
+// Implemented by the audio engine (audio.c): add `frames` of stereo audio,
+// scaled by gain, into instrument dest_inst's send bus — for routing units'
+// render callbacks. The engine runs each fed bus through that instrument's
+// effect chain (a dedicated instance, separate from any note-playing copy)
+// once per render sub-block and mixes the result into the master output.
+// Silently drops the send when it can't be honoured: sending to the
+// instrument doing the sending (which would be an instant feedback loop),
+// or from a muted lane. Buses are flushed in ascending instrument order, so
+// a bus can only feed one with a HIGHER index; a backwards send is dropped
+// rather than looped.
+void audio_send_bus(uint8_t dest_inst, const float* in_l, const float* in_r,
+                    uint32_t frames, float gain);
+
 // Samples per pattern line (== one tick == a 1/16 note) at the song's current
 // BPM, refreshed by the engine at the top of every render block. Units that
 // need to be tempo-relative read this instead of holding their own tempo.

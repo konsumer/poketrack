@@ -182,6 +182,81 @@ static void test_wav_export(void) {
   remove("test_export.wav");
 }
 
+// Render a short song to WAV and return its total energy, or -1 on failure.
+static double render_song_energy(const char* path) {
+  static AudioEngine eng;
+  audio_init(&eng, &song_a);
+  bool ok = audio_render_wav(&eng, path);
+  audio_shutdown(&eng);
+  if (!ok)
+    return -1.0;
+
+  Wave w = LoadWave(path);
+  const int16_t* pcm = (const int16_t*)w.data;
+  double energy = 0;
+  for (unsigned i = 0; pcm && i < w.frameCount * w.channels; i++)
+    energy += (double)pcm[i] * pcm[i];
+  UnloadWave(w);
+  remove(path);
+  return energy;
+}
+
+// ROUTE sends a chain's audio into another instrument's chain (a send bus),
+// so several instruments can share one reverb. Checks all three things that
+// have to hold: the dry half still plays, the sent half arrives, and it
+// arrives having actually been processed by the destination's units.
+static void test_route_send_bus(void) {
+  CHECK(unit_find("route") != NULL, "route unit not registered");
+
+  tracker_init(&song_a);
+  song_a.song_len = 1;
+  song_a.loop = false;
+  song_a.patterns[0][0] = 0;
+
+  // Instrument 0: an oscillator feeding a ROUTE aimed at instrument 2.
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "osc", 0);
+  tracker_inst_set_slot(&song_a.instruments[0], 1, "route", 0);
+  uint8_t* route_p = song_a.instruments[0].chain[1].params;
+
+  // Instrument 2: bus-only — no source, just a gain it can be identified by.
+  tracker_inst_set_slot(&song_a.instruments[2], 0, "pangain", 2);
+  uint8_t* bus_p = song_a.instruments[2].chain[0].params;
+
+  Pattern* p = tracker_pattern(&song_a, 0);
+  CHECK(p != NULL, "route: pattern alloc failed");
+  if (!p)
+    return;
+  p->len = 8;
+  p->steps[0][0] = (PatternStep){.note = 60, .velocity = 127, .instrument = 0, .fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
+
+  route_p[0] = 0x00;  // MIX: all dry, nothing sent
+  route_p[1] = 2;     // INST: destination
+  bus_p[0] = 0x80;    // bus PAN center
+  bus_p[1] = 0x80;    // bus GAIN unity
+  double dry = render_song_energy("test_route_dry.wav");
+  CHECK(dry > 0, "route: MIX=00 should play dry as usual, got energy %g", dry);
+
+  // All sent, bus at unity: the same audio, arriving via instrument 2.
+  route_p[0] = 0xFF;
+  double sent = render_song_energy("test_route_sent.wav");
+  CHECK(sent > dry * 0.5 && sent < dry * 2.0,
+        "route: MIX=FF should sound about as loud through the bus (dry %g, sent %g)", dry, sent);
+
+  // Same, but the bus silences what it is handed. Only reachable if the sent
+  // audio really goes THROUGH instrument 2's chain rather than around it.
+  bus_p[1] = 0x00;  // bus GAIN mute
+  double muted = render_song_energy("test_route_muted.wav");
+  CHECK(muted >= 0 && muted < dry * 0.01,
+        "route: sent audio bypassed the destination chain (dry %g, through muted bus %g)", dry, muted);
+
+  // A ROUTE pointed at its own instrument must not feed itself back.
+  route_p[1] = 0;
+  double self = render_song_energy("test_route_self.wav");
+  CHECK(self >= 0, "route: self-send render failed");
+
+  tracker_init(&song_a);
+}
+
 static void test_render_smoke(void) {
   const UnitDef* defs[64];
   int n = 0;
@@ -643,6 +718,7 @@ int main(void) {
   RUN(test_wav_export);
   RUN(test_render_smoke);
   RUN(test_chopper_repeats_at_tempo_derived_length);
+  RUN(test_route_send_bus);
   RUN(test_clap_plugin_pd);
   RUN(test_multiple_wclap_teardown_does_not_dangle);
   RUN(test_clap_plugin_pd_default_params_are_audible);

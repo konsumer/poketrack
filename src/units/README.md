@@ -244,7 +244,7 @@ Tempo-synced buffer repeat / beat-chop, modelled on Renoise's Repeater. While en
 
 **Length limit.** A slice has to be buffered in full, and the buffer is four seconds per instance (there's one instance per lane/track playing the instrument, so it's the unit's main cost). LINE sync reaches every SIZE at any sane tempo. BEAT sync doesn't: at 120 BPM `2/1` is already 4s, so `2/1`, `4/1` and `8/1` all fold to the same length there — anything too long is halved until it fits, which keeps it on a musical division rather than an arbitrary cut. **Use LINE sync for long chops.**
 
-Unlike [DUCKER](#ducker), which only *watches* another instrument's level and writes a param, there's no audio routing between instruments — so CHOPPER can only chop its own chain.
+CHOPPER only chops its own chain. To chop several instruments together, send them all into one bus instrument with [ROUTE](#route) and put the CHOPPER there.
 
 ### PAN/GAIN
 
@@ -286,6 +286,26 @@ ON defaults to Off, same as LFO — leave it off while you set INST/PARAM/AMNT s
 | INST | 00–FF | Target instrument index (defaults to current) |
 | PARAM | 00–FF | Target param (global index across chain slots) |
 | ON | Off / On | Enable/disable |
+
+### ROUTE
+
+Send bus — splits a chain's audio between playing where it is and feeding **another instrument's chain**. That other instrument becomes a shared effect bus: put one REVERB on instrument 2, drop a ROUTE at the end of the drum chain on instrument 0 and the synth chain on instrument 1, point both at `02`, and the two share a single reverb instead of each running its own.
+
+| Param | Range | Notes |
+|-------|-------|-------|
+| MIX | 00–FF | 00 = nothing sent (plays here as usual), 80 = half here / half sent, FF = only sent |
+| INST | 00–FF | Destination instrument index |
+
+MIX defaults to 00, so a freshly added ROUTE changes nothing until a destination has been picked — same idea as LFO and DUCKER defaulting to Off.
+
+The destination's chain runs as an **effect chain fed from outside**: any source unit in it is ignored on the bus (a bus instrument usually has none — just the effects). It gets its own dedicated instance, so an instrument can be a bus *and* be played from a pattern at the same time without the two interfering. Sends are heard in the same audio block they're made — no added latency — and a bus keeps running for five seconds after its last input so reverb tails and delay repeats ring out rather than being cut off.
+
+Notes on what a send does and doesn't do:
+
+- **Effects after the ROUTE** in the same chain only process what stays behind (the dry part). Put a ROUTE last if you want the whole chain sent.
+- **Routing is forward-only.** Buses are processed in ascending instrument order, so a bus can feed a higher-numbered one (02 → 05), but a send back to an equal or lower index is dropped. That, plus a send to a ROUTE's own instrument being ignored, is what makes feedback loops impossible.
+- **A muted lane sends nothing**, matching mute everywhere else.
+- Bus audio is mixed straight to the master, so it doesn't show up in the song screen's per-lane waveform.
 
 ### LFO
 

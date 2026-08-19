@@ -134,7 +134,7 @@ Available `unit_id` values (from `src/units/`):
 
 - Sources: `osc`, `fm`, `gran`, `drum`, `sampler`, `sf2`, `sfz`, `clap`
 - Effects: `dist`, `bcrush`, `delay`, `comp`, `flanger`, `filter`, `reverb`,
-  `ducker`, `lfo`, `midi`, `phaser`, `tremolo`, `chorus`
+  `ducker`, `lfo`, `midi`, `phaser`, `route`, `tremolo`, `chorus`
 
 ---
 

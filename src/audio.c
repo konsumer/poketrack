@@ -22,6 +22,25 @@ uint32_t g_unit_samples_per_line = 0;
 // Bumped on every play-start (see unit.h).
 uint32_t g_unit_play_epoch = 0;
 
+// ROUTE send-bus state — declared up here because render_channel() (below)
+// touches it; the machinery itself lives in the send-bus section further down.
+//
+// How long a bus keeps rendering after its last input, so reverb tails and
+// delay repeats ring out instead of being cut off mid-decay.
+#define BUS_TAIL_SAMPLES (AUDIO_SAMPLE_RATE * 5u)
+
+static float g_bus_l[NUM_INSTRUMENTS][AUDIO_BLOCK_SIZE];
+static float g_bus_r[NUM_INSTRUMENTS][AUDIO_BLOCK_SIZE];
+static bool g_bus_fed[NUM_INSTRUMENTS];       // got audio during this sub-block
+static uint32_t g_bus_tail[NUM_INSTRUMENTS];  // samples left to render after last feed
+// Which instrument's chain is rendering right now, so a ROUTE unit can't feed
+// the instrument it lives in (an instant feedback loop). TRACKER_EMPTY when
+// nothing routable is rendering.
+static uint8_t g_send_owner = TRACKER_EMPTY;
+// False while rendering a muted lane — its sends are dropped, matching the
+// "muted lanes are excluded from the mix" contract (see audio_toggle_mute).
+static bool g_send_open = true;
+
 static void midi_voice_destroy(AudioEngine* eng, int v);
 void audio_midi_kill_all(AudioEngine* eng);
 
@@ -240,6 +259,7 @@ static void render_channel(AudioEngine* eng, int ch, int tr, float* out_l, float
     return;
 
   // Effects: process in-place
+  g_send_owner = ii;  // a ROUTE here must not feed its own instrument's bus
   for (int s = 0; s < CHAIN_MAX; s++) {
     ChainSlot* slot = &inst->chain[s];
     const UnitDef* def = eng->chan_defs[ch][tr][s];
@@ -248,6 +268,7 @@ static void render_channel(AudioEngine* eng, int ch, int tr, float* out_l, float
     def->render(eng->chan_states[ch][tr][s], slot->params,
                 eng->tmp_l, eng->tmp_r, eng->tmp_l, eng->tmp_r, frames);
   }
+  g_send_owner = TRACKER_EMPTY;
 
   // Accumulate energy per instrument for sidechain ducking (RMS computed at end of fill).
   for (uint32_t f = 0; f < frames; f++) {
@@ -411,6 +432,131 @@ void audio_mod_set_param(uint8_t inst_idx, uint8_t global_param, uint8_t val) {
     set_global_param(g_mod_engine, inst_idx, global_param, val);
 }
 
+// ---- send buses (ROUTE unit) ------------------------------------------------
+//
+// One stereo bus per instrument. A ROUTE unit inside any chain adds its audio
+// into the destination instrument's bus via audio_send_bus(); flush_buses()
+// then runs each fed bus through that instrument's effect chain and mixes the
+// result into the master. Both happen inside one render sub-block, so a send
+// is heard in the same block it was made — no latency.
+//
+// Buffers live here rather than in AudioEngine because audio_send_bus() is
+// called from unit render callbacks, which have no engine handle (same
+// reasoning as audio_mod_set_param above).
+
+void audio_send_bus(uint8_t dest_inst, const float* in_l, const float* in_r,
+                    uint32_t frames, float gain) {
+  if (!g_send_open || !in_l || !in_r || gain <= 0.0f)
+    return;
+  if (dest_inst == g_send_owner)  // self-send: would feed back instantly
+    return;
+  if (frames > AUDIO_BLOCK_SIZE)
+    frames = AUDIO_BLOCK_SIZE;
+
+  if (!g_bus_fed[dest_inst]) {
+    memset(g_bus_l[dest_inst], 0, frames * sizeof(float));
+    memset(g_bus_r[dest_inst], 0, frames * sizeof(float));
+    g_bus_fed[dest_inst] = true;
+  }
+  for (uint32_t f = 0; f < frames; f++) {
+    g_bus_l[dest_inst][f] += in_l[f] * gain;
+    g_bus_r[dest_inst][f] += in_r[f] * gain;
+  }
+}
+
+static void destroy_bus_states(AudioEngine* eng, uint8_t inst_idx) {
+  if (!eng->bus_built[inst_idx])
+    return;
+  for (int s = 0; s < CHAIN_MAX; s++) {
+    if (eng->bus_states[inst_idx][s]) {
+      if (eng->bus_defs[inst_idx][s])
+        eng->bus_defs[inst_idx][s]->destroy(eng->bus_states[inst_idx][s]);
+      eng->bus_states[inst_idx][s] = NULL;
+      eng->bus_defs[inst_idx][s] = NULL;
+    }
+  }
+  eng->bus_built[inst_idx] = false;
+  g_bus_tail[inst_idx] = 0;
+  g_bus_fed[inst_idx] = false;
+}
+
+// Build the bus instance of an instrument's chain: effects only. A bus is fed
+// audio from elsewhere, so its own sources would never be rendered — skipping
+// them also avoids pointlessly loading their sample/soundfont data.
+static void ensure_bus_states(AudioEngine* eng, uint8_t inst_idx) {
+  if (eng->bus_built[inst_idx])
+    return;
+  TrackerInstrument* inst = &eng->song->instruments[inst_idx];
+  for (int s = 0; s < CHAIN_MAX; s++) {
+    ChainSlot* slot = &inst->chain[s];
+    if (!slot->unit_id[0] || !slot->enabled)
+      continue;
+    const UnitDef* def = unit_find(slot->unit_id);
+    if (!def || def->is_source)
+      continue;
+    eng->bus_states[inst_idx][s] = def->create(AUDIO_SAMPLE_RATE);
+    eng->bus_defs[inst_idx][s] = def;
+    if (def->set_data && eng->bus_states[inst_idx][s])
+      def->set_data(eng->bus_states[inst_idx][s], slot->data, eng->save_dir);
+  }
+  eng->bus_built[inst_idx] = true;
+}
+
+static void kill_bus_states(AudioEngine* eng) {
+  for (int i = 0; i < NUM_INSTRUMENTS; i++) {
+    g_bus_fed[i] = false;
+    g_bus_tail[i] = 0;
+    if (!eng->bus_built[i])
+      continue;
+    for (int s = 0; s < CHAIN_MAX; s++)
+      if (eng->bus_states[i][s] && eng->bus_defs[i][s] && eng->bus_defs[i][s]->kill)
+        eng->bus_defs[i][s]->kill(eng->bus_states[i][s]);
+  }
+}
+
+// Run every fed (or still-ringing) bus through its instrument's effect chain
+// and mix into out. Called once per render sub-block, after every source of
+// audio has had its chance to feed a bus.
+//
+// Ascending instrument order means a bus that itself holds a ROUTE can feed a
+// HIGHER-numbered bus in the same sub-block. A send to an equal or lower index
+// is dropped instead: that is exactly what makes routing loops impossible.
+static void flush_buses(AudioEngine* eng, float* out_l, float* out_r,
+                        uint32_t frames, double* sc_energy) {
+  for (int i = 0; i < NUM_INSTRUMENTS; i++) {
+    if (g_bus_fed[i]) {
+      g_bus_tail[i] = BUS_TAIL_SAMPLES;
+    } else if (g_bus_tail[i] > 0) {
+      // Still ringing out — run the chain on silence so tails decay.
+      g_bus_tail[i] = (g_bus_tail[i] > frames) ? g_bus_tail[i] - frames : 0;
+      memset(g_bus_l[i], 0, frames * sizeof(float));
+      memset(g_bus_r[i], 0, frames * sizeof(float));
+    } else {
+      continue;
+    }
+
+    ensure_bus_states(eng, (uint8_t)i);
+    TrackerInstrument* inst = &eng->song->instruments[i];
+    g_send_owner = (uint8_t)i;
+    for (int s = 0; s < CHAIN_MAX; s++) {
+      const UnitDef* def = eng->bus_defs[i][s];
+      if (!eng->bus_states[i][s] || !inst->chain[s].enabled || !def)
+        continue;
+      def->render(eng->bus_states[i][s], inst->chain[s].params,
+                  g_bus_l[i], g_bus_r[i], g_bus_l[i], g_bus_r[i], frames);
+    }
+    g_send_owner = TRACKER_EMPTY;
+
+    for (uint32_t f = 0; f < frames; f++) {
+      float v = (g_bus_l[i][f] + g_bus_r[i][f]) * 0.5f;
+      sc_energy[i] += (double)v * v;
+      out_l[f] += g_bus_l[i][f];
+      out_r[f] += g_bus_r[i][f];
+    }
+  }
+  memset(g_bus_fed, 0, sizeof(g_bus_fed));
+}
+
 static void fire_step(AudioEngine* eng, int ch, int tr, PatternStep* step) {
   if (!step)
     return;
@@ -475,6 +621,7 @@ void audio_rebuild_instrument(AudioEngine* eng, uint8_t inst_idx) {
   // some other edit happens to flip preview_inst away and back.
   destroy_preview_states(eng);
   destroy_shared_states(eng, inst_idx);
+  destroy_bus_states(eng, inst_idx);
   AUDIO_UNLOCK(eng);
 }
 
@@ -482,7 +629,10 @@ void audio_shutdown(AudioEngine* eng) {
   AUDIO_LOCK(eng);
   for (int ch = 0; ch < SONG_CHANNELS; ch++) destroy_lane_states(eng, ch);
   destroy_preview_states(eng);
-  for (int i = 0; i < NUM_INSTRUMENTS; i++) destroy_shared_states(eng, i);
+  for (int i = 0; i < NUM_INSTRUMENTS; i++) {
+    destroy_shared_states(eng, i);
+    destroy_bus_states(eng, i);
+  }
   for (int v = 0; v < 8; v++) midi_voice_destroy(eng, v);
   AUDIO_UNLOCK(eng);
   lock_destroy(&eng->lock);
@@ -560,6 +710,7 @@ void audio_stop(AudioEngine* eng) {
   for (int ch = 0; ch < SONG_CHANNELS; ch++)
     for (int tr = 0; tr < PATTERN_TRACKS; tr++)
       chan_kill(eng, ch, tr);  // immediate stop — prevents TSF release tails replaying on next start
+  kill_bus_states(eng);
   memset(eng->active_note, 0, sizeof(eng->active_note));
   audio_midi_kill_all(eng);
   AUDIO_UNLOCK(eng);
@@ -592,7 +743,10 @@ void audio_set_save_dir(AudioEngine* eng, const char* save_file_path) {
   for (int ch = 0; ch < SONG_CHANNELS; ch++)
     destroy_lane_states(eng, ch);
   destroy_preview_states(eng);
-  for (int i = 0; i < NUM_INSTRUMENTS; i++) destroy_shared_states(eng, i);
+  for (int i = 0; i < NUM_INSTRUMENTS; i++) {
+    destroy_shared_states(eng, i);
+    destroy_bus_states(eng, i);
+  }
   AUDIO_UNLOCK(eng);
 }
 
@@ -945,8 +1099,10 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
       for (int ch = 0; ch < SONG_CHANNELS; ch++) {
         float lane_l[AUDIO_BLOCK_SIZE] = {0};
         float lane_r[AUDIO_BLOCK_SIZE] = {0};
+        g_send_open = !eng->mute[ch];  // a muted lane feeds no send bus either
         for (int tr = 0; tr < PATTERN_TRACKS; tr++)
           render_channel(eng, ch, tr, lane_l, lane_r, count, sc_energy);
+        g_send_open = true;
 
         for (uint32_t f = 0; f < count; f++) {
           float v = (lane_l[f] + lane_r[f]) * 0.5f;
@@ -969,6 +1125,7 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
     if (eng->preview_inst != TRACKER_EMPTY) {
       TrackerInstrument* inst = &eng->song->instruments[eng->preview_inst];
       float pl[AUDIO_BLOCK_SIZE] = {0}, pr[AUDIO_BLOCK_SIZE] = {0};
+      g_send_owner = eng->preview_inst;
       for (int s = 0; s < CHAIN_MAX; s++) {
         if (!eng->preview_states[s])
           continue;
@@ -992,6 +1149,7 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
           continue;
         def->render(eng->preview_states[s], slot->params, pl, pr, pl, pr, count);
       }
+      g_send_owner = TRACKER_EMPTY;
       for (uint32_t f = 0; f < count; f++) {
         blk_l[f] += pl[f];
         blk_r[f] += pr[f];
@@ -1005,6 +1163,7 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
         continue;
       TrackerInstrument* inst = &eng->song->instruments[mv->inst_idx];
       float pl[AUDIO_BLOCK_SIZE] = {0}, pr[AUDIO_BLOCK_SIZE] = {0};
+      g_send_owner = mv->inst_idx;
       for (int s = 0; s < CHAIN_MAX; s++) {
         if (!mv->states[s] || !inst->chain[s].enabled)
           continue;
@@ -1021,6 +1180,7 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
           continue;
         def->render(mv->states[s], inst->chain[s].params, pl, pr, pl, pr, count);
       }
+      g_send_owner = TRACKER_EMPTY;
       for (uint32_t f = 0; f < count; f++) {
         blk_l[f] += pl[f];
         blk_r[f] += pr[f];
@@ -1035,26 +1195,6 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
         continue;
       TrackerInstrument* inst = &eng->song->instruments[i];
       float pl[AUDIO_BLOCK_SIZE] = {0}, pr[AUDIO_BLOCK_SIZE] = {0};
-      for (int s = 0; s < CHAIN_MAX; s++) {
-        if (!eng->shared_states[i][s] || !inst->chain[s].enabled)
-          continue;
-        const UnitDef* def = eng->shared_defs[i][s];
-        if (!def || !def->is_source)
-          continue;
-        def->render(eng->shared_states[i][s], inst->chain[s].params, NULL, NULL, pl, pr, count);
-      }
-      for (int s = 0; s < CHAIN_MAX; s++) {
-        if (!eng->shared_states[i][s] || !inst->chain[s].enabled)
-          continue;
-        const UnitDef* def = eng->shared_defs[i][s];
-        if (!def || def->is_source)
-          continue;
-        def->render(eng->shared_states[i][s], inst->chain[s].params, pl, pr, pl, pr, count);
-      }
-      for (uint32_t f = 0; f < count; f++) {
-        float v = (pl[f] + pr[f]) * 0.5f;
-        sc_energy[i] += (double)v * v;
-      }
 
       // Which lanes are currently playing this instrument, and whether any
       // of them is unmuted. A shared instance mixes every lane's voices into
@@ -1064,7 +1204,8 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
       // the mix" contract (see audio_toggle_mute) is to only silence the
       // instrument once EVERY lane using it is muted. An instrument with no
       // lane using it right now (e.g. driven purely by live MIDI) is never
-      // gated by mute.
+      // gated by mute. Computed before rendering so a ROUTE in this chain
+      // can be held back from the send buses on the same terms.
       bool lane_uses_inst[SONG_CHANNELS] = {0};
       bool any_lane_uses_inst = false, any_unmuted_lane_uses_inst = false;
       if (eng->playing) {
@@ -1082,6 +1223,32 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
         }
       }
       bool inst_muted = any_lane_uses_inst && !any_unmuted_lane_uses_inst;
+
+      g_send_owner = (uint8_t)i;
+      g_send_open = !inst_muted;
+      for (int s = 0; s < CHAIN_MAX; s++) {
+        if (!eng->shared_states[i][s] || !inst->chain[s].enabled)
+          continue;
+        const UnitDef* def = eng->shared_defs[i][s];
+        if (!def || !def->is_source)
+          continue;
+        def->render(eng->shared_states[i][s], inst->chain[s].params, NULL, NULL, pl, pr, count);
+      }
+      for (int s = 0; s < CHAIN_MAX; s++) {
+        if (!eng->shared_states[i][s] || !inst->chain[s].enabled)
+          continue;
+        const UnitDef* def = eng->shared_defs[i][s];
+        if (!def || def->is_source)
+          continue;
+        def->render(eng->shared_states[i][s], inst->chain[s].params, pl, pr, pl, pr, count);
+      }
+      g_send_owner = TRACKER_EMPTY;
+      g_send_open = true;
+
+      for (uint32_t f = 0; f < count; f++) {
+        float v = (pl[f] + pr[f]) * 0.5f;
+        sc_energy[i] += (double)v * v;
+      }
 
       if (!inst_muted) {
         for (uint32_t f = 0; f < count; f++) {
@@ -1108,6 +1275,10 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
         }
       }
     }
+
+    // Send buses last: every source of audio above has now had its chance
+    // to feed one, so a send is heard in the same sub-block it was made.
+    flush_buses(eng, blk_l, blk_r, count, sc_energy);
 
     for (uint32_t f = 0; f < count; f++) {
       out[(pos + f) * 2] = unit_softclip(blk_l[f] * 0.7f);
@@ -1234,6 +1405,7 @@ bool audio_render_wav(AudioEngine* eng, const char* path) {
     for (int tr = 0; tr < PATTERN_TRACKS; tr++)
       chan_kill(eng, ch, tr);
   kill_shared_states(eng);
+  kill_bus_states(eng);
   memset(eng->active_note, 0, sizeof(eng->active_note));
   AUDIO_UNLOCK(eng);
 

@@ -34,6 +34,7 @@ static const UnitDef* REGISTRY[] = {
     &unit_pangain,
     &unit_compressor,
     &unit_ducker,
+    &unit_route,
     &unit_midi,
     &unit_lfo,
     NULL,
