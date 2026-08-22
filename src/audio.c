@@ -709,6 +709,7 @@ void audio_stop(AudioEngine* eng) {
     return;
   }
   eng->playing = false;
+  eng->cue_row = -1;
   for (int ch = 0; ch < SONG_CHANNELS; ch++)
     for (int tr = 0; tr < PATTERN_TRACKS; tr++)
       chan_kill(eng, ch, tr);  // immediate stop — prevents TSF release tails replaying on next start
