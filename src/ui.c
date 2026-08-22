@@ -173,13 +173,23 @@ void ui_update(UIState* ui) {
   file_browser_tick();
 
   if (!file_browser_active()) {
-    // hold START (+ SELECT) + direction = play from cursor row (consumes
-    // this START hold so the release below doesn't also toggle play/stop)
-    if (input_pressed(BTN_PLAY) && input_held(BTN_SCREEN) && !audio_is_playing(ui->engine)) {
-      if (ui->screen == SCREEN_SONG)
-        audio_play_from(ui->engine, (uint16_t)ui->song_row);
-      else
+    // hold START (+ SELECT) = DJ cue on the song screen: while playing, marks
+    // the cursor row as the jump target (takes effect at the next row
+    // boundary; pressing again on the same row cancels). While stopped it
+    // keeps the old behavior: play from the cursor row. Either way consumes
+    // this START hold so the release below doesn't also toggle play/stop.
+    if (input_pressed(BTN_PLAY) && input_held(BTN_SCREEN)) {
+      if (ui->screen == SCREEN_SONG) {
+        if (audio_is_playing(ui->engine)) {
+          audio_lock(ui->engine);
+          ui->engine->cue_row = (ui->engine->cue_row == ui->song_row) ? -1 : ui->song_row;
+          audio_unlock(ui->engine);
+        } else {
+          audio_play_from(ui->engine, (uint16_t)ui->song_row);
+        }
+      } else if (!audio_is_playing(ui->engine)) {
         audio_play(ui->engine);
+      }
       ui->play_chord_used = true;
     }
 
@@ -318,7 +328,7 @@ static void draw_status(UIState* ui) {
   } else if (ui->screen == SCREEN_INSTRUMENT) {
     hint = "hold{OK}+dpad: edit   {NO}: clear/back   {PREV} prev  {NEXT} next   {PLAY}: play/stop";
   } else if (ui->screen == SCREEN_SONG) {
-    hint = "hold{OK}+dpad: edit   hold{PLAY}+dpad: mute   {NO}: clear   {PLAY}: play/stop";
+    hint = "hold{OK}+dpad: edit   hold{PLAY}+dpad: mute   {PLAY}: play/stop   {SCREEN}+{PLAY}: cue jump";
   } else {
     hint = "hold{OK}+dpad: edit   {NO}: clear/back   {PLAY}: play/stop";
   }

@@ -221,9 +221,14 @@ void screen_song_draw(UIState* ui) {
         }
       }
     }
+    // Cued (DJ-jump target) row flashes as a muted line, overriding the
+    // playing-row tint so a cue on the currently playing row still reads.
+    bool cued = (ui->engine->cue_row == r);
+    if (cued && ((ui->blink >> 4) & 1))
+      row_bg = C_DIM;
     DrawRectangle(0, y, WIN_W, CH_H, row_bg);
     DrawText(hex2((uint8_t)r), 2, y + (CH_H - FONT_S) / 2, FONT_S,
-             r == ui->song_row ? C_TITLE : C_HEADER);
+             cued ? C_DIM : (r == ui->song_row ? C_TITLE : C_HEADER));
 
     for (int i = 0; i < SONG_VIEW_COLS; i++) {
       int ch = ui->song_col_scroll + i;

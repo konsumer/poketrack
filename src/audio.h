@@ -37,6 +37,8 @@ typedef struct {
   bool playing;
   bool exporting;              // true = offline WAV render in progress; live callback outputs silence
   bool pattern_loop;           // true = loop one pattern instead of full song
+  int cue_row;                 // DJ cue: song row to jump to at the next row boundary (-1 = none)
+  bool pat_loop;               // true = keep looping the current song row instead of advancing
   uint8_t loop_pattern_idx;    // pattern index to loop (when pattern_loop)
   uint32_t loop_channel_mask;  // bitmask: channels that use loop_pattern_idx
   ChannelCursor cursors[SONG_CHANNELS];

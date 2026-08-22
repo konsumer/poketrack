@@ -21,6 +21,7 @@ typedef enum {
   MENU_SCALE_ROOT,
   MENU_SCALE,
   MENU_LOOP,
+  MENU_PATLOOP,
   MENU_PREVIEW,
   MENU_SAVE,
   MENU_EXPORT,
@@ -40,6 +41,7 @@ static const char* menu_labels[] = {
     "KEY",
     "SCALE",
     "LOOP",
+    "PAT-LOOP",
     "PREVIEW",
     "SAVE",
     "EXPORT WAV",
@@ -164,6 +166,14 @@ void screen_menu_update(UIState* ui) {
           ui->song->loop = !ui->song->loop;
         break;
 
+      case MENU_PATLOOP:
+        if (input_pressed(BTN_UP) || input_pressed(BTN_DOWN) || input_pressed(BTN_OK)) {
+          audio_lock(ui->engine);
+          ui->engine->pat_loop = !ui->engine->pat_loop;
+          audio_unlock(ui->engine);
+        }
+        break;
+
       case MENU_PREVIEW:
         if (input_pressed(BTN_UP) || input_pressed(BTN_DOWN) || input_pressed(BTN_OK))
           g_preview_disabled = !g_preview_disabled;
@@ -256,6 +266,10 @@ void screen_menu_draw(UIState* ui) {
         break;
       case MENU_LOOP:
         DrawText(ui->song->loop ? "ON" : "OFF",
+                 100, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_TEXT);
+        break;
+      case MENU_PATLOOP:
+        DrawText(ui->engine->pat_loop ? "ON" : "OFF",
                  100, y + (CH_H - FONT_S) / 2, FONT_S, cur ? C_NOTE : C_TEXT);
         break;
       case MENU_PREVIEW:

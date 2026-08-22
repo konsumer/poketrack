@@ -603,6 +603,7 @@ void audio_init(AudioEngine* eng, TrackerSong* song) {
   eng->samples_per_tick = calc_samples_per_tick(song->bpm);
   memset(eng->active_inst, TRACKER_EMPTY, sizeof(eng->active_inst));
   eng->preview_inst = TRACKER_EMPTY;
+  eng->cue_row = -1;
 }
 
 // Destroy all live states for an instrument — call before mutating its chain slots
@@ -651,6 +652,7 @@ static void playback_reset(AudioEngine* eng, uint16_t start_row) {
   }
   memset(eng->active_note, 0, sizeof(eng->active_note));
   eng->pattern_loop = false;
+  eng->cue_row = -1;
   eng->tick_counter = 0;
   eng->row_tick = 0;
   eng->sample_acc = eng->samples_per_tick;
@@ -1056,13 +1058,22 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
           uint16_t row_len = row_max_len(eng, eng->cursors[0].song_row);
           if (++eng->row_tick >= row_len) {
             eng->row_tick = 0;
-            uint16_t next = eng->cursors[0].song_row + 1;
-            if (next > song_last_row(eng)) {
-              if (eng->song->loop)
-                next = 0;
-              else {
-                eng->playing = false;
-                next = eng->cursors[0].song_row;
+            uint16_t next;
+            if (eng->cue_row >= 0) {
+              // DJ cue: jump to the marked row, then resume normal advance.
+              next = (uint16_t)eng->cue_row;
+              eng->cue_row = -1;
+            } else if (eng->pat_loop) {
+              next = eng->cursors[0].song_row;
+            } else {
+              next = eng->cursors[0].song_row + 1;
+              if (next > song_last_row(eng)) {
+                if (eng->song->loop)
+                  next = 0;
+                else {
+                  eng->playing = false;
+                  next = eng->cursors[0].song_row;
+                }
               }
             }
             for (int c = 0; c < SONG_CHANNELS; c++) {
