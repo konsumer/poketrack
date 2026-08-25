@@ -1,364 +1,197 @@
-<html>
+<!doctype html>
+<html lang="en">
   <head>
-    <title>poketrack</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PokeTrack</title>
+    <meta name="description" content="PokeTrack: cross-platform joystick-driven music tracker. Play online, buy on Steam, browse the source on GitHub, or watch the tutorial videos.">
     <link rel="icon" type="image/png" href="./favicon-32x32.png" sizes="32x32" />
     <link rel="shortcut icon" href="./favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-title" content="PokeTrack" />
     <link rel="manifest" href="./site.webmanifest" />
-    <script src="./coi-serviceworker.js"></script>
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { background: #000; overflow: hidden; width: 100%; height: 100%; }
-
-      canvas {
-        display: block !important;
-        position: fixed !important;
-        image-rendering: pixelated;
+      :root {
+        --bg: #000008;
+        --bg-alt: #060610;
+        --panel: #0a0a18;
+        --cursor: #182868;
+        --cursor2: #281040;
+        --sep: #202030;
+        --text: #b8b8c8;
+        --dim: #282838;
+        --header: #505070;
+        --note: #40ffc0;
+        --vel: #a0ff60;
+        --inst: #ffa030;
+        --fx: #80a0ff;
+        --play: #00ff60;
+        --title: #ffffff;
       }
-
-      /* ── Mobile controller ──────────────────────────────── */
-      #gamepad {
-        display: none;
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 38vh;
-        min-height: 150px;
-        max-height: 220px;
-        background: #0e0e0e;
-        border-top: 1px solid #2a2a2a;
-        flex-direction: column;
-        user-select: none;
-        -webkit-user-select: none;
-        touch-action: none;
-        z-index: 100;
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); }
+      body {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+        color: var(--text);
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
       }
+      a { color: var(--note); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .wrap { max-width: 880px; margin: 0 auto; padding: 40px 24px 64px; }
 
-      /* Top strip: SELECT/START left, L1/R1 right */
-      .gp-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 5px 14px 2px;
-        flex-shrink: 0;
+      /* ── header ─────────────────────────────── */
+      header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; flex-wrap: wrap; }
+      .brand { min-width: 0; }
+      .logo-row { display: flex; align-items: center; gap: 14px; }
+      .logo-row img.logo { width: 84px; height: 84px; border: 1px solid var(--sep); border-radius: 6px; }
+      header h1 {
+        margin: 0; font-size: 34px; font-weight: 700; color: var(--title);
+        letter-spacing: 1px; text-shadow: 0 0 8px rgba(64,255,192,0.25);
       }
-      .gp-meta { display: flex; gap: 6px; }
+      header h1 .pulse { color: var(--note); }
+      header .tagline { margin: 8px 0 0; font-size: 14px; color: var(--header); }
 
-      /* Bottom main: dpad left, face right */
-      .gp-main {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        flex: 1;
-        padding: 0 18px 8px;
+      .buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+      .btn {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 9px 16px; font-size: 14px; font-weight: 700;
+        font-family: inherit; letter-spacing: 0.5px;
+        border: 1px solid var(--sep); border-radius: 4px;
+        background: var(--panel); color: var(--text); cursor: pointer;
+        transition: border-color .12s, background .12s;
       }
+      .btn:hover { text-decoration: none; border-color: var(--note); }
+      .btn b { color: var(--note); font-weight: 700; }
+      .btn.play   { background: var(--cursor); border-color: var(--note); color: var(--title); }
+      .btn.play:hover { background: #1c2a7a; }
+      .btn.steam  { background: #1a1a2e; border-color: #4b6bc0; color: var(--fx); }
+      .btn.steam:hover { border-color: var(--fx); }
 
-      /* Pill buttons (SELECT, START, L1, R1) */
-      .gp-pill {
-        background: #2a2a2a;
-        color: #aaa;
-        border: 1px solid #3a3a3a;
-        border-radius: 20px;
-        padding: 5px 12px;
-        font-size: 10px;
-        font-weight: bold;
-        font-family: sans-serif;
-        letter-spacing: 0.5px;
-        cursor: pointer;
-        min-width: 56px;
-        text-align: center;
-        -webkit-tap-highlight-color: transparent;
-        outline: none;
+      /* ── panels ─────────────────────────────── */
+      .panel {
+        margin-top: 28px;
+        border: 1px solid var(--sep);
+        border-radius: 4px;
+        background: linear-gradient(var(--bg-alt), var(--panel));
+        padding: 16px 18px;
       }
-      .gp-pill.active { background: #484848; color: #fff; }
-
-      /* D-pad */
-      .gp-dpad {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        grid-template-rows: repeat(3, 1fr);
-        width: min(38vw, 130px);
-        height: min(38vw, 130px);
+      .panel h2 {
+        margin: 0 0 12px; font-size: 12px; font-weight: 700; letter-spacing: 2px;
+        text-transform: uppercase; color: var(--title);
+        border-bottom: 1px solid var(--sep); padding-bottom: 8px;
       }
+      .panel h2 .tag { color: var(--note); }
+      .panel p { margin: 0 0 10px; }
+      .panel ul { margin: 0; padding-left: 4px; list-style: none; }
+      .panel li { margin: 4px 0; }
 
-      .gp-dpad-arm {
-        background: #252525;
-        border: 1px solid #333;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #999;
-        font-size: 13px;
-        cursor: pointer;
-        -webkit-tap-highlight-color: transparent;
-        outline: none;
+      /* key glyphs */
+      .key {
+        display: inline-block; min-width: 20px; text-align: center;
+        border: 1px solid var(--sep); border-radius: 3px;
+        background: var(--cursor2); color: var(--title);
+        font-size: 12px; font-weight: 700; padding: 0 4px; line-height: 20px;
       }
-      .gp-dpad-arm.active { background: #3a3a3a; color: #fff; }
+      .note { color: var(--note); }
+      .inst { color: var(--inst); }
+      .fx   { color: var(--fx); }
+      .dim  { color: var(--dim); }
+      .play { color: var(--play); }
 
-      .gp-dpad-up    { grid-column: 2; grid-row: 1; border-radius: 5px 5px 0 0; border-bottom: none; }
-      .gp-dpad-left  { grid-column: 1; grid-row: 2; border-radius: 5px 0 0 5px; border-right: none; }
-      .gp-dpad-center {
-        grid-column: 2; grid-row: 2;
-        background: #252525;
-        border: none;
-        border-left: 1px solid #333;
-        border-right: 1px solid #333;
-        pointer-events: none;
+      /* ── cards ──────────────────────────────── */
+      .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-top: 6px; }
+      .card {
+        border: 1px solid var(--sep); border-radius: 4px;
+        background: var(--bg-alt); padding: 14px 16px;
       }
-      .gp-dpad-right { grid-column: 3; grid-row: 2; border-radius: 0 5px 5px 0; border-left: none; }
-      .gp-dpad-down  { grid-column: 2; grid-row: 3; border-radius: 0 0 5px 5px; border-top: none; }
-      .gp-dpad-corner { background: transparent; border: none; pointer-events: none; }
+      .card:hover { border-color: var(--cursor); background: var(--panel); }
+      .card h3 { margin: 0 0 6px; font-size: 13px; color: var(--title); }
+      .card h3 a { color: var(--note); }
+      .card p { margin: 0; font-size: 12px; color: var(--header); }
 
-      /* Face buttons diamond: X top, Y left, A right, B bottom */
-      .gp-face {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        grid-template-rows: repeat(3, 1fr);
-        width: min(38vw, 130px);
-        height: min(38vw, 130px);
-        gap: 4px;
-      }
+      footer { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--sep); color: var(--header); font-size: 12px; }
+      footer a { color: var(--header); }
+      footer a:hover { color: var(--note); }
 
-      .gp-circle {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 50%;
-        border: 2px solid;
-        background: #1a1a1a;
-        font-size: 11px;
-        font-weight: bold;
-        font-family: sans-serif;
-        cursor: pointer;
-        -webkit-tap-highlight-color: transparent;
-        outline: none;
-      }
-      .gp-circle.active { background: #2e2e2e; filter: brightness(1.5); }
-
-      .gp-btn-x { grid-column: 2; grid-row: 1; border-color: #4477ff; color: #4477ff; }
-      .gp-btn-y { grid-column: 1; grid-row: 2; border-color: #44aa44; color: #44aa44; }
-      .gp-btn-a { grid-column: 3; grid-row: 2; border-color: #cc3333; color: #cc3333; }
-      .gp-btn-b { grid-column: 2; grid-row: 3; border-color: #cc8800; color: #cc8800; }
-
-      @media (pointer: coarse) and (orientation: portrait) {
-        #gamepad { display: flex; }
-      }
+      .blink { animation: blink 1.1s steps(1) infinite; }
+      @keyframes blink { 50% { opacity: 0; } }
     </style>
   </head>
   <body>
-    <canvas id="canvas"></canvas>
+    <div class="wrap">
+      <header>
+        <div class="brand">
+          <div class="logo-row">
+            <img class="logo" src="./square.png" alt="PokeTrack logo">
+            <div>
+              <h1>Poke<span class="pulse">Track</span></h1>
+              <p class="tagline">// cross-platform joystick-driven music-tracker</p>
+            </div>
+          </div>
+          <div class="buttons">
+            <a class="btn play" href="./web.html"><b>▶</b> Play in browser</a>
+            <a class="btn steam" href="https://store.steampowered.com/app/5043200/PokeTrack/"><b>♁</b> Buy on Steam</a>
+            <a class="btn" href="https://github.com/konsumer/poketrack"><b>⌥</b> Source on GitHub</a>
+            <a class="btn" href="https://www.youtube.com/playlist?list=PLDE2Ywpu1J__p2yBXrMOoKCgtIYQgfGo7"><b>▶</b> Videos</a>
+          </div>
+        </div>
+      </header>
 
-    <!-- Mobile SNES-style controller (shown only on touch devices via CSS) -->
-    <div id="gamepad">
-      <div class="gp-top">
-        <div class="gp-meta">
-          <button class="gp-pill" data-btn="select">SELECT</button>
-          <button class="gp-pill" data-btn="start">START</button>
+      <section class="panel">
+        <h2><span class="tag">▸</span> about</h2>
+        <p>
+          PokeTrack is a music tracker built for <span class="note">joystick input first</span>.
+          Input is consistent and fast once you learn it. Most actions are a single button plus a
+          direction, so you can stay heads-down in the pattern editor without reaching for a mouse.
+          It runs in the browser and on Linux-based handheld consoles as well as mac / windows / linux desktop.
+        </p>
+        <ul>
+          <li><span class="play">▸</span> Fast, consistent control scheme: joystick + keyboard</li>
+          <li><span class="inst">▸</span> Built-in synth and effect units: no plugins to start</li>
+          <li><span class="fx">▸</span> SF2 / SFZ sample-based instrument support</li>
+          <li><span class="vel">▸</span> Custom CLAP / WCLAP plugin support (any language → wasm)</li>
+          <li><span class="note">▸</span> Themeable UI, incl. converted LGPT themes</li>
+        </ul>
+      </section>
+
+      <section class="panel">
+        <h2><span class="tag">▸</span> get started</h2>
+        <div class="cards">
+          <div class="card">
+            <h3><a href="https://store.steampowered.com/app/5043200/PokeTrack/">Buy on Steam</a></h3>
+            <p>One-click install, auto-updates, and supports continued development.</p>
+          </div>
+          <div class="card">
+            <h3><a href="./web.html">Play online</a></h3>
+            <p>Run PokeTrack right in your browser, no install needed.</p>
+          </div>
+          <div class="card">
+            <h3><a href="https://github.com/konsumer/poketrack">Get the source</a></h3>
+            <p>Open-source development and build-releases on GitHub.</p>
+          </div>
+          <div class="card">
+            <h3><a href="https://www.youtube.com/playlist?list=PLDE2Ywpu1J__p2yBXrMOoKCgtIYQgfGo7">Watch videos</a></h3>
+            <p>Tutorials and song demos on YouTube.</p>
+          </div>
         </div>
-        <div class="gp-meta">
-          <button class="gp-pill" data-btn="l">L1</button>
-          <button class="gp-pill" data-btn="r">R1</button>
-        </div>
-      </div>
-      <div class="gp-main">
-        <!-- D-pad -->
-        <div class="gp-dpad">
-          <div class="gp-dpad-corner"></div>
-          <button class="gp-dpad-arm gp-dpad-up"    data-btn="up">▲</button>
-          <div class="gp-dpad-corner"></div>
-          <button class="gp-dpad-arm gp-dpad-left"  data-btn="left">◀</button>
-          <div class="gp-dpad-center"></div>
-          <button class="gp-dpad-arm gp-dpad-right" data-btn="right">▶</button>
-          <div class="gp-dpad-corner"></div>
-          <button class="gp-dpad-arm gp-dpad-down"  data-btn="down">▼</button>
-          <div class="gp-dpad-corner"></div>
-        </div>
-        <!-- Face buttons -->
-        <div class="gp-face">
-          <div></div>
-          <button class="gp-circle gp-btn-x" data-btn="x">X</button>
-          <div></div>
-          <button class="gp-circle gp-btn-y" data-btn="y">Y</button>
-          <div></div>
-          <button class="gp-circle gp-btn-a" data-btn="a">A</button>
-          <div></div>
-          <button class="gp-circle gp-btn-b" data-btn="b">B</button>
-          <div></div>
-        </div>
-      </div>
+      </section>
+
+      <section class="panel">
+        <h2><span class="tag">▸</span> controls</h2>
+        <ul>
+          <li><span class="key">A</span> edit / change value &nbsp;·&nbsp; <span class="key">B</span> delete / reset / cancel</li>
+          <li><span class="key">X</span> fill column &nbsp;·&nbsp; <span class="key">Y</span> clear column</li>
+          <li><span class="key">SELECT</span> + <span class="key">←↑↓→</span> change screen (Song / Pattern / Instrument / Menu)</li>
+          <li><span class="key">START</span> play song / pattern</li>
+        </ul>
+        <p class="dim">You should be able to track quickly with a joystick, or keys. Once it clicks, it's meant to be fast and consistent.<span class="blink"> █</span></p>
+      </section>
+
+      <footer>
+        PokeTrack · <a href="https://github.com/konsumer/poketrack">github.com/konsumer/poketrack</a> ·
+        <a href="https://store.steampowered.com/app/5043200/PokeTrack/">Steam</a>
+      </footer>
     </div>
-
-    <script type="module">
-      import poketrack from './poketrack.mjs'
-
-      const AW = 480, AH = 320  // game internal resolution aspect
-
-      function layoutCanvas() {
-        const canvas = document.getElementById('canvas')
-        if (!canvas) return
-        const isMobile = window.matchMedia('(pointer: coarse)').matches
-        const isLandscape = window.matchMedia('(orientation: landscape)').matches
-        const vw = window.innerWidth
-        const vh = window.innerHeight
-        const gpH = (isMobile && !isLandscape) ? (document.getElementById('gamepad')?.offsetHeight ?? 0) : 0
-        const availW = vw
-        const availH = vh - gpH
-
-        let w, h
-        if (availW / availH > AW / AH) {
-          h = availH; w = h * AW / AH
-        } else {
-          w = availW; h = w * AH / AW
-        }
-        const top = (availH - h) / 2
-        const left = (vw - w) / 2
-
-        const s = canvas.style
-        s.setProperty('position', 'fixed', 'important')
-        s.setProperty('top',    top  + 'px', 'important')
-        s.setProperty('left',   left + 'px', 'important')
-        s.setProperty('width',  w    + 'px', 'important')
-        s.setProperty('height', h    + 'px', 'important')
-        s.setProperty('transform', 'none', 'important')
-        s.setProperty('margin',  '0', 'important')
-      }
-
-      window.addEventListener('resize', layoutCanvas)
-      window.addEventListener('orientationchange', layoutCanvas)
-      layoutCanvas()
-
-      // Fetch song from URL hash before starting wasm (preRun must be sync)
-      let songBytes = null
-      const hash = document.location.hash?.slice(1)
-      if (hash) {
-        const url = hash.endsWith('.rpt') ? hash : `${hash}.rpt`
-        try {
-          const r = await fetch(url)
-          if (r.ok) {
-            songBytes = new Uint8Array(await r.arrayBuffer())
-          } else {
-            console.error(`song fetch failed: ${r.status} ${url}`)
-          }
-        } catch(e) {
-          console.error('song fetch error:', e)
-        }
-      }
-
-      const mod = await poketrack({
-        canvas: document.getElementById('canvas'),
-        preRun({ FS_createDataFile }) {
-          if (songBytes) {
-            FS_createDataFile('.', 'song.rpt', songBytes, true, false, true)
-          }
-        }
-      })
-      layoutCanvas()  // re-apply after Emscripten init may have reset canvas styles
-
-      // Called lazily from C (midi_web_request_access) when user opens a MIDI device picker.
-      // Idempotent — does nothing if already requested.
-      window._midiWebRequestAccess = async () => {
-        if (!navigator.requestMIDIAccess || window._midiAccessRequested) return
-        window._midiAccessRequested = true
-        try {
-          const access = await navigator.requestMIDIAccess({ sysex: false })
-          const syncPorts = () => {
-            const inputs = [...access.inputs.values()]
-            mod.ccall('midi_in_web_set_port_count', null, ['number'], [inputs.length])
-            inputs.forEach((input, i) => {
-              mod.ccall('midi_in_web_set_port_name', null, ['number', 'string'], [i, input.name])
-              input.onmidimessage = ({ data: d }) =>
-                mod.ccall('midi_in_web_push', null, ['number','number','number','number'],
-                  [d[0]??0, d[1]??0, d[2]??0, i])
-            })
-            const outputs = [...access.outputs.values()]
-            window._midiOutputs = outputs
-            mod.ccall('midi_out_web_set_port_count', null, ['number'], [outputs.length])
-            outputs.forEach((output, i) =>
-              mod.ccall('midi_out_web_set_port_name', null, ['number', 'string'], [i, output.name]))
-          }
-          syncPorts()
-          access.onstatechange = syncPorts
-        } catch (e) {
-          console.warn('Web MIDI access denied:', e)
-        }
-      }
-
-      // ── Mobile on-screen controller input ───────────────────
-      // Maps data-btn to synthetic KeyboardEvent params matching input.c KB_MAP.
-      // Raylib/emscripten reads keyCode from DOM keyboard events dispatched to window.
-      const BTN_KEYS = {
-        up:     { key: 'ArrowUp',    code: 'ArrowUp',   keyCode: 38 },
-        down:   { key: 'ArrowDown',  code: 'ArrowDown', keyCode: 40 },
-        left:   { key: 'ArrowLeft',  code: 'ArrowLeft', keyCode: 37 },
-        right:  { key: 'ArrowRight', code: 'ArrowRight',keyCode: 39 },
-        a:      { key: 'x',          code: 'KeyX',      keyCode: 88 },
-        b:      { key: 'z',          code: 'KeyZ',      keyCode: 90 },
-        x:      { key: 's',          code: 'KeyS',      keyCode: 83 },
-        y:      { key: 'a',          code: 'KeyA',      keyCode: 65 },
-        l:      { key: 'q',          code: 'KeyQ',      keyCode: 81 },
-        r:      { key: 'w',          code: 'KeyW',      keyCode: 87 },
-        start:  { key: 'Enter',      code: 'Enter',     keyCode: 13 },
-        select: { key: 'Shift',      code: 'ShiftLeft', keyCode: 16 },
-      }
-
-      function fireKey(btn, type) {
-        const k = BTN_KEYS[btn]
-        if (!k) return
-        const ev = new KeyboardEvent(type, {
-          key: k.key, code: k.code, keyCode: k.keyCode, which: k.keyCode,
-          bubbles: true, cancelable: true,
-        })
-        // Dispatch to canvas and window — emscripten may hook either
-        document.getElementById('canvas').dispatchEvent(ev)
-        window.dispatchEvent(ev)
-      }
-
-      const gp = document.getElementById('gamepad')
-      // Map touch.identifier → data-btn string for each active finger
-      const activeTouch = new Map()
-
-      gp.addEventListener('touchstart', e => {
-        e.preventDefault()
-        for (const t of e.changedTouches) {
-          const el = document.elementFromPoint(t.clientX, t.clientY)?.closest('[data-btn]')
-          if (!el) continue
-          const btn = el.dataset.btn
-          activeTouch.set(t.identifier, btn)
-          el.classList.add('active')
-          fireKey(btn, 'keydown')
-        }
-      }, { passive: false })
-
-      gp.addEventListener('touchend', e => {
-        e.preventDefault()
-        for (const t of e.changedTouches) {
-          const btn = activeTouch.get(t.identifier)
-          if (!btn) continue
-          activeTouch.delete(t.identifier)
-          // Only remove .active if no other finger is still holding this button
-          const stillHeld = [...activeTouch.values()].includes(btn)
-          if (!stillHeld) {
-            gp.querySelector(`[data-btn="${btn}"]`)?.classList.remove('active')
-            fireKey(btn, 'keyup')
-          }
-        }
-      }, { passive: false })
-
-      gp.addEventListener('touchcancel', e => {
-        for (const t of e.changedTouches) {
-          const btn = activeTouch.get(t.identifier)
-          if (!btn) continue
-          activeTouch.delete(t.identifier)
-          const stillHeld = [...activeTouch.values()].includes(btn)
-          if (!stillHeld) {
-            gp.querySelector(`[data-btn="${btn}"]`)?.classList.remove('active')
-            fireKey(btn, 'keyup')
-          }
-        }
-      }, { passive: false })
-    </script>
   </body>
 </html>

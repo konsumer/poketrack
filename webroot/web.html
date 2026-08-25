@@ -1,0 +1,364 @@
+<html>
+  <head>
+    <title>poketrack</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <link rel="icon" type="image/png" href="./favicon-32x32.png" sizes="32x32" />
+    <link rel="shortcut icon" href="./favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="PokeTrack" />
+    <link rel="manifest" href="./site.webmanifest" />
+    <script src="./coi-serviceworker.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { background: #000; overflow: hidden; width: 100%; height: 100%; }
+
+      canvas {
+        display: block !important;
+        position: fixed !important;
+        image-rendering: pixelated;
+      }
+
+      /* ── Mobile controller ──────────────────────────────── */
+      #gamepad {
+        display: none;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 38vh;
+        min-height: 150px;
+        max-height: 220px;
+        background: #0e0e0e;
+        border-top: 1px solid #2a2a2a;
+        flex-direction: column;
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: none;
+        z-index: 100;
+      }
+
+      /* Top strip: SELECT/START left, L1/R1 right */
+      .gp-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 5px 14px 2px;
+        flex-shrink: 0;
+      }
+      .gp-meta { display: flex; gap: 6px; }
+
+      /* Bottom main: dpad left, face right */
+      .gp-main {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex: 1;
+        padding: 0 18px 8px;
+      }
+
+      /* Pill buttons (SELECT, START, L1, R1) */
+      .gp-pill {
+        background: #2a2a2a;
+        color: #aaa;
+        border: 1px solid #3a3a3a;
+        border-radius: 20px;
+        padding: 5px 12px;
+        font-size: 10px;
+        font-weight: bold;
+        font-family: sans-serif;
+        letter-spacing: 0.5px;
+        cursor: pointer;
+        min-width: 56px;
+        text-align: center;
+        -webkit-tap-highlight-color: transparent;
+        outline: none;
+      }
+      .gp-pill.active { background: #484848; color: #fff; }
+
+      /* D-pad */
+      .gp-dpad {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(3, 1fr);
+        width: min(38vw, 130px);
+        height: min(38vw, 130px);
+      }
+
+      .gp-dpad-arm {
+        background: #252525;
+        border: 1px solid #333;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #999;
+        font-size: 13px;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+        outline: none;
+      }
+      .gp-dpad-arm.active { background: #3a3a3a; color: #fff; }
+
+      .gp-dpad-up    { grid-column: 2; grid-row: 1; border-radius: 5px 5px 0 0; border-bottom: none; }
+      .gp-dpad-left  { grid-column: 1; grid-row: 2; border-radius: 5px 0 0 5px; border-right: none; }
+      .gp-dpad-center {
+        grid-column: 2; grid-row: 2;
+        background: #252525;
+        border: none;
+        border-left: 1px solid #333;
+        border-right: 1px solid #333;
+        pointer-events: none;
+      }
+      .gp-dpad-right { grid-column: 3; grid-row: 2; border-radius: 0 5px 5px 0; border-left: none; }
+      .gp-dpad-down  { grid-column: 2; grid-row: 3; border-radius: 0 0 5px 5px; border-top: none; }
+      .gp-dpad-corner { background: transparent; border: none; pointer-events: none; }
+
+      /* Face buttons diamond: X top, Y left, A right, B bottom */
+      .gp-face {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(3, 1fr);
+        width: min(38vw, 130px);
+        height: min(38vw, 130px);
+        gap: 4px;
+      }
+
+      .gp-circle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        border: 2px solid;
+        background: #1a1a1a;
+        font-size: 11px;
+        font-weight: bold;
+        font-family: sans-serif;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+        outline: none;
+      }
+      .gp-circle.active { background: #2e2e2e; filter: brightness(1.5); }
+
+      .gp-btn-x { grid-column: 2; grid-row: 1; border-color: #4477ff; color: #4477ff; }
+      .gp-btn-y { grid-column: 1; grid-row: 2; border-color: #44aa44; color: #44aa44; }
+      .gp-btn-a { grid-column: 3; grid-row: 2; border-color: #cc3333; color: #cc3333; }
+      .gp-btn-b { grid-column: 2; grid-row: 3; border-color: #cc8800; color: #cc8800; }
+
+      @media (pointer: coarse) and (orientation: portrait) {
+        #gamepad { display: flex; }
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+
+    <!-- Mobile SNES-style controller (shown only on touch devices via CSS) -->
+    <div id="gamepad">
+      <div class="gp-top">
+        <div class="gp-meta">
+          <button class="gp-pill" data-btn="select">SELECT</button>
+          <button class="gp-pill" data-btn="start">START</button>
+        </div>
+        <div class="gp-meta">
+          <button class="gp-pill" data-btn="l">L1</button>
+          <button class="gp-pill" data-btn="r">R1</button>
+        </div>
+      </div>
+      <div class="gp-main">
+        <!-- D-pad -->
+        <div class="gp-dpad">
+          <div class="gp-dpad-corner"></div>
+          <button class="gp-dpad-arm gp-dpad-up"    data-btn="up">▲</button>
+          <div class="gp-dpad-corner"></div>
+          <button class="gp-dpad-arm gp-dpad-left"  data-btn="left">◀</button>
+          <div class="gp-dpad-center"></div>
+          <button class="gp-dpad-arm gp-dpad-right" data-btn="right">▶</button>
+          <div class="gp-dpad-corner"></div>
+          <button class="gp-dpad-arm gp-dpad-down"  data-btn="down">▼</button>
+          <div class="gp-dpad-corner"></div>
+        </div>
+        <!-- Face buttons -->
+        <div class="gp-face">
+          <div></div>
+          <button class="gp-circle gp-btn-x" data-btn="x">X</button>
+          <div></div>
+          <button class="gp-circle gp-btn-y" data-btn="y">Y</button>
+          <div></div>
+          <button class="gp-circle gp-btn-a" data-btn="a">A</button>
+          <div></div>
+          <button class="gp-circle gp-btn-b" data-btn="b">B</button>
+          <div></div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import poketrack from './poketrack.mjs'
+
+      const AW = 480, AH = 320  // game internal resolution aspect
+
+      function layoutCanvas() {
+        const canvas = document.getElementById('canvas')
+        if (!canvas) return
+        const isMobile = window.matchMedia('(pointer: coarse)').matches
+        const isLandscape = window.matchMedia('(orientation: landscape)').matches
+        const vw = window.innerWidth
+        const vh = window.innerHeight
+        const gpH = (isMobile && !isLandscape) ? (document.getElementById('gamepad')?.offsetHeight ?? 0) : 0
+        const availW = vw
+        const availH = vh - gpH
+
+        let w, h
+        if (availW / availH > AW / AH) {
+          h = availH; w = h * AW / AH
+        } else {
+          w = availW; h = w * AH / AW
+        }
+        const top = (availH - h) / 2
+        const left = (vw - w) / 2
+
+        const s = canvas.style
+        s.setProperty('position', 'fixed', 'important')
+        s.setProperty('top',    top  + 'px', 'important')
+        s.setProperty('left',   left + 'px', 'important')
+        s.setProperty('width',  w    + 'px', 'important')
+        s.setProperty('height', h    + 'px', 'important')
+        s.setProperty('transform', 'none', 'important')
+        s.setProperty('margin',  '0', 'important')
+      }
+
+      window.addEventListener('resize', layoutCanvas)
+      window.addEventListener('orientationchange', layoutCanvas)
+      layoutCanvas()
+
+      // Fetch song from URL hash before starting wasm (preRun must be sync)
+      let songBytes = null
+      const hash = document.location.hash?.slice(1)
+      if (hash) {
+        const url = hash.endsWith('.rpt') ? hash : `${hash}.rpt`
+        try {
+          const r = await fetch(url)
+          if (r.ok) {
+            songBytes = new Uint8Array(await r.arrayBuffer())
+          } else {
+            console.error(`song fetch failed: ${r.status} ${url}`)
+          }
+        } catch(e) {
+          console.error('song fetch error:', e)
+        }
+      }
+
+      const mod = await poketrack({
+        canvas: document.getElementById('canvas'),
+        preRun({ FS_createDataFile }) {
+          if (songBytes) {
+            FS_createDataFile('.', 'song.rpt', songBytes, true, false, true)
+          }
+        }
+      })
+      layoutCanvas()  // re-apply after Emscripten init may have reset canvas styles
+
+      // Called lazily from C (midi_web_request_access) when user opens a MIDI device picker.
+      // Idempotent — does nothing if already requested.
+      window._midiWebRequestAccess = async () => {
+        if (!navigator.requestMIDIAccess || window._midiAccessRequested) return
+        window._midiAccessRequested = true
+        try {
+          const access = await navigator.requestMIDIAccess({ sysex: false })
+          const syncPorts = () => {
+            const inputs = [...access.inputs.values()]
+            mod.ccall('midi_in_web_set_port_count', null, ['number'], [inputs.length])
+            inputs.forEach((input, i) => {
+              mod.ccall('midi_in_web_set_port_name', null, ['number', 'string'], [i, input.name])
+              input.onmidimessage = ({ data: d }) =>
+                mod.ccall('midi_in_web_push', null, ['number','number','number','number'],
+                  [d[0]??0, d[1]??0, d[2]??0, i])
+            })
+            const outputs = [...access.outputs.values()]
+            window._midiOutputs = outputs
+            mod.ccall('midi_out_web_set_port_count', null, ['number'], [outputs.length])
+            outputs.forEach((output, i) =>
+              mod.ccall('midi_out_web_set_port_name', null, ['number', 'string'], [i, output.name]))
+          }
+          syncPorts()
+          access.onstatechange = syncPorts
+        } catch (e) {
+          console.warn('Web MIDI access denied:', e)
+        }
+      }
+
+      // ── Mobile on-screen controller input ───────────────────
+      // Maps data-btn to synthetic KeyboardEvent params matching input.c KB_MAP.
+      // Raylib/emscripten reads keyCode from DOM keyboard events dispatched to window.
+      const BTN_KEYS = {
+        up:     { key: 'ArrowUp',    code: 'ArrowUp',   keyCode: 38 },
+        down:   { key: 'ArrowDown',  code: 'ArrowDown', keyCode: 40 },
+        left:   { key: 'ArrowLeft',  code: 'ArrowLeft', keyCode: 37 },
+        right:  { key: 'ArrowRight', code: 'ArrowRight',keyCode: 39 },
+        a:      { key: 'x',          code: 'KeyX',      keyCode: 88 },
+        b:      { key: 'z',          code: 'KeyZ',      keyCode: 90 },
+        x:      { key: 's',          code: 'KeyS',      keyCode: 83 },
+        y:      { key: 'a',          code: 'KeyA',      keyCode: 65 },
+        l:      { key: 'q',          code: 'KeyQ',      keyCode: 81 },
+        r:      { key: 'w',          code: 'KeyW',      keyCode: 87 },
+        start:  { key: 'Enter',      code: 'Enter',     keyCode: 13 },
+        select: { key: 'Shift',      code: 'ShiftLeft', keyCode: 16 },
+      }
+
+      function fireKey(btn, type) {
+        const k = BTN_KEYS[btn]
+        if (!k) return
+        const ev = new KeyboardEvent(type, {
+          key: k.key, code: k.code, keyCode: k.keyCode, which: k.keyCode,
+          bubbles: true, cancelable: true,
+        })
+        // Dispatch to canvas and window — emscripten may hook either
+        document.getElementById('canvas').dispatchEvent(ev)
+        window.dispatchEvent(ev)
+      }
+
+      const gp = document.getElementById('gamepad')
+      // Map touch.identifier → data-btn string for each active finger
+      const activeTouch = new Map()
+
+      gp.addEventListener('touchstart', e => {
+        e.preventDefault()
+        for (const t of e.changedTouches) {
+          const el = document.elementFromPoint(t.clientX, t.clientY)?.closest('[data-btn]')
+          if (!el) continue
+          const btn = el.dataset.btn
+          activeTouch.set(t.identifier, btn)
+          el.classList.add('active')
+          fireKey(btn, 'keydown')
+        }
+      }, { passive: false })
+
+      gp.addEventListener('touchend', e => {
+        e.preventDefault()
+        for (const t of e.changedTouches) {
+          const btn = activeTouch.get(t.identifier)
+          if (!btn) continue
+          activeTouch.delete(t.identifier)
+          // Only remove .active if no other finger is still holding this button
+          const stillHeld = [...activeTouch.values()].includes(btn)
+          if (!stillHeld) {
+            gp.querySelector(`[data-btn="${btn}"]`)?.classList.remove('active')
+            fireKey(btn, 'keyup')
+          }
+        }
+      }, { passive: false })
+
+      gp.addEventListener('touchcancel', e => {
+        for (const t of e.changedTouches) {
+          const btn = activeTouch.get(t.identifier)
+          if (!btn) continue
+          activeTouch.delete(t.identifier)
+          const stillHeld = [...activeTouch.values()].includes(btn)
+          if (!stillHeld) {
+            gp.querySelector(`[data-btn="${btn}"]`)?.classList.remove('active')
+            fireKey(btn, 'keyup')
+          }
+        }
+      }, { passive: false })
+    </script>
+  </body>
+</html>
