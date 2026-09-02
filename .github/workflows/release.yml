@@ -191,11 +191,16 @@ jobs:
           name: examples
           path: examples.zip
 
+  # Announce only once every platform build has succeeded (`needs: build`
+  # waits for the whole matrix and skips this job if any leg fails) — a
+  # release whose zips never got attached shouldn't be announced. Same gate
+  # the Steam deploy uses, which keys off this workflow's overall conclusion.
   discord:
+    needs: build
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     steps:
       - name: Send Discord Embed
-        if: github.event_name == 'release'
         uses: SethCohen/github-releases-to-discord@v1.20.0
         with:
           webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
