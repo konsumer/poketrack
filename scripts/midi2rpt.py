@@ -12,8 +12,12 @@ Rules:
     melodic chords are split into one track per simultaneous voice. Up to
     PATTERN_TRACKS (16) voices are packed into one multi-track pattern; further
     voices spill into additional patterns placed on additional song lanes.
+  * A note's release is written as a NOTE_OFF (0xFE) cell on the step where the
+    MIDI note ends, unless the next note on that track already starts there.
   * A soundfont is optional. When given, every instrument is wired to an `sf2`
-    unit whose data path is stored relative to the output file.
+    unit whose data path is stored relative to the output file. The soundfont is
+    looked up in the working directory, then next to the output, then next to
+    the input MIDI; it must exist, or the file it names would never load.
 
 Usage:
   midi2rpt.py [--soundfont FONT.sf2] [--out SONG.rpt] [--steps-per-beat N] INPUT.mid
@@ -257,6 +261,26 @@ def write_rpt(path, name, bpm, patterns, instruments, pattern_len, sf_relpath):
 
 # ---------------------------------------------------------------------------
 
+def resolve_soundfont(soundfont, out_path, midi_path):
+    """Find the soundfont on disk and return its absolute path.
+
+    A bare name like "microgm.sf2" is looked for in the working directory, then
+    beside the output song, then beside the input MIDI — the song stores the
+    path relative to itself, so a name that resolves nowhere would silently
+    produce a song whose instruments load no font at all."""
+    candidates = [soundfont]
+    if not os.path.isabs(soundfont):
+        for base in (os.path.dirname(os.path.abspath(out_path)),
+                     os.path.dirname(os.path.abspath(midi_path))):
+            candidates.append(os.path.join(base, soundfont))
+    for c in candidates:
+        if os.path.isfile(c):
+            return os.path.abspath(c)
+    raise ValueError("soundfont not found: %s (looked in: %s)"
+                     % (soundfont, ", ".join(os.path.dirname(os.path.abspath(c)) or "."
+                                             for c in candidates)))
+
+
 def convert(midi_path, out_path, soundfont=None, steps_per_beat=4, name=None):
     notes, tpb, tempo, beats_per_bar = parse_midi(midi_path)
     if not notes:
@@ -301,7 +325,8 @@ def convert(midi_path, out_path, soundfont=None, steps_per_beat=4, name=None):
     max_step = 0
     for _, vnotes in voice_specs:
         for n in vnotes:
-            max_step = max(max_step, round(n.start / ticks_per_step))
+            end = n.start + max(1, n.dur)
+            max_step = max(max_step, round(end / ticks_per_step))
     length = ((max_step // bar_steps) + 1) * bar_steps
     length = max(bar_steps, min(length, MAX_PATTERN_STEPS))
 
@@ -309,10 +334,20 @@ def convert(midi_path, out_path, soundfont=None, steps_per_beat=4, name=None):
     tracks = []
     for iidx, vnotes in voice_specs:
         steps = [None] * length
+        releases = []
         for n in sorted(vnotes, key=lambda x: x.start):
             si = round(n.start / ticks_per_step)
             if 0 <= si < length:
-                steps[si] = (n.pitch, max(1, min(127, n.velocity)))
+                # tracker velocity is 0-255 (0xFF = full), MIDI's is 0-127
+                vel = max(1, min(255, round(n.velocity * 255 / 127)))
+                steps[si] = (n.pitch, vel)
+                end = round((n.start + max(1, n.dur)) / ticks_per_step)
+                releases.append(max(si + 1, end))
+        # A release only gets a cell if the track is free there — a step already
+        # holding the next note-on retriggers the track anyway.
+        for ri in releases:
+            if ri < length and steps[ri] is None:
+                steps[ri] = (NOTE_OFF, 0)
         tracks.append((iidx, steps))
 
     # pack tracks into multi-track patterns (PATTERN_TRACKS each), across song lanes
@@ -331,7 +366,7 @@ def convert(midi_path, out_path, soundfont=None, steps_per_beat=4, name=None):
 
     sf_relpath = None
     if soundfont:
-        sf_relpath = os.path.relpath(os.path.abspath(soundfont),
+        sf_relpath = os.path.relpath(resolve_soundfont(soundfont, out_path, midi_path),
                                      os.path.dirname(os.path.abspath(out_path)))
 
     if name is None:
@@ -352,12 +387,17 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     out = args.out or os.path.splitext(args.input)[0] + ".rpt"
-    npat, ninst, length, bpm = convert(
-        args.input, out, soundfont=args.soundfont,
-        steps_per_beat=args.steps_per_beat, name=args.name)
+    try:
+        npat, ninst, length, bpm = convert(
+            args.input, out, soundfont=args.soundfont,
+            steps_per_beat=args.steps_per_beat, name=args.name)
+    except ValueError as e:
+        sys.stderr.write("error: %s\n" % e)
+        return 1
     print("wrote %s  (%d patterns, %d instruments, %d steps, %d bpm)"
           % (out, npat, ninst, length, bpm))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

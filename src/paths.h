@@ -15,11 +15,35 @@ static inline bool path_is_absolute(const char* p) {
   return p && (p[0] == '/' || p[0] == '\\' || (p[0] && p[1] == ':'));
 }
 
-// Directory containing file_path, always with a trailing '/' so callers can
-// concatenate directly. GetDirectoryPath drops the separator (and answers "."
-// for a bare filename), so put one back.
+// Directory containing file_path, always absolute and with a trailing '/' so
+// callers can concatenate directly. GetDirectoryPath drops the separator (and
+// answers "." for a bare filename), so put one back — and anchor a relative
+// answer on the working directory, because callers use this dir in both
+// directions: to resolve a song's stored data paths into absolute ones on
+// load, and to relativise them again on save. A relative dir breaks both --
+// the "resolved" path stays relative and gets resolved a second time against
+// save_dir (sf2 then looks for songs/./songs/font.sf2 and finds nothing), and
+// path_make_relative shares no prefix with an absolute path, so it gives up
+// and writes the absolute one into the file.
 static inline void path_dir_of(const char* file_path, char* out, int sz) {
-  snprintf(out, sz, "%s/", GetDirectoryPath(file_path));
+  char dir[512];
+  snprintf(dir, sizeof(dir), "%s", GetDirectoryPath(file_path));
+  const char* d = dir;
+  while (d[0] == '.' && d[1] == '/')  // "./x" is just "x"
+    d += 2;
+  if (path_is_absolute(d)) {
+    snprintf(out, sz, "%s/", d);
+    return;
+  }
+  char cwd[512];
+  snprintf(cwd, sizeof(cwd), "%s", GetWorkingDirectory());
+  size_t cl = strlen(cwd);
+  while (cl > 0 && (cwd[cl - 1] == '/' || cwd[cl - 1] == '\\'))
+    cwd[--cl] = '\0';  // trailing separator (and root "/") is re-added below
+  if (!d[0] || (d[0] == '.' && !d[1]))
+    snprintf(out, sz, "%s/", cwd);
+  else
+    snprintf(out, sz, "%s/%s/", cwd, d);
 }
 
 // Resolve path against base_dir. Absolute paths (and an empty base_dir) pass

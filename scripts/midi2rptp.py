@@ -7,8 +7,10 @@ tracks. Each monophonic voice becomes one track: each distinct drum pitch on the
 GM drum channel, and each split chord-voice on melodic channels.
 
 Pattern files don't carry instrument definitions (only a per-step instrument
-index), so set up the matching instruments in your song — e.g. a drum instrument
-at index 0, which is what GM-drum MIDI maps to here.
+index), so set up the matching instruments in your song to match. Indices are
+handed out in the order the MIDI's (track, channel) groups are first seen — the
+same order midi2rpt.py uses, so converting one file both ways gives matching
+indices — and the mapping is printed on conversion.
 
 Usage:
   midi2rptp.py [--out PATTERN.rptp] [--steps-per-beat N] INPUT.mid
@@ -21,13 +23,14 @@ import os
 import struct
 import sys
 
-from midi2rpt import (parse_midi, split_voices, NOTE_EMPTY, FX_EMPTY,
+from midi2rpt import (parse_midi, split_voices, NOTE_EMPTY, NOTE_OFF, FX_EMPTY,
                       DRUM_CHANNEL, PATTERN_TRACKS, MAX_PATTERN_STEPS)
 
 
 def build_tracks(midi_path, steps_per_beat=4):
-    """Return (tracks, length): tracks is a list of (instrument_index, steps),
-    steps a list of (note, velocity) or None; length is the shared step count."""
+    """Return (tracks, length, instruments): tracks is a list of
+    (instrument_index, steps), steps a list of (note, velocity) or None; length
+    is the shared step count; instruments is a label per instrument index."""
     notes, tpb, tempo, beats_per_bar = parse_midi(midi_path)
     if not notes:
         raise ValueError("no notes in %s" % midi_path)
@@ -39,20 +42,23 @@ def build_tracks(midi_path, steps_per_beat=4):
     for n in notes:
         groups.setdefault((n.track, n.channel), []).append(n)
 
-    # Consistent instrument-index assignment: drums share index 0, each melodic
-    # (channel, program) gets the next index (matches midi2rpt.py).
+    # Consistent instrument-index assignment: all drums share one index, each
+    # melodic (channel, program) gets its own, in first-seen order — the same
+    # order midi2rpt.py assigns, so both tools agree on the numbering.
     inst_index = {}
+    inst_labels = []
 
-    def get_instrument(key):
+    def get_instrument(key, label):
         if key not in inst_index:
             inst_index[key] = len(inst_index)
+            inst_labels.append(label)
         return inst_index[key]
 
     voice_specs = []  # (instrument_index, [notes])
     for (track, channel) in sorted(groups):
         group = groups[(track, channel)]
         if channel == DRUM_CHANNEL:
-            iidx = get_instrument(("drum",))
+            iidx = get_instrument(("drum",), "Drums (GM channel 10)")
             by_pitch = {}
             for n in group:
                 by_pitch.setdefault(n.pitch, []).append(n)
@@ -61,31 +67,43 @@ def build_tracks(midi_path, steps_per_beat=4):
                 voice_specs.append((iidx, by_pitch[pit]))
         else:
             program = group[0].program
-            iidx = get_instrument(("mel", channel, program))
+            iidx = get_instrument(("mel", channel, program),
+                                  "channel %d, program %d" % (channel + 1, program))
             for voice in split_voices(group):
                 voice_specs.append((iidx, voice))
 
     max_step = 0
     for _, vnotes in voice_specs:
         for n in vnotes:
-            max_step = max(max_step, round(n.start / ticks_per_step))
+            end = n.start + max(1, n.dur)
+            max_step = max(max_step, round(end / ticks_per_step))
     length = ((max_step // bar_steps) + 1) * bar_steps
     length = max(bar_steps, min(length, MAX_PATTERN_STEPS))
 
     tracks = []
     for iidx, vnotes in voice_specs:
         steps = [None] * length
+        releases = []
         for n in sorted(vnotes, key=lambda x: x.start):
             si = round(n.start / ticks_per_step)
             if 0 <= si < length:
-                steps[si] = (n.pitch, max(1, min(127, n.velocity)))
+                # tracker velocity is 0-255 (0xFF = full), MIDI's is 0-127
+                vel = max(1, min(255, round(n.velocity * 255 / 127)))
+                steps[si] = (n.pitch, vel)
+                end = round((n.start + max(1, n.dur)) / ticks_per_step)
+                releases.append(max(si + 1, end))
+        # A release only gets a cell if the track is free there — a step already
+        # holding the next note-on retriggers the track anyway.
+        for ri in releases:
+            if ri < length and steps[ri] is None:
+                steps[ri] = (NOTE_OFF, 0)
         tracks.append((iidx, steps))
 
     if len(tracks) > PATTERN_TRACKS:
         sys.stderr.write("warning: %d voices exceed %d tracks; extra voices dropped\n"
                          % (len(tracks), PATTERN_TRACKS))
         tracks = tracks[:PATTERN_TRACKS]
-    return tracks, length
+    return tracks, length, inst_labels
 
 
 def write_rptp(path, tracks, length):
@@ -108,9 +126,9 @@ def write_rptp(path, tracks, length):
 
 
 def convert(midi_path, out_path, steps_per_beat=4):
-    tracks, length = build_tracks(midi_path, steps_per_beat)
+    tracks, length, instruments = build_tracks(midi_path, steps_per_beat)
     write_rptp(out_path, tracks, length)
-    return len(tracks), length
+    return len(tracks), length, instruments
 
 
 def main(argv=None):
@@ -122,9 +140,19 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     out = args.out or os.path.splitext(args.input)[0] + ".rptp"
-    ntracks, length = convert(args.input, out, steps_per_beat=args.steps_per_beat)
+    try:
+        ntracks, length, instruments = convert(
+            args.input, out, steps_per_beat=args.steps_per_beat)
+    except ValueError as e:
+        sys.stderr.write("error: %s\n" % e)
+        return 1
     print("wrote %s  (%d tracks, %d steps)" % (out, ntracks, length))
+    # The pattern only stores instrument indices — say which is which, so the
+    # song they're pasted into can be wired up to match.
+    for i, label in enumerate(instruments):
+        print("  instrument %d: %s" % (i, label))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
