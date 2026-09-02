@@ -22,12 +22,7 @@ static const Color C_IDLE = {0xC4, 0xC4, 0xC4, 0xFF};
 // Buttons the artwork draws in dark gray (d-pad, start/select, shoulders) have
 // no color of their own to brighten, so they light up to near-white.
 static const Color C_LIT = {0xF6, 0xF6, 0xFC, 0xFF};
-// Face buttons light up to the artwork's own cap colors, at full strength.
-static const Color C_LIT_X = {0x1E, 0x7B, 0xE8, 0xFF};  // blue
-static const Color C_LIT_Y = {0x00, 0xD1, 0x8A, 0xFF};  // green
-static const Color C_LIT_A = {0xF0, 0x37, 0x4F, 0xFF};  // red
-static const Color C_LIT_B = {0xFB, 0xB0, 0x3B, 0xFF};  // orange
-static const Color C_RING = {0xFF, 0xFF, 0xFF, 0xFF};   // ring around a lit face button
+static const Color C_RING = {0xFF, 0xFF, 0xFF, 0xFF};  // ring around a lit face button
 
 static Texture2D g_tex;
 static bool g_loaded;
@@ -61,15 +56,20 @@ static const struct {
 #define DPAD_HUB_Y 170
 #define DPAD_HUB_S 50
 
+// Face buttons light up to the artwork's own cap colors, at full strength.
+// The colors are spelled out here rather than kept in named `static const
+// Color` constants: a const variable is not a constant expression in C, so
+// MSVC rejects one inside this file-scope initializer (C2099) where gcc and
+// clang quietly fold it — which is how the Windows build broke.
 static const struct {
   TrackerButton btn;
   float cx, cy, r;
   Color lit;
 } FACE[4] = {
-    {BTN_ALL, 670, 120, 27, C_LIT_X},   // X — north
-    {BTN_NONE, 601, 189, 27, C_LIT_Y},  // Y — west
-    {BTN_OK, 753, 197, 26, C_LIT_A},    // A — east
-    {BTN_NO, 684, 267, 26, C_LIT_B},    // B — south
+    {BTN_ALL, 670, 120, 27, {0x1E, 0x7B, 0xE8, 0xFF}},   // X — north, blue
+    {BTN_NONE, 601, 189, 27, {0x00, 0xD1, 0x8A, 0xFF}},  // Y — west, green
+    {BTN_OK, 753, 197, 26, {0xF0, 0x37, 0x4F, 0xFF}},    // A — east, red
+    {BTN_NO, 684, 267, 26, {0xFB, 0xB0, 0x3B, 0xFF}},    // B — south, orange
 };
 
 // Start/select are slanted capsules in the artwork — a thick line with round
