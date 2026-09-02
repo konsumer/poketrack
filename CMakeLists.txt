@@ -126,6 +126,7 @@ set(SOURCES
     src/tracker.c
     src/input.c
     src/icons.c
+    src/controller.c
     src/audio.c
     src/ui.c
     src/theme.c

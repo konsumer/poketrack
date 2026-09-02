@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "audio.h"
+#include "controller.h"
 #include "input.h"
 #include "midi_in.h"
 #include "raylib.h"
@@ -23,6 +24,9 @@ static AudioEngine g_engine;
 static UIState g_ui;
 static AudioStream g_stream;
 static RenderTexture2D g_target;
+// Height of the virtual-controller band under the tracker view, or 0 when
+// --controller wasn't passed.
+static int g_ctrl_h = 0;
 
 static void stream_callback(void* buf, unsigned int frames) {
   audio_fill_buffer(&g_engine, (float*)buf, frames);
@@ -37,15 +41,21 @@ static void main_loop(void) {
   ui_draw(&g_ui);
   EndTextureMode();
 
+  // The tracker view and the controller band scale as one block, so the pad
+  // keeps its proportions when the window is resized.
   int sw = GetScreenWidth(), sh = GetScreenHeight();
-  float scale = fminf((float)sw / WIN_W, (float)sh / WIN_H);
+  int lh = WIN_H + g_ctrl_h;
+  float scale = fminf((float)sw / WIN_W, (float)sh / lh);
   int dw = (int)(WIN_W * scale), dh = (int)(WIN_H * scale);
+  float ox = (sw - dw) / 2.0f, oy = (sh - lh * scale) / 2.0f;
   Rectangle src = {0, 0, WIN_W, -WIN_H};  // negative height flips Y (raylib RenderTexture quirk)
-  Rectangle dst = {(sw - dw) / 2.0f, (sh - dh) / 2.0f, (float)dw, (float)dh};
+  Rectangle dst = {ox, oy, (float)dw, (float)dh};
 
   BeginDrawing();
   ClearBackground(BLACK);
   DrawTexturePro(g_target.texture, src, dst, (Vector2){0, 0}, 0, WHITE);
+  if (g_ctrl_h > 0)  // height derived from dh, not scaled directly, so int truncation leaves no seam
+    controller_draw((Rectangle){ox, oy + dh, (float)dw, lh * scale - dh});
   EndDrawing();
 }
 
@@ -54,6 +64,7 @@ int main(int argc, char** argv) {
 
 #ifndef __EMSCRIPTEN__
   bool start_fullscreen = false;
+  bool show_controller = false;
   const char* theme_path = NULL;
   const char* wav_out_path = NULL;
   const char* song_path = "song.rpt";
@@ -68,6 +79,8 @@ int main(int argc, char** argv) {
         "                        cursor moves over pattern cells\n"
         "  --width <px>          Window width (default 480)\n"
         "  --height <px>         Window height (default 320)\n"
+        "  --controller          Show a virtual SNES pad below the tracker that lights\n"
+        "                        up as you press keys/buttons (for screen recordings)\n"
         "  --wav <out.wav>       Render the song to a WAV file and exit, instead of\n"
         "                        opening the UI\n"
         "  -h, --help            Show this help and exit\n"
@@ -80,6 +93,8 @@ int main(int argc, char** argv) {
       start_fullscreen = true;
     } else if (strcmp(argv[i], "--theme") == 0 && i + 1 < argc) {
       theme_path = argv[++i];
+    } else if (strcmp(argv[i], "--controller") == 0) {
+      show_controller = true;
     } else if (strcmp(argv[i], "--no-preview") == 0) {
       g_preview_disabled = true;
     } else if (strcmp(argv[i], "--width") == 0 && i + 1 < argc) {
@@ -136,9 +151,13 @@ int main(int argc, char** argv) {
 
 #ifndef __EMSCRIPTEN__
   SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+  if (show_controller)
+    g_ctrl_h = controller_height(WIN_W);
 #endif
-  InitWindow(WIN_W, WIN_H, "poketrack");
+  InitWindow(WIN_W, WIN_H + g_ctrl_h, "poketrack");
   SetTargetFPS(60);
+  if (g_ctrl_h > 0)
+    controller_init();
   g_target = LoadRenderTexture(WIN_W, WIN_H);
   SetTextureFilter(g_target.texture, TEXTURE_FILTER_POINT);
 #ifndef __EMSCRIPTEN__
@@ -164,6 +183,7 @@ int main(int argc, char** argv) {
   midi_in_global_shutdown();
   midi_out_global_shutdown();
   UnloadRenderTexture(g_target);
+  controller_unload();
   CloseWindow();
 #endif
   return 0;
