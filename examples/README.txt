@@ -9,8 +9,10 @@ What's included:
 
   beats/     - drum pattern kits (breaks, house, hip-hop, DnB, and more),
                organized by genre, ready to drop into the pattern editor.
-  *.rpt      - full demo songs (hello.rpt, muscle-pigeon.rpt) you can load
-               and pick apart to see how a finished track is put together.
+  *.rpt      - full demo songs (hello.rpt, muscle-pigeon.rpt, rickroll.rpt)
+               you can load and pick apart to see how a finished track is put
+               together. muscle-pigeon.md and rickroll.md walk through how
+               each one is arranged.
   *.sf2      - a General MIDI soundfont (microgm.sf2) for the SF2 instrument
                unit.
   themes/    - alternate UI color themes (.ptt), including converted LGPT
