@@ -301,8 +301,33 @@ static void preload_chan_states_for_pattern(AudioEngine* eng, int ch, uint8_t pi
   }
 }
 
+// Warm every file-backed resource the song's instruments name, so no create()
+// on the audio thread has to read from disk.
+//
+// preload_chan_states_for_pattern() only reaches the instruments a lane's
+// FIRST non-empty row plays, and a track can only hold one chain at a time
+// anyway — so an instrument that first appears later in the arrangement used
+// to do its cold soundfont load inside fire_step(), on the audio thread. A
+// cold load measures ~1.5ms against an 11.6ms block budget on a fast machine;
+// on a slow one it blows the deadline outright and clicks. Fonts are cached by
+// path, so a song whose instruments share one font costs a single load here.
+static void preload_instrument_data(AudioEngine* eng) {
+  for (int i = 0; i < NUM_INSTRUMENTS; i++) {
+    TrackerInstrument* inst = &eng->song->instruments[i];
+    for (int s = 0; s < CHAIN_MAX; s++) {
+      ChainSlot* slot = &inst->chain[s];
+      if (!slot->unit_id[0] || !slot->enabled)
+        continue;
+      const UnitDef* def = unit_find(slot->unit_id);
+      if (def && def->preload_data)
+        def->preload_data(slot->data, eng->save_dir);
+    }
+  }
+}
+
 // Pre-load chan_states for all channels in the song arrangement (call before playing).
 static void preload_all_chan_states(AudioEngine* eng) {
+  preload_instrument_data(eng);
   for (int ch = 0; ch < SONG_CHANNELS; ch++) {
     for (int row = 0; row < eng->song->song_len; row++) {
       uint8_t pi = eng->song->patterns[ch][row];
@@ -694,6 +719,7 @@ void audio_play_pattern(AudioEngine* eng, uint8_t pattern_idx) {
     eng->loop_channel_mask = 1u;
 
   // Pre-load states on this (main) thread so file I/O doesn't hit the audio callback
+  preload_instrument_data(eng);
   for (int ch = 0; ch < SONG_CHANNELS; ch++) {
     if (eng->loop_channel_mask & (1u << ch))
       preload_chan_states_for_pattern(eng, ch, pattern_idx);

@@ -107,6 +107,30 @@ static void sf2_set_data(UnitState* s, const char* data, const char* base_dir) {
     tsf_set_output(s->sf, TSF_STEREO_INTERLEAVED, (int)s->sample_rate, 0.0f);
 }
 
+// Load a font into the cache and hold a reference that is never released, so
+// it stays resident for the rest of the run. Used by the engine to warm every
+// font the song references before playback starts (see UnitDef.preload_data).
+static void sf2_preload(const char* data, const char* base_dir) {
+  const char* rel = (data && data[0]) ? data : "soundfont.sf2";
+  char path[512];
+  unit_resolve_path(base_dir, rel, path, sizeof(path));
+  for (int i = 0; i < SF2_CACHE_MAX; i++)
+    if (sf2_cache[i].master && strcmp(sf2_cache[i].path, path) == 0)
+      return;  // already resident
+  for (int i = 0; i < SF2_CACHE_MAX; i++) {
+    if (!sf2_cache[i].master) {
+      tsf* master = tsf_load_filename(path);
+      if (!master)
+        return;  // missing/bad file: leave it to fail the same way it does now
+      strncpy(sf2_cache[i].path, path, sizeof(sf2_cache[i].path) - 1);
+      sf2_cache[i].master = master;
+      sf2_cache[i].refs = 1;  // the pin; acquire/release balance on top of it
+      return;
+    }
+  }
+  // Cache full — nothing to pin into. acquire() still works, just unshared.
+}
+
 static void sf2_ensure_loaded(UnitState* s) {
   if (!s->sf) {
     if (!s->path[0])
@@ -194,6 +218,7 @@ const UnitDef unit_sf2 = {
     .create = sf2_create,
     .destroy = sf2_destroy,
     .set_data = sf2_set_data,
+    .preload_data = sf2_preload,
     .note_on = sf2_note_on,
     .note_off = sf2_note_off,
     .kill = sf2_kill,
