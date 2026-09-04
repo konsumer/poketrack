@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
 if(APPLE)
-  project(poketrack VERSION 0.2.0 LANGUAGES C OBJC)
+  project(poketrack VERSION 0.7.13 LANGUAGES C OBJC)
 else()
-  project(poketrack VERSION 0.2.0 LANGUAGES C)
+  project(poketrack VERSION 0.7.13 LANGUAGES C)
 endif()
 
 if(POLICY CMP0135)
