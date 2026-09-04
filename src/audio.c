@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "denormal.h"
 #include "midi_in.h"
 #include "paths.h"
 #include "raylib.h"
@@ -1324,6 +1325,7 @@ void audio_lock(AudioEngine* eng) { AUDIO_LOCK(eng); }
 void audio_unlock(AudioEngine* eng) { AUDIO_UNLOCK(eng); }
 
 void audio_fill_buffer(AudioEngine* eng, float* out, uint32_t frames) {
+  audio_denormals_off();
   AUDIO_LOCK(eng);
   // During an offline WAV render the export thread drives the engine directly;
   // the live callback must stay silent so it doesn't double-advance the song.
@@ -1384,6 +1386,7 @@ bool audio_render_wav(AudioEngine* eng, const char* path) {
   float blk[AUDIO_BLOCK_SIZE * 2];
 
   bool oom = (data == NULL);
+  audio_denormals_off();  // export runs render_block on this thread, not the callback's
   while (!oom) {
     AUDIO_LOCK(eng);
     bool play = eng->playing;
