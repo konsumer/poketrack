@@ -920,6 +920,104 @@ static void test_multiple_wclap_teardown_does_not_dangle(void) {
 // BPM, so verify the actual period of the looped slice rather than just that
 // it makes finite noise (test_render_smoke already covers that). 1/8 note at
 // 120 BPM = 16 lines / 8 = 2 lines.
+// A tempo-synced LFO must derive its phase from song position, not from a
+// per-instance accumulator. The chain is instantiated per lane/track, so an
+// instrument playing on several tracks has several copies of its LFO, all
+// writing the same target param — copies created at different times used to
+// sit at different phases and the value juddered between them (last writer
+// wins). Also checks the cycle actually lands on the advertised division.
+static void test_lfo_sync_is_position_locked(void) {
+  const UnitDef* d = unit_find("lfo");
+  CHECK(d != NULL, "lfo unit not registered");
+  if (!d)
+    return;
+
+  // A real engine, so the LFO's audio_mod_set_param() lands somewhere readable:
+  // instrument 0 is [filter, lfo], and the LFO drives the filter's CUTF
+  // (global param index 1 — slot 0 owns 0..2).
+  static AudioEngine eng;
+  tracker_init(&song_a);
+  song_a.song_len = 1;
+  song_a.loop = false;
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "filter", 0);
+  tracker_inst_set_slot(&song_a.instruments[0], 1, "lfo", 0);
+  audio_init(&eng, &song_a);
+  uint8_t* cutf = &song_a.instruments[0].chain[0].params[1];
+
+  const uint32_t spl = 5512;  // one pattern line at 120 BPM, 44.1kHz
+  g_unit_samples_per_line = spl;
+  g_unit_render_samples = 0;
+
+  uint8_t p[UNIT_MAX_PARAMS];
+  memcpy(p, d->param_defaults, UNIT_MAX_PARAMS);
+  p[1] = 2;     // SAW — monotonic within a cycle, so the period is easy to spot
+  p[2] = 0;     // INST: target instrument 0
+  p[3] = 1;     // PARAM: filter CUTF
+  p[4] = 0x80;  // centre
+  p[5] = 0xFF;  // full depth
+  p[6] = 1;     // ON
+  p[7] = 5;     // SYNC = 1/4 (one cycle per beat = 4 lines)
+
+  enum { BLK = 512 };
+  static float l[BLK], r[BLK];
+  memset(l, 0, sizeof(l));
+  memset(r, 0, sizeof(r));
+
+  // "Track A" has been playing a while when "track B" starts.
+  UnitState* a = d->create(44100.0f);
+  CHECK(a != NULL, "lfo: create failed");
+  if (!a)
+    return;
+  for (int b = 0; b < 37; b++) {
+    d->render(a, p, l, r, l, r, BLK);
+    g_unit_render_samples += BLK;
+  }
+  UnitState* late = d->create(44100.0f);
+  CHECK(late != NULL, "lfo: create failed");
+  if (!late) {
+    d->destroy(a);
+    return;
+  }
+
+  int disagree = 0;
+  for (int b = 0; b < 16; b++) {
+    d->render(a, p, l, r, l, r, BLK);
+    uint8_t va = *cutf;
+    d->render(late, p, l, r, l, r, BLK);
+    uint8_t vb = *cutf;
+    if (va != vb)
+      disagree++;
+    g_unit_render_samples += BLK;
+  }
+  CHECK(disagree == 0,
+        "lfo: a copy created mid-song disagrees with its sibling in %d/16 blocks "
+        "— synced phase is not position-locked", disagree);
+
+  // One cycle per beat: sampling a saw at the start of successive beats must
+  // give the same value every time, and NOT the same value half a beat later.
+  const uint64_t beat = (uint64_t)spl * 4;
+  uint8_t on_beat[4], off_beat;
+  for (int i = 0; i < 4; i++) {
+    g_unit_render_samples = beat * (uint64_t)(i + 3);
+    d->render(a, p, l, r, l, r, 2);  // tiny block: phase ~ exactly at the beat
+    on_beat[i] = *cutf;
+  }
+  g_unit_render_samples = beat * 3 + beat / 2;
+  d->render(a, p, l, r, l, r, 2);
+  off_beat = *cutf;
+  CHECK(on_beat[0] == on_beat[1] && on_beat[1] == on_beat[2] && on_beat[2] == on_beat[3],
+        "lfo: SYNC=1/4 not repeating once per beat (%02X %02X %02X %02X)",
+        on_beat[0], on_beat[1], on_beat[2], on_beat[3]);
+  CHECK(on_beat[0] != off_beat,
+        "lfo: value is constant across the beat — not actually modulating");
+
+  d->destroy(a);
+  d->destroy(late);
+  audio_shutdown(&eng);
+  g_unit_samples_per_line = 0;
+  g_unit_render_samples = 0;
+}
+
 static void test_chopper_repeats_at_tempo_derived_length(void) {
   const UnitDef* d = unit_find("chopper");
   CHECK(d != NULL, "chopper unit not registered");
@@ -1042,6 +1140,7 @@ int main(void) {
   RUN(test_wav_export);
   RUN(test_render_smoke);
   RUN(test_chopper_repeats_at_tempo_derived_length);
+  RUN(test_lfo_sync_is_position_locked);
   RUN(test_route_send_bus);
   RUN(test_clap_plugin_pd);
   RUN(test_clap_plugin_juno1);

@@ -20,8 +20,8 @@ float g_sidechain_rms[NUM_INSTRUMENTS] = {0};
 // Tempo, published to units that need to be BPM-relative (see unit.h).
 uint32_t g_unit_samples_per_line = 0;
 
-// Bumped on every play-start (see unit.h).
-uint32_t g_unit_play_epoch = 0;
+// Samples rendered since the last play-start (see unit.h).
+uint64_t g_unit_render_samples = 0;
 
 // ROUTE send-bus state — declared up here because render_channel() (below)
 // touches it; the machinery itself lives in the send-bus section further down.
@@ -670,7 +670,7 @@ void audio_shutdown(AudioEngine* eng) {
 // Shared by all three entry points below and by the offline WAV render; the
 // caller holds the lock and sets eng->playing once it has finished setting up.
 static void playback_reset(AudioEngine* eng, uint16_t start_row) {
-  g_unit_play_epoch++;
+  g_unit_render_samples = 0;  // snaps tempo-synced units back onto the bar grid
   audio_preview_kill(eng);
   for (int ch = 0; ch < SONG_CHANNELS; ch++) {
     eng->cursors[ch].song_row = start_row;
@@ -1325,6 +1325,7 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
     }
 
     pos += count;
+    g_unit_render_samples += count;
     if (eng->playing)
       eng->sample_acc += count;
   }

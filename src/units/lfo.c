@@ -16,9 +16,8 @@
 #include "unit.h"
 
 struct UnitState {
-  float phase;
+  float phase;  // FREE mode only; SYNC derives phase from song position
   float sample_rate;
-  uint32_t last_epoch;  // last-seen g_unit_play_epoch, to catch play-start
 };
 
 static UnitState* lfo_create(float sr) {
@@ -55,40 +54,40 @@ static void lfo_render(UnitState* s, const uint8_t* p,
 
   int sync = p[7] > LFO_NSYNC - 1 ? LFO_NSYNC - 1 : p[7];
 
-  // Snap back onto the bar grid at play-start, so a synced LFO always starts
-  // its cycle from the same point instead of free-running from wherever it
-  // happened to be left. Tracked regardless of sync mode so toggling SYNC
-  // mid-playback doesn't itself trigger a reset.
-  bool play_started = s->last_epoch != g_unit_play_epoch;
-  s->last_epoch = g_unit_play_epoch;
-  if (sync != 0 && play_started)
-    s->phase = 0;
-
-  float phase_inc;
   uint32_t spl = g_unit_samples_per_line;
-  if (sync == 0 || !spl) {
-    // FREE (or tempo not known yet): plain Hz rate.
-    float rate = p2f(p[0], 0.1f, 20.0f);
-    phase_inc = rate / s->sample_rate;
-  } else {
-    // One cycle every (whole-note-in-samples * multiplier).
-    float period_samples = (float)spl * 16.0f * lfo_sync_mult[sync - 1];
-    phase_inc = 1.0f / period_samples;
-  }
+  float phase;
 
-  // Compute LFO at midpoint of block for param update (one write per block is fine)
-  float phase = s->phase + phase_inc * (frames / 2.0f);
-  if (phase >= 1.0f)
-    phase -= (float)(int)phase;
+  if (sync == 0 || !spl) {
+    // FREE (or tempo not known yet): plain Hz rate, accumulated per instance.
+    float rate = p2f(p[0], 0.1f, 20.0f);
+    float phase_inc = rate / s->sample_rate;
+    // Value at the block midpoint; one param write per block is plenty.
+    phase = s->phase + phase_inc * (frames / 2.0f);
+    if (phase >= 1.0f)
+      phase -= (float)(int)phase;
+    // Advance phase over the full block
+    s->phase += phase_inc * frames;
+    while (s->phase >= 1.0f) s->phase -= 1.0f;
+  } else {
+    // SYNC: one cycle every (whole-note-in-samples * multiplier), positioned
+    // from g_unit_render_samples rather than a per-instance accumulator. The
+    // chain is instantiated per lane/track, so an instrument playing on
+    // several tracks has several copies of this unit all writing the same
+    // target param — an accumulator left a copy created mid-song a full
+    // half-cycle out from its siblings and the value juddered between them
+    // (last writer wins). Deriving from song position makes every copy agree,
+    // and the integer modulo means no drift however long the song runs.
+    uint64_t period = (uint64_t)((float)spl * 16.0f * lfo_sync_mult[sync - 1] + 0.5f);
+    if (period < 1)
+      period = 1;
+    uint64_t pos = g_unit_render_samples + frames / 2;  // block midpoint
+    phase = (float)(pos % period) / (float)period;
+  }
 
   float raw = cntr + unit_lfo_wave(shape, phase) * depth;
   uint8_t val = raw < 0.0f ? 0 : raw > 255.0f ? 255
                                               : (uint8_t)raw;
   audio_mod_set_param(inst, prm, val);
-
-  // Advance phase over full block
-  s->phase += phase_inc * frames;
-  while (s->phase >= 1.0f) s->phase -= 1.0f;
 }
 
 static void lfo_init_params(uint8_t* params, int inst_idx) {
