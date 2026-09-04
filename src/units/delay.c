@@ -15,7 +15,7 @@
 
 #include "unit.h"
 
-#define DELAY_MAX 44100  // 1 second at 44100 Hz
+#define DELAY_MAX 48000  // 1 second at the highest rate we run at (AUDIO_SAMPLE_RATE_MAX)
 
 struct UnitState {
   float buf_l[DELAY_MAX];

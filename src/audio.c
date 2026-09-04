@@ -23,6 +23,16 @@ uint32_t g_unit_samples_per_line = 0;
 // Samples rendered since the last play-start (see unit.h).
 uint64_t g_unit_render_samples = 0;
 
+// Render rate, replaced at startup with the device's negotiated rate.
+uint32_t g_audio_sample_rate = AUDIO_SAMPLE_RATE_DEFAULT;
+
+void audio_set_sample_rate(uint32_t rate) {
+  // Guard against a nonsense value from a misbehaving backend rather than
+  // dividing by it all over the engine.
+  if (rate >= 8000u && rate <= AUDIO_SAMPLE_RATE_MAX)
+    g_audio_sample_rate = rate;
+}
+
 // ROUTE send-bus state — declared up here because render_channel() (below)
 // touches it; the machinery itself lives in the send-bus section further down.
 //

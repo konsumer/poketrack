@@ -7,7 +7,23 @@
 #include "tracker.h"
 #include "units/unit_registry.h"
 
-#define AUDIO_SAMPLE_RATE 44100
+// The rate the engine actually renders at. Set once at startup from whatever
+// the audio device negotiated (see audio_set_sample_rate); 48000 until then,
+// because that's what every current device runs at — PipeWire, CoreAudio and
+// WASAPI all default to it. Feeding a stream at a different rate than the
+// device puts miniaudio's resampler in the callback path for every block and
+// makes the callback ask for odd frame counts, so matching it is both cheaper
+// and simpler.
+#define AUDIO_SAMPLE_RATE_DEFAULT 48000u
+// Buffers that units size at build time must hold the longest rate we support.
+#define AUDIO_SAMPLE_RATE_MAX 48000u
+extern uint32_t g_audio_sample_rate;
+#define AUDIO_SAMPLE_RATE g_audio_sample_rate
+
+// Called before any unit is created — changing it later would leave existing
+// units running at the old rate.
+void audio_set_sample_rate(uint32_t rate);
+
 #define AUDIO_BLOCK_SIZE 512
 
 typedef struct {

@@ -37,7 +37,7 @@
 // sane tempo, and up to 2/1 on the beat grid at 120 BPM. A request longer
 // than this is halved until it fits rather than clamped, so it stays on a
 // musical division instead of landing on an arbitrary length.
-#define CHOP_MAX (44100 * 4)
+#define CHOP_MAX (48000 * 4)  // 4s at AUDIO_SAMPLE_RATE_MAX
 #define CHOP_MIN_LEN 64  // guard against a zero/absurd length locking up playback
 
 struct UnitState {
