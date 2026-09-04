@@ -1326,6 +1326,15 @@ void audio_unlock(AudioEngine* eng) { AUDIO_UNLOCK(eng); }
 
 void audio_fill_buffer(AudioEngine* eng, float* out, uint32_t frames) {
   audio_denormals_off();
+  // render_block renders through AUDIO_BLOCK_SIZE stack buffers, so a larger
+  // request would smash them. raylib currently can't make one — its mixing
+  // path reads through a 4096-byte staging buffer, which at 8 bytes/frame caps
+  // a callback at exactly 512 frames — but that's an undocumented internal we
+  // don't control, so don't let a raylib bump turn into a stack overflow.
+  if (frames > AUDIO_BLOCK_SIZE) {
+    memset(out + AUDIO_BLOCK_SIZE * 2, 0, (frames - AUDIO_BLOCK_SIZE) * 2 * sizeof(float));
+    frames = AUDIO_BLOCK_SIZE;
+  }
   AUDIO_LOCK(eng);
   // During an offline WAV render the export thread drives the engine directly;
   // the live callback must stay silent so it doesn't double-advance the song.
