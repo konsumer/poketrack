@@ -79,6 +79,16 @@ typedef struct {
   // Called from main thread each frame; use for deferred work (e.g. CLAP on_main_thread).
   void (*main_thread_work)(UnitState* s);
 
+  // Optional, main thread only. Warm whatever shared, file-backed resource
+  // `data` names, so a later create()/set_data() on the audio thread is a
+  // cache hit instead of a disk read. Static — no UnitState, and it must keep
+  // the resource resident after returning (an ordinary create/destroy pair
+  // would load it and immediately drop the last reference again).
+  // Loading a soundfont measures ~1.5ms, more than a whole 512-frame block's
+  // budget, so an instrument first appearing mid-song would otherwise glitch
+  // the moment it plays its first note.
+  void (*preload_data)(const char* data, const char* base_dir);
+
   // All three are optional (NULL = no-op). Sources need note_on/note_off;
   // effects with internal state (delay lines, envelopes) should provide kill.
   void (*note_on)(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* params);
@@ -138,13 +148,20 @@ void audio_send_bus(uint8_t dest_inst, const float* in_l, const float* in_r,
 // A beat is 4 lines, a whole note 16. Zero until the first block renders.
 extern uint32_t g_unit_samples_per_line;
 
-// Bumped by the engine every time playback (re)starts from the top —
-// audio_play(), audio_play_pattern(), audio_render_wav() — so tempo-synced
-// units can tell "this render is right after a play-start" apart from
-// "playback has been running for a while" and snap their phase back onto the
-// bar grid. Compare against a value cached in the unit's own state; a
-// mismatch means playback (re)started since the last render call.
-extern uint32_t g_unit_play_epoch;
+// Samples rendered since playback last (re)started from the top —
+// audio_play(), audio_play_pattern(), audio_render_wav() all reset it to 0.
+// Tempo-synced units derive their phase from this instead of accumulating it
+// per instance, which matters because a chain is instantiated per lane/track:
+// an instrument playing on several tracks has several copies of its LFO, and
+// an accumulator would leave a copy created mid-song at a different phase from
+// its siblings, all writing the same target param (last writer wins, so the
+// value juddered). Position-derived phase makes every copy agree.
+//
+// It keeps advancing while stopped, so a tempo-synced unit still moves when
+// auditioning an instrument; resetting at play-start is what snaps the cycle
+// back onto the bar grid. A BPM change mid-song steps the phase rather than
+// gliding it — grid alignment is the point of SYNC.
+extern uint64_t g_unit_render_samples;
 
 // sin(2*pi*phase) for any phase (wraps, handles negatives). LUT + linear
 // interpolation, error < -100dB — replaces per-sample sinf in render loops.

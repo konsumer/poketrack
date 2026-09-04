@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "denormal.h"
 #include "midi_in.h"
 #include "paths.h"
 #include "raylib.h"
@@ -19,8 +20,8 @@ float g_sidechain_rms[NUM_INSTRUMENTS] = {0};
 // Tempo, published to units that need to be BPM-relative (see unit.h).
 uint32_t g_unit_samples_per_line = 0;
 
-// Bumped on every play-start (see unit.h).
-uint32_t g_unit_play_epoch = 0;
+// Samples rendered since the last play-start (see unit.h).
+uint64_t g_unit_render_samples = 0;
 
 // ROUTE send-bus state — declared up here because render_channel() (below)
 // touches it; the machinery itself lives in the send-bus section further down.
@@ -300,8 +301,33 @@ static void preload_chan_states_for_pattern(AudioEngine* eng, int ch, uint8_t pi
   }
 }
 
+// Warm every file-backed resource the song's instruments name, so no create()
+// on the audio thread has to read from disk.
+//
+// preload_chan_states_for_pattern() only reaches the instruments a lane's
+// FIRST non-empty row plays, and a track can only hold one chain at a time
+// anyway — so an instrument that first appears later in the arrangement used
+// to do its cold soundfont load inside fire_step(), on the audio thread. A
+// cold load measures ~1.5ms against an 11.6ms block budget on a fast machine;
+// on a slow one it blows the deadline outright and clicks. Fonts are cached by
+// path, so a song whose instruments share one font costs a single load here.
+static void preload_instrument_data(AudioEngine* eng) {
+  for (int i = 0; i < NUM_INSTRUMENTS; i++) {
+    TrackerInstrument* inst = &eng->song->instruments[i];
+    for (int s = 0; s < CHAIN_MAX; s++) {
+      ChainSlot* slot = &inst->chain[s];
+      if (!slot->unit_id[0] || !slot->enabled)
+        continue;
+      const UnitDef* def = unit_find(slot->unit_id);
+      if (def && def->preload_data)
+        def->preload_data(slot->data, eng->save_dir);
+    }
+  }
+}
+
 // Pre-load chan_states for all channels in the song arrangement (call before playing).
 static void preload_all_chan_states(AudioEngine* eng) {
+  preload_instrument_data(eng);
   for (int ch = 0; ch < SONG_CHANNELS; ch++) {
     for (int row = 0; row < eng->song->song_len; row++) {
       uint8_t pi = eng->song->patterns[ch][row];
@@ -644,7 +670,7 @@ void audio_shutdown(AudioEngine* eng) {
 // Shared by all three entry points below and by the offline WAV render; the
 // caller holds the lock and sets eng->playing once it has finished setting up.
 static void playback_reset(AudioEngine* eng, uint16_t start_row) {
-  g_unit_play_epoch++;
+  g_unit_render_samples = 0;  // snaps tempo-synced units back onto the bar grid
   audio_preview_kill(eng);
   for (int ch = 0; ch < SONG_CHANNELS; ch++) {
     eng->cursors[ch].song_row = start_row;
@@ -693,6 +719,7 @@ void audio_play_pattern(AudioEngine* eng, uint8_t pattern_idx) {
     eng->loop_channel_mask = 1u;
 
   // Pre-load states on this (main) thread so file I/O doesn't hit the audio callback
+  preload_instrument_data(eng);
   for (int ch = 0; ch < SONG_CHANNELS; ch++) {
     if (eng->loop_channel_mask & (1u << ch))
       preload_chan_states_for_pattern(eng, ch, pattern_idx);
@@ -1298,6 +1325,7 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
     }
 
     pos += count;
+    g_unit_render_samples += count;
     if (eng->playing)
       eng->sample_acc += count;
   }
@@ -1324,6 +1352,16 @@ void audio_lock(AudioEngine* eng) { AUDIO_LOCK(eng); }
 void audio_unlock(AudioEngine* eng) { AUDIO_UNLOCK(eng); }
 
 void audio_fill_buffer(AudioEngine* eng, float* out, uint32_t frames) {
+  audio_denormals_off();
+  // render_block renders through AUDIO_BLOCK_SIZE stack buffers, so a larger
+  // request would smash them. raylib currently can't make one — its mixing
+  // path reads through a 4096-byte staging buffer, which at 8 bytes/frame caps
+  // a callback at exactly 512 frames — but that's an undocumented internal we
+  // don't control, so don't let a raylib bump turn into a stack overflow.
+  if (frames > AUDIO_BLOCK_SIZE) {
+    memset(out + AUDIO_BLOCK_SIZE * 2, 0, (frames - AUDIO_BLOCK_SIZE) * 2 * sizeof(float));
+    frames = AUDIO_BLOCK_SIZE;
+  }
   AUDIO_LOCK(eng);
   // During an offline WAV render the export thread drives the engine directly;
   // the live callback must stay silent so it doesn't double-advance the song.
@@ -1384,6 +1422,10 @@ bool audio_render_wav(AudioEngine* eng, const char* path) {
   float blk[AUDIO_BLOCK_SIZE * 2];
 
   bool oom = (data == NULL);
+  // The export drives render_block on the CALLING thread, not the audio
+  // callback's, so flush denormals here too — and put the mode back after, so
+  // a WAV export doesn't silently change float behaviour for the whole UI.
+  AudioDenormalState denorm_prev = audio_denormals_off();
   while (!oom) {
     AUDIO_LOCK(eng);
     bool play = eng->playing;
@@ -1407,6 +1449,8 @@ bool audio_render_wav(AudioEngine* eng, const char* path) {
     if (n_frames >= max_frames)
       break;
   }
+
+  audio_denormals_restore(denorm_prev);
 
   // Restore engine state
   AUDIO_LOCK(eng);
