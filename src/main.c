@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +31,38 @@ static int g_ctrl_h = 0;
 
 static void stream_callback(void* buf, unsigned int frames) {
   audio_fill_buffer(&g_engine, (float*)buf, frames);
+}
+
+// raylib has no getter for the rate the audio device actually opened at, but
+// it logs it during InitAudioDevice as "> Sample rate:   <asked> -> <actual>".
+// Scrape it from there: rendering at the device's own rate keeps miniaudio's
+// resampler out of the callback path entirely. Falls back to whatever
+// audio.h defaults to if the line ever changes shape.
+static unsigned int g_detected_rate = 0;
+
+static void rate_sniffing_log(int level, const char* text, va_list args) {
+  char line[512];
+  va_list copy;
+  va_copy(copy, args);
+  vsnprintf(line, sizeof(line), text, copy);
+  va_end(copy);
+
+  const char* p = strstr(line, "Sample rate:");
+  if (p) {
+    const char* arrow = strstr(p, "->");
+    unsigned int r = 0;
+    // The second number is the device's real rate; the first is only what was
+    // requested, and miniaudio is free to ignore it.
+    if (arrow && sscanf(arrow + 2, "%u", &r) == 1 && r)
+      g_detected_rate = r;
+  }
+
+  // Keep raylib's own output: this callback replaces the default logger.
+  const char* tag = (level == LOG_WARNING) ? "WARNING: "
+                    : (level == LOG_ERROR)   ? "ERROR: "
+                    : (level == LOG_DEBUG)   ? "DEBUG: "
+                                             : "INFO: ";
+  printf("%s%s\n", tag, line);
 }
 
 static void main_loop(void) {
@@ -164,8 +197,16 @@ int main(int argc, char** argv) {
   if (start_fullscreen)
     ToggleFullscreen();
 #endif
+  SetTraceLogCallback(rate_sniffing_log);
   InitAudioDevice();
+  SetTraceLogCallback(NULL);  // back to raylib's own logger
+  if (g_detected_rate)
+    audio_set_sample_rate(g_detected_rate);
+  TraceLog(LOG_INFO, "AUDIO: engine renders at %u Hz (device %s)", AUDIO_SAMPLE_RATE,
+           g_detected_rate ? "matched — no resampling" : "rate undetected, using default");
 
+  // Everything the engine renders through is built against this rate, so it
+  // has to be settled before the first unit exists.
   g_stream = LoadAudioStream(AUDIO_SAMPLE_RATE, 32, 2);
   SetAudioStreamCallback(g_stream, stream_callback);
   PlayAudioStream(g_stream);
