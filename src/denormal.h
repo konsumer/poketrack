@@ -25,22 +25,37 @@
 
 #include <pmmintrin.h>
 #include <xmmintrin.h>
-static inline void audio_denormals_off(void) {
+#define AUDIO_DENORMALS_CONTROLLED 1
+// Whole MXCSR, so restore puts back rounding/mask bits exactly as they were.
+typedef unsigned int AudioDenormalState;
+static inline AudioDenormalState audio_denormals_off(void) {
+  AudioDenormalState prev = _mm_getcsr();
   _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);          // denormal results -> 0
   _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);  // denormal inputs  -> 0
+  return prev;
 }
+static inline void audio_denormals_restore(AudioDenormalState prev) { _mm_setcsr(prev); }
 
 #elif defined(__aarch64__)
 
-static inline void audio_denormals_off(void) {
-  uint64_t fpcr;
-  __asm__ volatile("mrs %0, fpcr" : "=r"(fpcr));
-  __asm__ volatile("msr fpcr, %0" : : "r"(fpcr | (1u << 24)));  // FZ
+#define AUDIO_DENORMALS_CONTROLLED 1
+typedef uint64_t AudioDenormalState;
+static inline AudioDenormalState audio_denormals_off(void) {
+  AudioDenormalState prev;
+  __asm__ volatile("mrs %0, fpcr" : "=r"(prev));
+  __asm__ volatile("msr fpcr, %0" : : "r"(prev | (1u << 24)));  // FZ
+  return prev;
+}
+static inline void audio_denormals_restore(AudioDenormalState prev) {
+  __asm__ volatile("msr fpcr, %0" : : "r"(prev));
 }
 
 #else
 
 // wasm and everything else: no per-thread denormal control to set.
-static inline void audio_denormals_off(void) {}
+#define AUDIO_DENORMALS_CONTROLLED 0
+typedef uint32_t AudioDenormalState;
+static inline AudioDenormalState audio_denormals_off(void) { return 0; }
+static inline void audio_denormals_restore(AudioDenormalState prev) { (void)prev; }
 
 #endif

@@ -1422,7 +1422,10 @@ bool audio_render_wav(AudioEngine* eng, const char* path) {
   float blk[AUDIO_BLOCK_SIZE * 2];
 
   bool oom = (data == NULL);
-  audio_denormals_off();  // export runs render_block on this thread, not the callback's
+  // The export drives render_block on the CALLING thread, not the audio
+  // callback's, so flush denormals here too — and put the mode back after, so
+  // a WAV export doesn't silently change float behaviour for the whole UI.
+  AudioDenormalState denorm_prev = audio_denormals_off();
   while (!oom) {
     AUDIO_LOCK(eng);
     bool play = eng->playing;
@@ -1446,6 +1449,8 @@ bool audio_render_wav(AudioEngine* eng, const char* path) {
     if (n_frames >= max_frames)
       break;
   }
+
+  audio_denormals_restore(denorm_prev);
 
   // Restore engine state
   AUDIO_LOCK(eng);

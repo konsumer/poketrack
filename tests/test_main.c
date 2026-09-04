@@ -3,12 +3,14 @@
 // registry, song/instrument file round-trips, WAV export, the recursive file
 // scan the SFZ zip loader depends on, and a render smoke test (every unit
 // renders finite audio; synth sources actually make sound).
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "audio.h"
 #include "clap_host.h"
+#include "denormal.h"
 #include "raylib.h"
 #include "tracker.h"
 #include "units/unit_registry.h"
@@ -926,6 +928,49 @@ static void test_multiple_wclap_teardown_does_not_dangle(void) {
 // writing the same target param — copies created at different times used to
 // sit at different phases and the value juddered between them (last writer
 // wins). Also checks the cycle actually lands on the advertised division.
+// The audio callback must leave denormals flushed to zero. filter.c's SVF
+// state decays into the denormal range and STAYS there while its input is
+// quiet (a low cutoff is a long time constant), and on x86-64 every denormal
+// operation takes a microcode assist costing ~100x a normal one — enough to
+// blow a block deadline and stutter. This is why an LFO on filter cutoff
+// stuttered on Linux/x86 but never on ARM, where denormals are near-free.
+//
+// Tests the wiring, not just denormal.h: it clears the mode, checks the check
+// itself can see denormals, then runs one real audio_fill_buffer() and
+// requires the mode to be set afterwards.
+static bool makes_denormal(void) {
+  volatile float tiny = FLT_MIN, half = 0.5f;
+  volatile float out = tiny * half;
+  return out != 0.0f;
+}
+static void test_audio_callback_flushes_denormals(void) {
+#if !AUDIO_DENORMALS_CONTROLLED
+  return;  // no per-thread denormal control on this target (wasm)
+#else
+  // Clear only the flush bits, leaving rounding/exception-mask bits alone.
+  AudioDenormalState set = audio_denormals_off();
+  audio_denormals_restore(set);
+  CHECK(makes_denormal(),
+        "test is not sensitive: FLT_MIN*0.5 flushed even with the mode cleared");
+
+  static AudioEngine eng;
+  tracker_init(&song_a);
+  song_a.song_len = 1;
+  song_a.loop = false;
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "osc", 0);
+  audio_init(&eng, &song_a);
+
+  static float buf[AUDIO_BLOCK_SIZE * 2];
+  audio_fill_buffer(&eng, buf, AUDIO_BLOCK_SIZE);
+
+  CHECK(!makes_denormal(),
+        "audio_fill_buffer() left denormals enabled — the audio thread will hit "
+        "the x86 denormal penalty (see src/denormal.h)");
+
+  audio_shutdown(&eng);
+#endif
+}
+
 static void test_lfo_sync_is_position_locked(void) {
   const UnitDef* d = unit_find("lfo");
   CHECK(d != NULL, "lfo unit not registered");
@@ -991,7 +1036,8 @@ static void test_lfo_sync_is_position_locked(void) {
   }
   CHECK(disagree == 0,
         "lfo: a copy created mid-song disagrees with its sibling in %d/16 blocks "
-        "— synced phase is not position-locked", disagree);
+        "— synced phase is not position-locked",
+        disagree);
 
   // One cycle per beat: sampling a saw at the start of successive beats must
   // give the same value every time, and NOT the same value half a beat later.
@@ -1140,6 +1186,7 @@ int main(void) {
   RUN(test_wav_export);
   RUN(test_render_smoke);
   RUN(test_chopper_repeats_at_tempo_derived_length);
+  RUN(test_audio_callback_flushes_denormals);
   RUN(test_lfo_sync_is_position_locked);
   RUN(test_route_send_bus);
   RUN(test_clap_plugin_pd);
