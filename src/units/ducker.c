@@ -79,6 +79,7 @@ const UnitDef unit_ducker = {
     .id = "ducker",
     .name = "DUCKER",
     .is_source = false,
+    .renders_for_side_effect = true,
     .num_params = 9,
     .param_names = {"SRC", "THRESH", "REL", "AMNT", "CNTR", "INV", "INST", "PARAM", "ON"},
     .param_defaults = {0, 0, 0x40, 0xC0, 0x80, 0, 0, 0, 0},

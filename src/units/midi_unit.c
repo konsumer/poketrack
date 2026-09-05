@@ -339,6 +339,7 @@ const UnitDef unit_midi = {
     .role_label = "",
     .file_filter = NULL,
     .is_source = true,
+    .renders_for_side_effect = true,
     .num_params = 1,
     .param_names = {"CHAN"},
     .param_defaults = {0},

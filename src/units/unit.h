@@ -26,6 +26,12 @@ typedef struct {
   // active track/voice — for units (like CLAP) whose backing plugin
   // already tracks its own polyphony from a stream of note events.
   bool shared_instance;
+  // If true, render() does something the engine can still observe when the
+  // chain is silent — writes another instrument's param, feeds a send bus,
+  // emits MIDI. The engine stops rendering a track whose output has gone
+  // silent (see render_channel), so a chain holding one of these must be
+  // exempt or the side effect would stop with it.
+  bool renders_for_side_effect;
   int num_params;
   const char* param_names[UNIT_MAX_PARAMS];
   uint8_t param_defaults[UNIT_MAX_PARAMS];

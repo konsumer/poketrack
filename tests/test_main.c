@@ -943,6 +943,81 @@ static bool makes_denormal(void) {
   volatile float out = tiny * half;
   return out != 0.0f;
 }
+// A track keeps its chain loaded once it has played a note, so the engine used
+// to re-render every chain forever even when it was producing silence. The
+// gate skips those, but it must be invisible: a later note has to wake the
+// track, and a chain holding a unit with side effects (LFO here) must never be
+// gated at all or its modulation would stop with it.
+static void test_idle_track_gate_wakes_on_note(void) {
+  static AudioEngine eng;
+  tracker_init(&song_a);
+  song_a.bpm = 120;
+  song_a.song_len = 1;
+  song_a.loop = false;
+  song_a.patterns[0][0] = 0;
+
+  // Instrument 0: plain osc — gateable. Instrument 1: osc + lfo — never gated.
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "osc", 0);
+  song_a.instruments[0].chain[0].enabled = 1;
+  tracker_inst_set_slot(&song_a.instruments[1], 0, "osc", 1);
+  song_a.instruments[1].chain[0].enabled = 1;
+  tracker_inst_set_slot(&song_a.instruments[1], 1, "lfo", 1);
+  song_a.instruments[1].chain[1].enabled = 1;
+
+  Pattern* p = tracker_pattern(&song_a, 0);
+  CHECK(p != NULL, "gate: pattern alloc failed");
+  if (!p)
+    return;
+  p->len = 64;
+  // track 0: note at step 0, released at step 1, note again at step 32
+  p->steps[0][0] = (PatternStep){.note = 60, .velocity = 200, .instrument = 0, .fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
+  p->steps[0][1] = (PatternStep){.note = NOTE_OFF, .fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
+  p->steps[0][32] = (PatternStep){.note = 64, .velocity = 200, .instrument = 0, .fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
+  // track 1: one note, never again — its chain has an LFO so it stays awake
+  p->steps[1][0] = (PatternStep){.note = 48, .velocity = 200, .instrument = 1, .fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
+  p->steps[1][1] = (PatternStep){.note = NOTE_OFF, .fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
+
+  audio_init(&eng, &song_a);
+  audio_play(&eng);
+
+  enum { BLK = 512 };
+  static float buf[BLK * 2];
+  const uint32_t spl = AUDIO_SAMPLE_RATE * 60u / (120u * 4u);  // samples per line
+
+  // Render up to just before the second note, tracking whether the gate ever
+  // engaged on track 0 and how loud things were once it did.
+  bool gated_seen = false;
+  double energy_after_gate = 0;
+  uint32_t rendered = 0;
+  while (rendered < spl * 30) {
+    audio_fill_buffer(&eng, buf, BLK);
+    rendered += BLK;
+    if (eng.chan_gated[0][0]) {
+      gated_seen = true;
+      for (int i = 0; i < BLK * 2; i++) energy_after_gate += (double)buf[i] * buf[i];
+    }
+  }
+  CHECK(gated_seen, "gate: a track silent for 30 lines was never gated");
+  CHECK(energy_after_gate < 1e-6,
+        "gate: gated track still contributed audio (energy %g)", energy_after_gate);
+  CHECK(!eng.chan_gated[0][1],
+        "gate: a chain holding an LFO must never be gated — its modulation would stop");
+
+  // Now cross the second note and confirm the track came back.
+  double energy_after_note = 0;
+  while (rendered < spl * 36) {
+    audio_fill_buffer(&eng, buf, BLK);
+    rendered += BLK;
+    for (int i = 0; i < BLK * 2; i++) energy_after_note += (double)buf[i] * buf[i];
+  }
+  CHECK(energy_after_note > 1e-3,
+        "gate: track did not wake on its next note (energy %g) — notes are being swallowed",
+        energy_after_note);
+  CHECK(!eng.chan_gated[0][0], "gate: track still marked gated after a note");
+
+  audio_shutdown(&eng);
+}
+
 static void test_audio_callback_flushes_denormals(void) {
 #if !AUDIO_DENORMALS_CONTROLLED
   return;  // no per-thread denormal control on this target (wasm)
@@ -1187,6 +1262,7 @@ int main(void) {
   RUN(test_render_smoke);
   RUN(test_chopper_repeats_at_tempo_derived_length);
   RUN(test_audio_callback_flushes_denormals);
+  RUN(test_idle_track_gate_wakes_on_note);
   RUN(test_lfo_sync_is_position_locked);
   RUN(test_route_send_bus);
   RUN(test_clap_plugin_pd);
