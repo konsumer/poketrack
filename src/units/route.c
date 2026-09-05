@@ -46,6 +46,7 @@ const UnitDef unit_route = {
     .id = "route",
     .name = "ROUTE",
     .is_source = false,
+    .renders_for_side_effect = true,
     .num_params = 2,
     .param_names = {"MIX", "INST"},
     // MIX defaults to 0 (pure pass-through) so dropping a ROUTE in never

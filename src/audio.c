@@ -151,16 +151,34 @@ static void destroy_preview_states(AudioEngine* eng) {
 }
 
 // Ensure per (lane,track) states are created for the given instrument
+// Idle-track gate tuning. The threshold is ~-100 dBFS: below it nothing is
+// audible even at full monitoring gain, and a decaying tail crosses it long
+// after it stops mattering. The hold then requires a quarter second of
+// continuous silence before skipping, so a chain is never cut mid-tail.
+#define CHAN_SILENCE_THRESHOLD 1.0e-5f
+#define CHAN_SILENCE_HOLD_SECONDS 0.25f
+
+// Bring a track back into the render loop. Anything that could make a silent
+// track audible again has to call this: a note, or a param write from a
+// modulator aimed at the instrument it's playing.
+static void chan_wake(AudioEngine* eng, int ch, int tr) {
+  eng->chan_silent[ch][tr] = 0;
+  eng->chan_gated[ch][tr] = false;
+}
+
 static void ensure_chan_states(AudioEngine* eng, int ch, int tr, uint8_t inst_idx) {
   if (eng->active_inst[ch][tr] == inst_idx)
     return;
   destroy_chan_states(eng, ch, tr);
   if (inst_is_shared(eng, inst_idx)) {
     ensure_shared_states(eng, inst_idx);
+    eng->chan_gateable[ch][tr] = false;  // rendered by the shared path, not here
+    chan_wake(eng, ch, tr);
     eng->active_inst[ch][tr] = inst_idx;
     return;
   }
   TrackerInstrument* inst = &eng->song->instruments[inst_idx];
+  bool gateable = true;
   for (int s = 0; s < CHAIN_MAX; s++) {
     ChainSlot* slot = &inst->chain[s];
     if (!slot->unit_id[0] || !slot->enabled)
@@ -170,9 +188,13 @@ static void ensure_chan_states(AudioEngine* eng, int ch, int tr, uint8_t inst_id
       continue;
     eng->chan_states[ch][tr][s] = def->create(AUDIO_SAMPLE_RATE);
     eng->chan_defs[ch][tr][s] = def;
+    if (def->renders_for_side_effect)
+      gateable = false;
     if (def->set_data && eng->chan_states[ch][tr][s])
       def->set_data(eng->chan_states[ch][tr][s], slot->data, eng->save_dir);
   }
+  eng->chan_gateable[ch][tr] = gateable;
+  chan_wake(eng, ch, tr);
   eng->active_inst[ch][tr] = inst_idx;
 }
 
@@ -249,6 +271,12 @@ static void render_channel(AudioEngine* eng, int ch, int tr, float* out_l, float
   uint8_t ii = eng->active_inst[ch][tr];
   if (ii == TRACKER_EMPTY)
     return;
+  // Gated: this track's chain has been rendering silence long enough that its
+  // tails are gone. Skip the whole thing until a note or a param write wakes
+  // it (see chan_wake). This is the difference between rendering 64 chains a
+  // block and rendering the handful actually making sound.
+  if (eng->chan_gated[ch][tr])
+    return;
   TrackerInstrument* inst = &eng->song->instruments[ii];
 
   memset(eng->tmp_l, 0, frames * sizeof(float));
@@ -281,10 +309,18 @@ static void render_channel(AudioEngine* eng, int ch, int tr, float* out_l, float
   }
   g_send_owner = TRACKER_EMPTY;
 
-  // Accumulate energy per instrument for sidechain ducking (RMS computed at end of fill).
+  // Accumulate energy per instrument for sidechain ducking (RMS computed at end
+  // of fill), and track the peak so the gate can tell silence from a tail.
+  float peak = 0.0f;
   for (uint32_t f = 0; f < frames; f++) {
     float v = (eng->tmp_l[f] + eng->tmp_r[f]) * 0.5f;
     sc_energy[ii] += (double)v * v;
+    float a = eng->tmp_l[f] >= 0 ? eng->tmp_l[f] : -eng->tmp_l[f];
+    if (a > peak)
+      peak = a;
+    a = eng->tmp_r[f] >= 0 ? eng->tmp_r[f] : -eng->tmp_r[f];
+    if (a > peak)
+      peak = a;
   }
 
   // Mix into master
@@ -292,6 +328,18 @@ static void render_channel(AudioEngine* eng, int ch, int tr, float* out_l, float
     out_l[f] += eng->tmp_l[f];
     out_r[f] += eng->tmp_r[f];
   }
+
+  // Gate bookkeeping. Measured on the chain's OUTPUT, so a delay or reverb
+  // tail keeps the track alive until it has genuinely decayed away.
+  if (!eng->chan_gateable[ch][tr])
+    return;
+  if (peak >= CHAN_SILENCE_THRESHOLD) {
+    eng->chan_silent[ch][tr] = 0;
+    return;
+  }
+  eng->chan_silent[ch][tr] += frames;
+  if (eng->chan_silent[ch][tr] >= (uint32_t)(CHAN_SILENCE_HOLD_SECONDS * AUDIO_SAMPLE_RATE))
+    eng->chan_gated[ch][tr] = true;
 }
 
 // Pre-load chan_states for a specific pattern on the given lane (main-thread safe).
@@ -413,6 +461,17 @@ static void advance_cursor(AudioEngine* eng, int ch, ChannelCursor* cur) {
 
 // Find a live UnitState for (inst_idx, slot) usable for dynamic param access:
 // the shared instance (CLAP), any playing track's state, or the preview.
+// Wake every track playing this instrument. Called when a param is written
+// from outside the track's own chain (per-step FX, LFO, DUCKER): the write
+// could be a volume/cutoff move that makes a gated track audible again, and
+// the track can't notice that by itself because it isn't rendering.
+static void wake_tracks_using(AudioEngine* eng, uint8_t inst_idx) {
+  for (int ch = 0; ch < SONG_CHANNELS; ch++)
+    for (int tr = 0; tr < PATTERN_TRACKS; tr++)
+      if (eng->active_inst[ch][tr] == inst_idx && eng->chan_gated[ch][tr])
+        chan_wake(eng, ch, tr);
+}
+
 static UnitState* find_inst_state(AudioEngine* eng, uint8_t inst_idx, int s) {
   if (eng->shared_active[inst_idx] && eng->shared_states[inst_idx][s])
     return eng->shared_states[inst_idx][s];
@@ -464,8 +523,12 @@ static void set_global_param(AudioEngine* eng, uint8_t inst_idx, uint8_t global_
 static AudioEngine* g_mod_engine = NULL;
 
 void audio_mod_set_param(uint8_t inst_idx, uint8_t global_param, uint8_t val) {
-  if (g_mod_engine)
-    set_global_param(g_mod_engine, inst_idx, global_param, val);
+  if (!g_mod_engine)
+    return;
+  set_global_param(g_mod_engine, inst_idx, global_param, val);
+  // The write may be a cutoff/volume move that makes a gated track audible
+  // again, and a gated track isn't rendering so it can't notice on its own.
+  wake_tracks_using(g_mod_engine, inst_idx);
 }
 
 // ---- send buses (ROUTE unit) ------------------------------------------------
@@ -618,8 +681,10 @@ static void fire_step(AudioEngine* eng, int ch, int tr, PatternStep* step) {
   // Apply per-step param overrides (fx[i] = global param index; see
   // set_global_param for how indices span chain slots and dynamic params).
   for (int fi = 0; fi < FX_PER_STEP; fi++)
-    if (step->fx[fi] != TRACKER_EMPTY)
+    if (step->fx[fi] != TRACKER_EMPTY) {
       set_global_param(eng, inst_idx, step->fx[fi], step->fxv[fi]);
+      chan_wake(eng, ch, tr);  // an FX-only step can raise a gated track
+    }
 
   if (step->note == NOTE_EMPTY)
     return;
@@ -627,6 +692,7 @@ static void fire_step(AudioEngine* eng, int ch, int tr, PatternStep* step) {
   if (eng->active_note[ch][tr])
     chan_note_off(eng, ch, tr, eng->active_note[ch][tr]);
   eng->active_note[ch][tr] = step->note;
+  chan_wake(eng, ch, tr);
   chan_note_on(eng, ch, tr, step->note, step->velocity ? step->velocity : 100);
 }
 
@@ -681,6 +747,8 @@ void audio_shutdown(AudioEngine* eng) {
 // caller holds the lock and sets eng->playing once it has finished setting up.
 static void playback_reset(AudioEngine* eng, uint16_t start_row) {
   g_unit_render_samples = 0;  // snaps tempo-synced units back onto the bar grid
+  memset(eng->chan_silent, 0, sizeof(eng->chan_silent));
+  memset(eng->chan_gated, 0, sizeof(eng->chan_gated));
   audio_preview_kill(eng);
   for (int ch = 0; ch < SONG_CHANNELS; ch++) {
     eng->cursors[ch].song_row = start_row;

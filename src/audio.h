@@ -72,6 +72,18 @@ typedef struct {
   UnitState* chan_states[SONG_CHANNELS][PATTERN_TRACKS][CHAIN_MAX];
   const UnitDef* chan_defs[SONG_CHANNELS][PATTERN_TRACKS][CHAIN_MAX];
 
+  // Idle-track gate. A track keeps its chain loaded once it has played a note,
+  // and used to re-render the whole thing every block forever — on a 16-track
+  // pattern that's mostly work whose result is silence, which matters a lot on
+  // a low-end device. These count how long a track's OUTPUT (not its source)
+  // has been inaudible, so effect tails keep rendering until they actually
+  // decay; past the hold, the track is skipped until something wakes it.
+  uint32_t chan_silent[SONG_CHANNELS][PATTERN_TRACKS];  // consecutive silent samples
+  bool chan_gated[SONG_CHANNELS][PATTERN_TRACKS];       // currently skipped
+  // False when the chain holds a unit whose render() has effects beyond its
+  // own audio (LFO/DUCKER/ROUTE/MIDI) — those must never be gated.
+  bool chan_gateable[SONG_CHANNELS][PATTERN_TRACKS];
+
   // Preview channel (UI keyboard preview — monophonic, params readable by instrument screen)
   UnitState* preview_states[CHAIN_MAX];
   const UnitDef* preview_defs[CHAIN_MAX];

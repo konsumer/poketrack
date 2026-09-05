@@ -101,6 +101,7 @@ const UnitDef unit_lfo = {
     .id = "lfo",
     .name = "LFO",
     .is_source = false,
+    .renders_for_side_effect = true,
     .num_params = 8,
     .param_names = {"RATE", "SHPE", "INST", "PARAM", "CNTR", "DPTH", "ON", "SYNC"},
     .param_defaults = {0x20, 0, 0, 0, 0x80, 0x40, 0, 0},
