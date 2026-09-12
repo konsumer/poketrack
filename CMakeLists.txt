@@ -149,6 +149,8 @@ set(SOURCES
     src/units/gran.c
     src/units/filter.c
     src/units/sampler.c
+    src/units/turntable.c
+    src/units/sample_cache.c
     src/units/bitcrush.c
     src/units/tremolo.c
     src/units/chopper.c

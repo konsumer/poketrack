@@ -18,6 +18,7 @@ extern const UnitDef unit_phaser;
 extern const UnitDef unit_gran;
 extern const UnitDef unit_filter;
 extern const UnitDef unit_sampler;
+extern const UnitDef unit_turntable;
 extern const UnitDef unit_bitcrush;
 extern const UnitDef unit_tremolo;
 extern const UnitDef unit_pangain;

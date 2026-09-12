@@ -1363,6 +1363,111 @@ static void test_midi_note_modifiers(void) {
         chord_e, single_e);
 }
 
+// TURNTABLE drives the playhead from an internal audio-rate gesture. On a
+// rising ramp the direction of travel is unambiguous, so we can tell a steady
+// record from a scratched one and see the fader cutting the forward half.
+#define TT_WIN 3000
+
+static void tt_run(uint8_t depth, uint8_t cut, double* trend, int* downs, int* zeros) {
+  static AudioEngine eng;
+  nm_configure(&song_a, 100);
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "turntab", 0);
+  ChainSlot* sl = &song_a.instruments[0].chain[0];
+  snprintf(sl->data, sizeof(sl->data), "nm_ramp.wav");
+  sl->params[0] = 0x00;   // LSTR
+  sl->params[1] = 0xFF;   // LEND (whole sample)
+  sl->params[2] = 0x80;   // TUNE = 0
+  sl->params[3] = depth;  // DPTH
+  sl->params[4] = 0xFF;   // RATE = 16 Hz
+  sl->params[5] = 0;      // SHPE = SINE
+  sl->params[6] = cut;    // CUT
+  sl->params[7] = 0xFF;   // VOL
+
+  audio_init(&eng, &song_a);
+  audio_play(&eng);
+  enum { BLK = 512 };
+  static float buf[BLK * 2];
+  float first[TT_WIN];
+  int got = 0;
+  while (got < TT_WIN) {
+    audio_fill_buffer(&eng, buf, BLK);
+    for (int i = 0; i < BLK && got < TT_WIN; i++)
+      first[got++] = buf[i * 2];
+  }
+  audio_shutdown(&eng);
+
+  double head = 0, tail = 0;
+  int h = TT_WIN / 3;
+  for (int i = 0; i < h; i++) {
+    head += first[i];
+    tail += first[TT_WIN - 1 - i];
+  }
+  *trend = (tail - head) / h;
+
+  // Direction of travel, measured on 64-sample window means: a backwards
+  // stretch shows up as a run of windows whose mean falls. (Per-sample diffs
+  // are too small on a ramp to threshold reliably.)
+  enum { BW = 64 };
+  const int nw = TT_WIN / BW;
+  double prev = 0;
+  int d = 0, z = 0;
+  for (int wi = 0; wi < nw; wi++) {
+    double mean = 0;
+    for (int i = 0; i < BW; i++)
+      mean += first[wi * BW + i];
+    mean /= BW;
+    if (wi > 0 && mean < prev - 0.005)
+      d++;
+    prev = mean;
+  }
+  for (int i = 0; i < TT_WIN; i++)
+    if (fabsf(first[i]) < 1e-4f)
+      z++;
+  *downs = d;
+  *zeros = z;
+}
+
+static void test_turntable_scratch(void) {
+  enum { N = 4800 };
+  static float ramp[N];
+  for (int i = 0; i < N; i++)
+    ramp[i] = -1.0f + 2.0f * (float)i / (float)(N - 1);
+  Wave w = {0};
+  w.frameCount = N;
+  w.sampleRate = 48000;
+  w.sampleSize = 32;
+  w.channels = 1;
+  w.data = ramp;
+  CHECK(ExportWave(w, "nm_ramp.wav"), "turntable: couldn't write the test ramp");
+
+  double trend_plain, trend_scratch, trend_cut;
+  int downs_plain, downs_scratch, downs_cut;
+  int zeros_plain, zeros_cut;
+  tt_run(0x00, 0x00, &trend_plain, &downs_plain, &zeros_plain);
+  tt_run(0xFF, 0x00, &trend_scratch, &downs_scratch, &zeros_cut);  // zeros unused here
+  tt_run(0x00, 0xFF, &trend_cut, &downs_cut, &zeros_cut);
+  remove("nm_ramp.wav");
+
+  // DPTH=0: the record just plays, one direction.
+  CHECK(trend_plain > 0.2, "turntable: DPTH=0 should play forward (trend %.3f)", trend_plain);
+  CHECK(downs_plain <= 2,
+        "turntable: DPTH=0 shouldn't travel backwards (%d backward windows)", downs_plain);
+
+  // DPTH=FF: the gesture swings the platter back, so the window contains a
+  // long backwards stretch (DPTH=0's window has none).
+  CHECK(downs_scratch > 8,
+        "turntable: DPTH=FF should scratch the playhead backwards (%d backward windows, "
+        "was %d with DPTH=0)",
+        downs_scratch, downs_plain);
+
+  // CUT=FF with a steady platter: the fader silences the forward half.
+  CHECK(zeros_plain < TT_WIN / 20,
+        "turntable: CUT=0 should never gate (%d silent samples)", zeros_plain);
+  CHECK(zeros_cut > TT_WIN / 3 && zeros_cut < TT_WIN * 3 / 4,
+        "turntable: CUT=FF should silence about half the output (%d/%d samples)",
+        zeros_cut, TT_WIN);
+}
+
 static void test_lfo_sync_is_position_locked(void) {
   const UnitDef* d = unit_find("lfo");
   CHECK(d != NULL, "lfo unit not registered");
@@ -1582,6 +1687,7 @@ int main(void) {
   RUN(test_idle_track_gate_wakes_on_note);
   RUN(test_note_modifiers);
   RUN(test_midi_note_modifiers);
+  RUN(test_turntable_scratch);
   RUN(test_lfo_sync_is_position_locked);
   RUN(test_route_send_bus);
   RUN(test_clap_plugin_pd);

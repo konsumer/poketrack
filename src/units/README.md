@@ -96,7 +96,7 @@ Granular synthesizer. Point the data field at a WAV file. Plays overlapping shor
 
 ### SAMPLER
 
-Sample player. Point the data field at a WAV/MP3/OGG/FLAC file. Pitch tracks the played note.
+Sample player. Point the data field at a WAV/MP3/OGG/FLAC file. Pitch tracks the played note. Every SAMPLER and [TURNTABLE](#turntable) unit pointing at the same file shares one decoded copy — a song can stack scratch instruments on one recording without decoding it once per instrument (and the file is decoded up front, not on the audio thread).
 
 | Param | Range | Notes |
 |-------|-------|-------|
@@ -105,6 +105,30 @@ Sample player. Point the data field at a WAV/MP3/OGG/FLAC file. Pitch tracks the
 | LEND | 0–100% | Loop end point |
 | TUNE | -12st–+12st | Pitch transpose |
 | STRT | 0–100% | Playback start offset |
+
+### TURNTABLE
+
+A sample player built to be scratched — a [SAMPLER](#sampler) whose platter and fader are modelled per sample instead of per block. Point the data field at a recording; the note sets its pitch and `LSTR`/`LEND` set the section being cut up.
+
+| Param | Range | Notes |
+|-------|-------|-------|
+| LSTR | 0–100% | Scratch region start |
+| LEND | 0–100% | Scratch region end |
+| TUNE | -12st–+12st | Pitch transpose |
+| DPTH | 0–3x | How far the gesture swings the platter; 0 = the record just plays |
+| RATE | 0.25–16 Hz | Gesture speed |
+| SHPE | Sine / Tri / Saw | Gesture shape |
+| CUT | 0–full | Fader: how much of the forward half is silenced |
+| VOL | 0–1 | Output level |
+
+A record player is one continuous motion plus one gate, and both are here:
+
+- **The platter.** A gesture generator swings playback velocity forward and back inside the region. Velocity goes negative on the back half, which is the scratch itself. `DPTH` is how far it swings, `RATE` how fast, `SHPE` the shape — `Saw` snaps back hard, which is a tear.
+- **The fader.** `CUT` silences the forward half of the gesture, per sample, so the edges are abrupt rather than block-quantized.
+
+That covers the usual vocabulary: baby scratch (`CUT=0`, high `DPTH`), chirp (`CUT` high, high `DPTH`), tear (`SHPE=Saw`), and transform (`DPTH=0`, `CUT` high — the record runs steady while the fader chops it). A stopped platter outputs silence, the way a stationary record does, rather than a held DC value.
+
+Release stops it, like any other source.
 
 ### CLAP
 

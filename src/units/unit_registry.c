@@ -28,6 +28,7 @@ static const UnitDef* REGISTRY[] = {
     &unit_gran,
     &unit_filter,
     &unit_sampler,
+    &unit_turntable,
     &unit_bitcrush,
     &unit_tremolo,
     &unit_chopper,

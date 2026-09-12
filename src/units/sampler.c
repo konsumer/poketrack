@@ -5,11 +5,11 @@
 // P3 TUNE:   00=-12st  80=center  FF=+12st
 // P4 STRT:   00=0%     FF=100% of sample (play start offset)
 #include <math.h>
-#include <raylib.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "sample_cache.h"
 #include "unit.h"
 
 #define LOOP_OFF 0
@@ -18,9 +18,7 @@
 #define LOOP_REV 3
 
 struct UnitState {
-  float* samples;  // mono float samples
-  uint32_t num_samples;
-  uint32_t wav_sr;  // sample rate from WAV header
+  SampleCacheEntry* smp;  // shared; decoded once per file, not per instance
 
   float phase;    // current read position (float for interpolation)
   float rate;     // playback rate (samples per engine sample)
@@ -30,34 +28,6 @@ struct UnitState {
   float engine_sr;
 };
 
-// Load audio file via raylib (WAV/MP3/OGG/FLAC) → mono float32.
-// Returns malloc'd float array; caller frees with free().
-static float* load_audio(const char* path, uint32_t* out_count, uint32_t* out_sr) {
-  Wave w = LoadWave(path);
-  if (w.frameCount == 0 || !w.data)
-    return NULL;
-
-  *out_sr = w.sampleRate;
-  WaveFormat(&w, w.sampleRate, 32, 1);  // convert in-place: mono, 32-bit float
-
-  float* smp = LoadWaveSamples(w);  // raylib alloc
-  uint32_t n = w.frameCount;
-  UnloadWave(w);
-  if (!smp)
-    return NULL;
-
-  float* out = malloc(n * sizeof(float));
-  if (!out) {
-    UnloadWaveSamples(smp);
-    return NULL;
-  }
-  memcpy(out, smp, n * sizeof(float));
-  UnloadWaveSamples(smp);
-
-  *out_count = n;
-  return out;
-}
-
 static UnitState* sampler_create(float sr) {
   UnitState* s = calloc(1, sizeof(*s));
   s->engine_sr = sr;
@@ -66,41 +36,42 @@ static UnitState* sampler_create(float sr) {
 }
 
 static void sampler_destroy(UnitState* s) {
-  free(s->samples);
+  sample_cache_release(s->smp);
   free(s);
 }
 
 static void sampler_set_data(UnitState* s, const char* data, const char* base_dir) {
-  free(s->samples);
-  s->samples = NULL;
-  s->num_samples = 0;
-  s->wav_sr = 44100;
+  char path[1024];
+  path[0] = '\0';
+  if (data && data[0])
+    unit_resolve_path(base_dir, data, path, sizeof(path));
 
+  if (s->smp && strcmp(s->smp->path, path) == 0)
+    return;  // already pointing at this file
+
+  sample_cache_release(s->smp);
+  s->smp = path[0] ? sample_cache_acquire(path) : NULL;
+}
+
+// Warm the shared cache on the main thread, so the first note doesn't decode
+// the file on the audio thread.
+static void sampler_preload(const char* data, const char* base_dir) {
   if (!data || !data[0])
     return;
-
   char path[1024];
   unit_resolve_path(base_dir, data, path, sizeof(path));
-
-  uint32_t count = 0, wav_sr = 44100;
-  float* smp = load_audio(path, &count, &wav_sr);
-  if (!smp)
-    return;
-
-  s->samples = smp;
-  s->num_samples = count;
-  s->wav_sr = wav_sr;
+  sample_cache_preload(path);
 }
 
 static void sampler_note_on(UnitState* s, float pitch, uint8_t vel, const uint8_t* p) {
   (void)vel;
-  if (!s->samples || s->num_samples == 0)
+  if (!s->smp || s->smp->num_samples == 0)
     return;
 
   float tune_semi = p2f_center(p[3], -12.0f, 12.0f);
   float pitch_ratio = powf(2.0f, (pitch + tune_semi - 60.0f) / 12.0f);
-  s->rate = pitch_ratio * ((float)s->wav_sr / s->engine_sr);
-  s->phase = (p[4] / 255.0f) * (float)(s->num_samples - 1);
+  s->rate = pitch_ratio * ((float)s->smp->wav_sr / s->engine_sr);
+  s->phase = (p[4] / 255.0f) * (float)(s->smp->num_samples - 1);
   s->direction = 1;
   s->playing = true;
 }
@@ -125,7 +96,7 @@ static void sampler_render(UnitState* s, const uint8_t* p,
                            float* out_l, float* out_r, uint32_t frames) {
   (void)in_l;
   (void)in_r;
-  if (!s->playing || !s->samples || s->num_samples == 0)
+  if (!s->playing || !s->smp || s->smp->num_samples == 0)
     return;
 
   int loop_mode = p[0];
@@ -137,17 +108,18 @@ static void sampler_render(UnitState* s, const uint8_t* p,
   if (le_frac < ls_frac)
     le_frac = ls_frac;
 
-  uint32_t loop_start = (uint32_t)(ls_frac * (s->num_samples - 1));
-  uint32_t loop_end = (uint32_t)(le_frac * (s->num_samples - 1));
-  if (loop_end >= s->num_samples)
-    loop_end = s->num_samples - 1;
+  uint32_t n = s->smp->num_samples;
+  uint32_t loop_start = (uint32_t)(ls_frac * (n - 1));
+  uint32_t loop_end = (uint32_t)(le_frac * (n - 1));
+  if (loop_end >= n)
+    loop_end = n - 1;
   if (loop_start > loop_end)
     loop_start = loop_end;
 
+  const float* samples = s->smp->samples;
   float phase = s->phase;
   int dir = s->direction;
   float rate = s->rate;
-  uint32_t n = s->num_samples;
 
   for (uint32_t f = 0; f < frames; f++) {
     if (!s->playing)
@@ -161,7 +133,7 @@ static void sampler_render(UnitState* s, const uint8_t* p,
       i0 = n - 1;
     if (i1 >= n)
       i1 = n - 1;
-    float smp = s->samples[i0] * (1.0f - frac) + s->samples[i1] * frac;
+    float smp = samples[i0] * (1.0f - frac) + samples[i1] * frac;
     out_l[f] += smp;
     out_r[f] += smp;
 
@@ -218,6 +190,7 @@ const UnitDef unit_sampler = {
     .create = sampler_create,
     .destroy = sampler_destroy,
     .set_data = sampler_set_data,
+    .preload_data = sampler_preload,
     .note_on = sampler_note_on,
     .note_off = sampler_note_off,
     .kill = sampler_kill,
