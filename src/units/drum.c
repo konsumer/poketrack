@@ -34,9 +34,9 @@ static UnitState* drum_create(float sr) {
 }
 static void drum_destroy(UnitState* s) { free(s); }
 
-static void drum_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* p) {
+static void drum_note_on(UnitState* s, float pitch, uint8_t vel, const uint8_t* p) {
   s->type = p[0] < 4 ? p[0] : 3;
-  float pitch_m = powf(2.0f, (note - 60) / 12.0f);
+  float pitch_m = powf(2.0f, (pitch - 60) / 12.0f);
   float decay_t = p2f(p[1], 0.02f, 0.9f);
   s->tone = p2f(p[2], 0.0f, 1.0f);
   float punch = p2f(p[3], 0.8f, 3.0f);

@@ -1046,6 +1046,179 @@ static void test_audio_callback_flushes_denormals(void) {
 #endif
 }
 
+// ARP and MICRO are note modifiers: they sit ahead of the source and rewrite
+// the note stream for the rest of the chain, so the source only ever hears
+// notes the modifier emits. Verified end-to-end through the real engine.
+#define NM_LINES 9
+#define NM_SPL 6000  // one pattern line at 120 BPM, 48kHz
+
+// Configure song as a single-lane, single-track one-note pattern (note 60 held
+// for 8 lines), then render NM_LINES lines and count distinct amplitude bursts
+// — each burst is one note attack that decayed back to silence.
+static void nm_configure(TrackerSong* song, uint8_t vel) {
+  tracker_init(song);
+  song->bpm = 120;
+  song->song_len = 1;
+  song->loop = false;
+  song->patterns[0][0] = 0;
+  Pattern* pat = tracker_pattern(song, 0);
+  pat->len = 16;
+  pat->steps[0][0] = (PatternStep){.note = 60, .velocity = vel, .instrument = 0,
+                                   .fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
+  pat->steps[0][8] = (PatternStep){.note = NOTE_OFF, .fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
+}
+
+static int nm_count_bursts(TrackerSong* song) {
+  static AudioEngine eng;
+  audio_init(&eng, song);
+  audio_play(&eng);
+  enum { BLK = 512 };
+  static float buf[BLK * 2];
+  int bursts = 0;
+  // A note counts when sound returns after a real gap. A plain silent-sample
+  // count would miscount every zero crossing of a tone.
+  uint32_t quiet = UINT32_MAX;
+  for (uint32_t done = 0; done < NM_LINES * NM_SPL; done += BLK) {
+    audio_fill_buffer(&eng, buf, BLK);
+    for (int i = 0; i < BLK * 2; i++) {
+      if (fabsf(buf[i]) > 1e-3f) {
+        if (quiet >= 256)
+          bursts++;
+        quiet = 0;
+      } else if (quiet < UINT32_MAX) {
+        quiet++;
+      }
+    }
+  }
+  audio_shutdown(&eng);
+  return bursts;
+}
+
+// Frequency proxy for a sustained tone: sign changes per second, sampled after
+// the attack has settled. For a sine this is ~2x the pitch in Hz.
+static double nm_zero_cross_rate(TrackerSong* song) {
+  static AudioEngine eng;
+  audio_init(&eng, song);
+  audio_play(&eng);
+  enum { BLK = 512 };
+  static float buf[BLK * 2];
+  const uint32_t skip = AUDIO_SAMPLE_RATE / 3, want = AUDIO_SAMPLE_RATE;
+  int crossings = 0;
+  float prev = 0;
+  bool have = false;
+  for (uint32_t done = 0; done < skip + want; done += BLK) {
+    audio_fill_buffer(&eng, buf, BLK);
+    for (int i = 0; i < BLK; i++) {
+      uint32_t t = done + (uint32_t)i;
+      float v = buf[i * 2];
+      if (t >= skip) {
+        if (have && ((v >= 0.0f) != (prev >= 0.0f)))
+          crossings++;
+        have = true;
+      }
+      prev = v;
+    }
+  }
+  audio_shutdown(&eng);
+  return (double)crossings;
+}
+
+// Total rendered energy over NM_LINES lines.
+static double nm_render_energy(TrackerSong* song) {
+  static AudioEngine eng;
+  audio_init(&eng, song);
+  audio_play(&eng);
+  enum { BLK = 512 };
+  static float buf[BLK * 2];
+  double e = 0;
+  for (uint32_t done = 0; done < NM_LINES * NM_SPL; done += BLK) {
+    audio_fill_buffer(&eng, buf, BLK);
+    for (int i = 0; i < BLK * 2; i++)
+      e += (double)buf[i] * buf[i];
+  }
+  audio_shutdown(&eng);
+  return e;
+}
+
+static void test_note_modifiers(void) {
+  // A plain plucky osc, so each note is one burst that decays before the next.
+  uint8_t pluck[UNIT_MAX_PARAMS] = {0, 0, 0x10, 0, 0, 0x80, 0x80, 0xFF};
+
+  // --- ARP: one held note becomes one note per 1/16 (one pattern line) ---
+  nm_configure(&song_a, 100);
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "arp", 0);
+  tracker_inst_set_slot(&song_a.instruments[0], 1, "osc", 0);
+  memcpy(song_a.instruments[0].chain[1].params, pluck, UNIT_MAX_PARAMS);
+  song_a.instruments[0].chain[0].params[0] = 1;     // ON
+  song_a.instruments[0].chain[0].params[1] = 4;     // RATE = 1/16
+  song_a.instruments[0].chain[0].params[2] = 0;     // MODE = UP
+  song_a.instruments[0].chain[0].params[3] = 0x20;  // GATE ~17%
+  song_a.instruments[0].chain[0].params[4] = 0;     // OCT = 1
+  int arp_bursts = nm_count_bursts(&song_a);
+
+  // The same note without the arp: a single burst.
+  nm_configure(&song_a, 100);
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "osc", 0);
+  memcpy(song_a.instruments[0].chain[0].params, pluck, UNIT_MAX_PARAMS);
+  int plain_bursts = nm_count_bursts(&song_a);
+
+  CHECK(arp_bursts >= 7 && arp_bursts <= 9,
+        "arp: held note produced %d retriggers, want 8 (one per 1/16)", arp_bursts);
+  CHECK(plain_bursts <= 2,
+        "arp control: plain note produced %d bursts, want 1", plain_bursts);
+  CHECK(arp_bursts > plain_bursts,
+        "arp: %d bursts with arp vs %d without — notes are not being subdivided",
+        arp_bursts, plain_bursts);
+
+  // --- MICRO: a tracker note is a step of an N-per-octave scale, so its
+  // range shrinks. Note 72 (C5 in 12-EDO) through a 24-step scale with the
+  // C4 anchor is a tritone above it (F#4), not an octave. ---
+  uint8_t sine[UNIT_MAX_PARAMS] = {0, 0, 0, 0xFF, 0, 0x80, 0x80, 0x30};
+  double zcr[2];
+  for (int mode = 0; mode < 2; mode++) {
+    nm_configure(&song_a, 20);
+    Pattern* pat = tracker_pattern(&song_a, 0);
+    pat->steps[0][0].note = 72;
+    pat->steps[0][8] = (PatternStep){.fx = {TRACKER_EMPTY, TRACKER_EMPTY}};  // hold it
+    tracker_inst_set_slot(&song_a.instruments[0], 0, "micro", 0);
+    tracker_inst_set_slot(&song_a.instruments[0], 1, "osc", 0);
+    memcpy(song_a.instruments[0].chain[1].params, sine, UNIT_MAX_PARAMS);
+    song_a.instruments[0].chain[0].params[0] = 1;   // ON
+    song_a.instruments[0].chain[0].params[1] = mode ? 4 : 0;  // 24 steps vs 12 (bypass)
+    song_a.instruments[0].chain[0].params[2] = 60;  // ROOT = C4
+    zcr[mode] = nm_zero_cross_rate(&song_a);
+  }
+  double ratio = zcr[1] / zcr[0];
+  CHECK(fabs(ratio - 0.70711) < 0.03,
+        "micro: note 72 at 24 steps/octave runs at %.3fx the 12-EDO frequency (%0.f vs "
+        "%0.f Hz) — want 0.707, i.e. a tritone above the anchor, not an octave",
+        ratio, zcr[1], zcr[0]);
+
+  // --- CHORD: one note becomes a triad, so the source runs several voices ---
+  uint8_t pad[UNIT_MAX_PARAMS] = {0, 0, 0, 0xFF, 0, 0x80, 0x80, 0x20};
+  nm_configure(&song_a, 20);
+  pat = tracker_pattern(&song_a, 0);
+  pat->steps[0][8] = (PatternStep){.fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "chord", 0);
+  tracker_inst_set_slot(&song_a.instruments[0], 1, "osc", 0);
+  memcpy(song_a.instruments[0].chain[1].params, pad, UNIT_MAX_PARAMS);
+  song_a.instruments[0].chain[0].params[0] = 1;  // ON
+  song_a.instruments[0].chain[0].params[1] = 0;  // MAJ
+  double chord_e = nm_render_energy(&song_a);
+
+  nm_configure(&song_a, 20);
+  pat = tracker_pattern(&song_a, 0);
+  pat->steps[0][8] = (PatternStep){.fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "osc", 0);
+  memcpy(song_a.instruments[0].chain[0].params, pad, UNIT_MAX_PARAMS);
+  double single_e = nm_render_energy(&song_a);
+
+  CHECK(chord_e > single_e * 2.0,
+        "chord: triad energy %.6g vs single note %.6g — the chord did not reach the "
+        "source as separate voices",
+        chord_e, single_e);
+}
+
 static void test_lfo_sync_is_position_locked(void) {
   const UnitDef* d = unit_find("lfo");
   CHECK(d != NULL, "lfo unit not registered");
@@ -1263,6 +1436,7 @@ int main(void) {
   RUN(test_chopper_repeats_at_tempo_derived_length);
   RUN(test_audio_callback_flushes_denormals);
   RUN(test_idle_track_gate_wakes_on_note);
+  RUN(test_note_modifiers);
   RUN(test_lfo_sync_is_position_locked);
   RUN(test_route_send_bus);
   RUN(test_clap_plugin_pd);

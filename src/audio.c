@@ -218,35 +218,101 @@ static void ensure_preview_states(AudioEngine* eng, uint8_t inst_idx) {
   eng->preview_inst = inst_idx;
 }
 
-// Fire note on/off through a (lane,track)'s unit states. Shared-instance
-// instruments (CLAP) route into the one instance for the whole instrument
-// instead of this track's own copy — the plugin tracks its own voices.
-static void chan_note_on(AudioEngine* eng, int ch, int tr, uint8_t note, uint8_t vel) {
+// ── Note routing ────────────────────────────────────────────────────────────
+//
+// A note event travels down a chain slot by slot. A "note modifier"
+// (UnitDef.note_event: ARPEGGIATOR, MICROTONAL) takes the event over and
+// decides what the units below it see, forwarding them with unit_note_emit();
+// if no modifier consumes it, every source unit receives it. `pitch` is in
+// MIDI note units and may be fractional, so a modifier can address pitches
+// between semitones (sources that only take whole notes round it).
+//
+// g_note_ctx is what unit_note_emit() reads to know where "below" is. It's set
+// around every modifier call and every render() call, so a modifier can emit
+// both while handling an event and over time from render() (the arpeggiator
+// clocks its beat grid there). Stack discipline: note_dispatch/unit_note_emit
+// save and restore it so nested modifiers compose.
+typedef struct {
+  TrackerInstrument* inst;
+  UnitState** states;
+  const UnitDef* const* defs;
+  int slot;  // the unit being called; "below" means slots slot+1..
+} NoteCtx;
+
+static NoteCtx* g_note_ctx = NULL;
+
+// Hand `pitch` to the units at slot >= start: the first note modifier that
+// consumes it wins; otherwise every source unit gets it.
+static void note_dispatch(NoteCtx* ctx, int start, float pitch, uint8_t vel, bool on) {
+  for (int s = start; s < CHAIN_MAX; s++) {
+    if (!ctx->states[s] || !ctx->defs[s] || !ctx->inst->chain[s].enabled)
+      continue;
+    const UnitDef* def = ctx->defs[s];
+    if (!def->note_event)
+      continue;
+    NoteCtx* prev = g_note_ctx;
+    int saved = ctx->slot;
+    ctx->slot = s;
+    g_note_ctx = ctx;
+    bool consumed = def->note_event(ctx->states[s], ctx->inst->chain[s].params, pitch, vel, on);
+    g_note_ctx = prev;
+    ctx->slot = saved;
+    if (consumed)
+      return;
+  }
+  for (int s = start; s < CHAIN_MAX; s++) {
+    if (!ctx->states[s] || !ctx->defs[s] || !ctx->inst->chain[s].enabled)
+      continue;
+    const UnitDef* def = ctx->defs[s];
+    if (!def->is_source)
+      continue;
+    if (on) {
+      if (def->note_on)
+        def->note_on(ctx->states[s], pitch, vel, ctx->inst->chain[s].params);
+    } else if (def->note_off) {
+      def->note_off(ctx->states[s], pitch);
+    }
+  }
+}
+
+void unit_note_emit(float pitch, uint8_t vel, bool on) {
+  if (!g_note_ctx)
+    return;
+  note_dispatch(g_note_ctx, g_note_ctx->slot + 1, pitch, vel, on);
+}
+
+// Fire a note event through a whole chain (used by pattern playback, preview
+// and MIDI input). Shared-instance instruments (CLAP) route into the one
+// instance for the whole instrument instead of a per-track copy.
+static void chain_note(TrackerInstrument* inst, UnitState** states,
+                       const UnitDef* const* defs, float pitch, uint8_t vel, bool on) {
+  NoteCtx ctx = {inst, states, defs, -1};
+  note_dispatch(&ctx, 0, pitch, vel, on);
+}
+
+static void chan_note_on(AudioEngine* eng, int ch, int tr, float pitch, uint8_t vel) {
   uint8_t ii = eng->active_inst[ch][tr];
   if (ii == TRACKER_EMPTY)
     return;
   TrackerInstrument* inst = &eng->song->instruments[ii];
-  bool shared = inst_is_shared(eng, ii);
-  UnitState** states = shared ? eng->shared_states[ii] : eng->chan_states[ch][tr];
-  const UnitDef* const* defs = shared ? eng->shared_defs[ii] : eng->chan_defs[ch][tr];
-  for (int s = 0; s < CHAIN_MAX; s++) {
-    const UnitDef* def = defs[s];
-    if (states[s] && def && def->is_source && def->note_on)
-      def->note_on(states[s], note, vel, inst->chain[s].params);
+  if (inst_is_shared(eng, ii)) {
+    ensure_shared_states(eng, ii);
+    chain_note(inst, eng->shared_states[ii], eng->shared_defs[ii], pitch, vel, true);
+  } else {
+    chain_note(inst, eng->chan_states[ch][tr], eng->chan_defs[ch][tr], pitch, vel, true);
   }
 }
 
-static void chan_note_off(AudioEngine* eng, int ch, int tr, uint8_t note) {
+static void chan_note_off(AudioEngine* eng, int ch, int tr, float pitch) {
   uint8_t ii = eng->active_inst[ch][tr];
   if (ii == TRACKER_EMPTY)
     return;
-  bool shared = inst_is_shared(eng, ii);
-  UnitState** states = shared ? eng->shared_states[ii] : eng->chan_states[ch][tr];
-  const UnitDef* const* defs = shared ? eng->shared_defs[ii] : eng->chan_defs[ch][tr];
-  for (int s = 0; s < CHAIN_MAX; s++) {
-    const UnitDef* def = defs[s];
-    if (states[s] && def && def->is_source && def->note_off)
-      def->note_off(states[s], note);
+  TrackerInstrument* inst = &eng->song->instruments[ii];
+  if (inst_is_shared(eng, ii)) {
+    if (eng->shared_active[ii])
+      chain_note(inst, eng->shared_states[ii], eng->shared_defs[ii], pitch, 0, false);
+  } else {
+    chain_note(inst, eng->chan_states[ch][tr], eng->chan_defs[ch][tr], pitch, 0, false);
   }
 }
 
@@ -304,8 +370,14 @@ static void render_channel(AudioEngine* eng, int ch, int tr, float* out_l, float
     const UnitDef* def = eng->chan_defs[ch][tr][s];
     if (!eng->chan_states[ch][tr][s] || !slot->enabled || !def || def->is_source)
       continue;
+    // A note modifier renders for its side effect (emitting notes from its
+    // beat clock); give unit_note_emit() the chain context it needs.
+    NoteCtx nctx = {inst, eng->chan_states[ch][tr], eng->chan_defs[ch][tr], s};
+    NoteCtx* prev = g_note_ctx;
+    g_note_ctx = &nctx;
     def->render(eng->chan_states[ch][tr][s], slot->params,
                 eng->tmp_l, eng->tmp_r, eng->tmp_l, eng->tmp_r, frames);
+    g_note_ctx = prev;
   }
   g_send_owner = TRACKER_EMPTY;
 
@@ -873,14 +945,7 @@ void audio_preview_note(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
   ensure_preview_states(eng, inst_idx);
   audio_preview_kill(eng);
   TrackerInstrument* inst = &eng->song->instruments[inst_idx];
-  for (int s = 0; s < CHAIN_MAX; s++) {
-    if (!eng->preview_states[s])
-      continue;
-    ChainSlot* slot = &inst->chain[s];
-    const UnitDef* def = unit_find(slot->unit_id);
-    if (def && def->is_source && def->note_on)
-      def->note_on(eng->preview_states[s], note, 100, slot->params);
-  }
+  chain_note(inst, eng->preview_states, eng->preview_defs, (float)note, 100, true);
   AUDIO_UNLOCK(eng);
 }
 
@@ -964,14 +1029,8 @@ void audio_midi_note_on(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
   if (inst_is_shared(eng, inst_idx)) {
     ensure_shared_states(eng, inst_idx);
     TrackerInstrument* inst = &eng->song->instruments[inst_idx];
-    for (int s = 0; s < CHAIN_MAX; s++) {
-      if (!eng->shared_states[inst_idx][s])
-        continue;
-      ChainSlot* slot = &inst->chain[s];
-      const UnitDef* def = eng->shared_defs[inst_idx][s];
-      if (def && def->is_source && def->note_on)
-        def->note_on(eng->shared_states[inst_idx][s], note, 100, slot->params);
-    }
+    chain_note(inst, eng->shared_states[inst_idx], eng->shared_defs[inst_idx],
+               (float)note, 100, true);
     AUDIO_UNLOCK(eng);
     return;
   }
@@ -980,14 +1039,7 @@ void audio_midi_note_on(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
   int v = midi_voice_alloc(eng, inst_idx);
   struct MidiVoice* mv = &eng->midi_voices[v];
   TrackerInstrument* inst = &eng->song->instruments[inst_idx];
-  for (int s = 0; s < CHAIN_MAX; s++) {
-    if (!mv->states[s])
-      continue;
-    ChainSlot* slot = &inst->chain[s];
-    const UnitDef* def = mv->defs[s];
-    if (def && def->is_source && def->note_on)
-      def->note_on(mv->states[s], note, 100, slot->params);
-  }
+  chain_note(inst, mv->states, mv->defs, (float)note, 100, true);
   mv->note = note;
   mv->vstate = 1;  // MV_PLAYING
   mv->birth = eng->midi_voice_clock++;
@@ -997,10 +1049,11 @@ void audio_midi_note_on(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
 void audio_midi_note_off(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
   AUDIO_LOCK(eng);
   if (inst_is_shared(eng, inst_idx)) {
-    if (eng->shared_active[inst_idx])
-      for (int s = 0; s < CHAIN_MAX; s++)
-        if (eng->shared_states[inst_idx][s] && eng->shared_defs[inst_idx][s] && eng->shared_defs[inst_idx][s]->note_off)
-          eng->shared_defs[inst_idx][s]->note_off(eng->shared_states[inst_idx][s], note);
+    if (eng->shared_active[inst_idx]) {
+      TrackerInstrument* inst = &eng->song->instruments[inst_idx];
+      chain_note(inst, eng->shared_states[inst_idx], eng->shared_defs[inst_idx],
+                 (float)note, 0, false);
+    }
     AUDIO_UNLOCK(eng);
     return;
   }
@@ -1008,11 +1061,8 @@ void audio_midi_note_off(AudioEngine* eng, uint8_t inst_idx, uint8_t note) {
     struct MidiVoice* mv = &eng->midi_voices[v];
     if (mv->vstate != 1 || mv->inst_idx != inst_idx || mv->note != note)
       continue;
-    for (int s = 0; s < CHAIN_MAX; s++) {
-      if (!mv->states[s] || !mv->defs[s] || !mv->defs[s]->note_off)
-        continue;
-      mv->defs[s]->note_off(mv->states[s], note);
-    }
+    TrackerInstrument* inst = &eng->song->instruments[inst_idx];
+    chain_note(inst, mv->states, mv->defs, (float)note, 0, false);
     mv->vstate = 2;  // MV_RELEASED
     mv->rel_age = eng->midi_voice_clock++;
   }
@@ -1264,7 +1314,11 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
         const UnitDef* def = unit_find(slot->unit_id);
         if (!def || def->is_source)
           continue;
+        NoteCtx nctx = {inst, eng->preview_states, eng->preview_defs, s};
+        NoteCtx* prev = g_note_ctx;
+        g_note_ctx = &nctx;
         def->render(eng->preview_states[s], slot->params, pl, pr, pl, pr, count);
+        g_note_ctx = prev;
       }
       g_send_owner = TRACKER_EMPTY;
       for (uint32_t f = 0; f < count; f++) {
@@ -1295,7 +1349,11 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
         const UnitDef* def = mv->defs[s];
         if (!def || def->is_source)
           continue;
+        NoteCtx nctx = {inst, mv->states, mv->defs, s};
+        NoteCtx* prev = g_note_ctx;
+        g_note_ctx = &nctx;
         def->render(mv->states[s], inst->chain[s].params, pl, pr, pl, pr, count);
+        g_note_ctx = prev;
       }
       g_send_owner = TRACKER_EMPTY;
       for (uint32_t f = 0; f < count; f++) {
@@ -1357,7 +1415,11 @@ static void render_block(AudioEngine* eng, float* out, uint32_t frames) {
         const UnitDef* def = eng->shared_defs[i][s];
         if (!def || def->is_source)
           continue;
+        NoteCtx nctx = {inst, eng->shared_states[i], eng->shared_defs[i], s};
+        NoteCtx* prev = g_note_ctx;
+        g_note_ctx = &nctx;
         def->render(eng->shared_states[i][s], inst->chain[s].params, pl, pr, pl, pr, count);
+        g_note_ctx = prev;
       }
       g_send_owner = TRACKER_EMPTY;
       g_send_open = true;

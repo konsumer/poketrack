@@ -250,10 +250,12 @@ static void clap_unit_set_data(UnitState* s, const char* data, const char* base_
   }
 }
 
-static void clap_unit_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* p) {
+static void clap_unit_note_on(UnitState* s, float pitch, uint8_t vel, const uint8_t* p) {
   (void)p;
   if (!s->plugin || !s->is_source)
     return;
+  // CLAP note events carry whole keys — round a microtonal pitch.
+  uint8_t note = (uint8_t)lrintf(pitch);
   if (s->active_note >= 0)
     clap_host_note_off(s->plugin, (uint8_t)s->active_note, 0);
   // vel is poketrack's native 0-255 byte (screen_pattern.c defaults a fresh
@@ -266,9 +268,10 @@ static void clap_unit_note_on(UnitState* s, uint8_t note, uint8_t vel, const uin
   s->active_note = note;
 }
 
-static void clap_unit_note_off(UnitState* s, uint8_t note) {
+static void clap_unit_note_off(UnitState* s, float pitch) {
   if (!s->plugin || !s->is_source)
     return;
+  uint8_t note = (uint8_t)lrintf(pitch);
   clap_host_note_off(s->plugin, note, 0);
   if (s->active_note == note)
     s->active_note = -1;

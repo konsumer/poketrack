@@ -29,7 +29,7 @@ typedef struct {
 
 typedef struct {
   bool active;
-  uint8_t note;
+  float pitch;
   float vel;
   float next_grain;
 } GranVoice;
@@ -126,7 +126,7 @@ static void spawn_grain(UnitState* s, GranVoice* v, const uint8_t* p) {
     src_pos = (float)(s->buf_len - 1);
 
   float det = p2f_center(p[3], -12.0f, 12.0f);
-  float note_pitch = powf(2.0f, (v->note - 60 + det) / 12.0f);
+  float note_pitch = powf(2.0f, (v->pitch - 60 + det) / 12.0f);
 
   float grain_ms = p2f(p[0], 5.0f, 500.0f);
   float grain_samp = grain_ms * 0.001f * s->sample_rate;
@@ -141,7 +141,7 @@ static void spawn_grain(UnitState* s, GranVoice* v, const uint8_t* p) {
   };
 }
 
-static void gran_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* p) {
+static void gran_note_on(UnitState* s, float pitch, uint8_t vel, const uint8_t* p) {
   GranVoice* v = NULL;
   for (int i = 0; i < GRAN_POLY; i++)
     if (!s->voices[i].active) {
@@ -150,13 +150,13 @@ static void gran_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t*
     }
   if (!v)
     v = &s->voices[0];
-  *v = (GranVoice){.active = true, .note = note, .vel = vel / 127.0f, .next_grain = 0};
+  *v = (GranVoice){.active = true, .pitch = pitch, .vel = vel / 127.0f, .next_grain = 0};
   spawn_grain(s, v, p);
 }
 
-static void gran_note_off(UnitState* s, uint8_t note) {
+static void gran_note_off(UnitState* s, float pitch) {
   for (int i = 0; i < GRAN_POLY; i++)
-    if (s->voices[i].active && s->voices[i].note == note)
+    if (s->voices[i].active && fabsf(s->voices[i].pitch - pitch) < 0.001f)
       s->voices[i].active = false;
 }
 

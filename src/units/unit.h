@@ -95,10 +95,29 @@ typedef struct {
   // the moment it plays its first note.
   void (*preload_data)(const char* data, const char* base_dir);
 
-  // All three are optional (NULL = no-op). Sources need note_on/note_off;
+  // All four are optional (NULL = no-op). Sources need note_on/note_off;
   // effects with internal state (delay lines, envelopes) should provide kill.
-  void (*note_on)(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* params);
-  void (*note_off)(UnitState* s, uint8_t note);
+
+  // `pitch` is in MIDI note units and may be fractional — a note modifier
+  // (see note_event) can address pitches between semitones, which is what
+  // makes MICROTONAL audible. Sources that only understand whole notes
+  // (soundfonts, MIDI out, CLAP) round; synth sources use it directly.
+  void (*note_on)(UnitState* s, float pitch, uint8_t vel, const uint8_t* params);
+  void (*note_off)(UnitState* s, float pitch);
+
+  // Note modifier — an effect unit that rewrites the note stream for every
+  // unit BELOW it in the chain. Place it ahead of the source. The engine
+  // calls this for each note-on/off instead of handing the note straight to
+  // the sources; if it returns true the event is consumed and the engine
+  // stops walking (the unit is responsible for forwarding whatever it wants
+  // downstream via unit_note_emit()). Returning false passes the original
+  // event through untouched, which is what an OFF switch should do.
+  //
+  // A modifier may also emit notes over time from its render() callback (the
+  // ARPEGGIATOR clocks its beat grid there); renders_for_side_effect must be
+  // true for that to keep running on a silent (but still clocked) chain.
+  bool (*note_event)(UnitState* s, const uint8_t* params, float pitch, uint8_t vel, bool on);
+
   void (*kill)(UnitState* s);
 
   // Sources: in_l/in_r are NULL; ADD output to out_l/out_r (don't clear first).
@@ -134,6 +153,14 @@ void unit_dsp_init(void);
 // global index across an instrument's chain, resolving dynamic params
 // (CLAP mappings, MIDI CC slots) — for modulation units' render callbacks.
 void audio_mod_set_param(uint8_t inst_idx, uint8_t global_param, uint8_t val);
+
+// Implemented by the audio engine (audio.c): forward a note event to the
+// units below the note modifier currently being called — the next note
+// modifier if there is one, otherwise every source unit further down. Only
+// valid from inside a note_event callback or the render() callback of the
+// chain that is currently being dispatched/rendered; the engine tracks the
+// chain context. `pitch` is in MIDI note units (fractional allowed).
+void unit_note_emit(float pitch, uint8_t vel, bool on);
 
 // Implemented by the audio engine (audio.c): add `frames` of stereo audio,
 // scaled by gain, into instrument dest_inst's send bus — for routing units'

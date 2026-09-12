@@ -9,10 +9,17 @@ What's included:
 
   beats/     - drum pattern kits (breaks, house, hip-hop, DnB, and more),
                organized by genre, ready to drop into the pattern editor.
-  *.rpt      - full demo songs (hello.rpt, muscle-pigeon.rpt, rickroll.rpt)
-               you can load and pick apart to see how a finished track is put
-               together. muscle-pigeon.md and rickroll.md walk through how
-               each one is arranged.
+  *.rpt      - full demo songs (hello.rpt, muscle-pigeon.rpt, rickroll.rpt,
+               sarniezz.rpt, canon.rpt) you can load and pick apart to see how
+               a finished track is put together. muscle-pigeon.md, rickroll.md,
+               sarniezz.md and canon.md walk through how each one is arranged.
+               canon.rpt is an ARPEGGIATOR demo: CHORD -> ARP -> OSC arpeggiates
+               Pachelbel's Canon progression over a bass line and drums.
+               sarniezz.rpt is a bass-and-drums microtonal riff: one
+               MICRO -> OSC -> FILTER bass instrument plays four loop-pedal
+               layers of the riff, with MICRO treating the note grid as a
+               24-steps-per-octave scale so the part can be notated in quarter
+               tones. Drums are the GM soundfont.
   *.sf2      - a General MIDI soundfont (microgm.sf2) for the SF2 instrument
                unit.
   themes/    - alternate UI color themes (.ptt), including converted LGPT

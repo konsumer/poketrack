@@ -27,6 +27,9 @@ extern const UnitDef unit_route;
 extern const UnitDef unit_chopper;
 extern const UnitDef unit_midi;
 extern const UnitDef unit_lfo;
+extern const UnitDef unit_arp;
+extern const UnitDef unit_microtonal;
+extern const UnitDef unit_chord;
 
 const UnitDef* unit_find(const char* id);
 void unit_list(const UnitDef** out, int* count);

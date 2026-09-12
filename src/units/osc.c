@@ -17,7 +17,7 @@
 
 typedef struct {
   bool active;
-  uint8_t note;
+  float pitch;
   float freq;
   float phase;
   float env_level, env_time;
@@ -64,7 +64,7 @@ static UnitState* osc_create(float sr) {
 }
 static void osc_destroy(UnitState* s) { free(s); }
 
-static void osc_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* p) {
+static void osc_note_on(UnitState* s, float pitch, uint8_t vel, const uint8_t* p) {
   OscVoice* v = NULL;
   for (int i = 0; i < OSC_POLY; i++)
     if (!s->voices[i].active) {
@@ -76,17 +76,17 @@ static void osc_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* 
   float det = p2f_center(p[5], -12.0f, 12.0f);
   *v = (OscVoice){
       .active = true,
-      .note = note,
+      .pitch = pitch,
       .vel = vel / 127.0f,
-      .freq = 440.0f * powf(2.0f, (note - 69 + det) / 12.0f),
-      .noise_seed = 12345u + note,
+      .freq = 440.0f * powf(2.0f, (pitch - 69 + det) / 12.0f),
+      .noise_seed = 12345u + (uint32_t)(pitch < 0 ? 0 : pitch),
   };
 }
 
-static void osc_note_off(UnitState* s, uint8_t note) {
+static void osc_note_off(UnitState* s, float pitch) {
   for (int i = 0; i < OSC_POLY; i++) {
     OscVoice* v = &s->voices[i];
-    if (v->active && v->note == note && v->env_stage < 3) {
+    if (v->active && fabsf(v->pitch - pitch) < 0.001f && v->env_stage < 3) {
       v->env_stage = 3;
       v->env_time = 0;
     }

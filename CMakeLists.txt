@@ -157,6 +157,9 @@ set(SOURCES
     src/units/ducker.c
     src/units/route.c
     src/units/lfo.c
+    src/units/arp.c
+    src/units/microtonal.c
+    src/units/chord.c
     src/units/unit_registry.c
 )
 

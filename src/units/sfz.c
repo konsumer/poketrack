@@ -60,8 +60,9 @@ typedef enum { SFZ_ENV_ATTACK,
 
 typedef struct {
   int region_idx;     // -1 = inactive
-  uint8_t note;       // original note (for note_off matching)
-  uint8_t play_note;  // TRAN-translated note (for region select + pitch)
+  float pitch;        // original pitch (for note_off matching; may be fractional)
+  uint8_t play_note;  // TRAN-translated note (for region select)
+  float play_pitch;   // TRAN-translated pitch in semitones (for playback rate)
   float phase;
   float vel_gain;  // velocity → amplitude, post amp_veltrack
   float env;       // current envelope gain [0..1]
@@ -772,9 +773,16 @@ static void sfz_set_data(UnitState* s, const char* data, const char* base_dir) {
     s->voices[i].region_idx = -1;
 }
 
-static void sfz_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* p) {
+static void sfz_note_on(UnitState* s, float pitch, uint8_t vel, const uint8_t* p) {
   if (!s->shared || s->shared->num_regions == 0)
     return;
+  // Region selection needs a whole key; a microtonal pitch rounds to the
+  // nearest one, but the fractional part still drives the playback rate below.
+  int key = (int)lrintf(pitch);
+  if (key < 0)
+    key = 0;
+  if (key > 127)
+    key = 127;
 
   // P2 TRAN: integer semitone translation of the incoming note. This shifts which
   // region/key is selected (e.g. retarget a drum pattern onto a kit mapped an
@@ -782,7 +790,7 @@ static void sfz_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* 
   // note is kept for note_off matching (note_off isn't passed params).
   // 1 LSB = 1 semitone, 0x80 = center (0x00=-128 .. 0xFF=+127).
   int trans = (int)p[2] - 128;
-  int tnote = (int)note + trans;
+  int tnote = key + trans;
   if (tnote < 0)
     tnote = 0;
   if (tnote > 127)
@@ -823,8 +831,9 @@ static void sfz_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* 
 
     SfzVoice* v = &s->voices[vi];
     v->region_idx = ri;
-    v->note = note;
+    v->pitch = pitch;
     v->play_note = pnote;
+    v->play_pitch = pitch + trans;
     v->phase = (float)r->offset;  // slice start, for regions sharing one sample file
     v->vel_gain = vgain;
     v->env = 0.0f;
@@ -835,10 +844,10 @@ static void sfz_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* 
   }
 }
 
-static void sfz_note_off(UnitState* s, uint8_t note) {
+static void sfz_note_off(UnitState* s, float pitch) {
   for (int i = 0; i < SFZ_MAX_VOICES; i++) {
     SfzVoice* v = &s->voices[i];
-    if (v->region_idx >= 0 && v->note == note && !v->releasing) {
+    if (v->region_idx >= 0 && fabsf(v->pitch - pitch) < 0.001f && !v->releasing) {
       v->releasing = true;
     }
   }
@@ -879,8 +888,8 @@ static void sfz_render(UnitState* s, const uint8_t* p,
     float rpan_r = (r->pan >= 0.0f) ? 1.0f : 1.0f + r->pan;
     float rvol = powf(10.0f, r->volume_db / 20.0f);
 
-    // Recompute rate with global fine tune (TRAN already baked into v->play_note)
-    float pitch_ratio = powf(2.0f, (v->play_note - r->pitch_keycenter + r->tune + tune) / 12.0f);
+    // Recompute rate with global fine tune (TRAN already baked into v->play_pitch)
+    float pitch_ratio = powf(2.0f, (v->play_pitch - r->pitch_keycenter + r->tune + tune) / 12.0f);
     float rate = pitch_ratio * ((float)r->wav_sr / s->engine_sr);
 
     // Playable slice bounds — offset/end let many regions share one sample file

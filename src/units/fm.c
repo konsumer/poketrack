@@ -23,7 +23,7 @@ static const float fm_ratios[] = {0.25f, 0.5f, 1.0f, 1.5f, 2.0f, 3.0f,
 
 typedef struct {
   bool active;
-  uint8_t note;
+  float pitch;
   float car_freq, mod_freq;
   float car_phase, mod_phase;
   float mod_prev;
@@ -49,7 +49,7 @@ static UnitState* fm_create(float sr) {
 }
 static void fm_destroy(UnitState* s) { free(s); }
 
-static void fm_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* p) {
+static void fm_note_on(UnitState* s, float pitch, uint8_t vel, const uint8_t* p) {
   FMVoice* v = NULL;
   for (int i = 0; i < FM_POLY; i++)
     if (!s->voices[i].active) {
@@ -62,21 +62,21 @@ static void fm_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* p
   int ri = (int)(p[0] / 255.0f * (FM_RATIO_COUNT - 1) + 0.5f);
   if (ri >= FM_RATIO_COUNT)
     ri = FM_RATIO_COUNT - 1;
-  float base = 440.0f * powf(2.0f, (note - 69) / 12.0f);
+  float base = 440.0f * powf(2.0f, (pitch - 69) / 12.0f);
 
   *v = (FMVoice){
       .active = true,
-      .note = note,
+      .pitch = pitch,
       .vel = vel / 127.0f,
       .car_freq = base,
       .mod_freq = base * fm_ratios[ri],
   };
 }
 
-static void fm_note_off(UnitState* s, uint8_t note) {
+static void fm_note_off(UnitState* s, float pitch) {
   for (int i = 0; i < FM_POLY; i++) {
     FMVoice* v = &s->voices[i];
-    if (v->active && v->note == note && v->env_stage < 3) {
+    if (v->active && fabsf(v->pitch - pitch) < 0.001f && v->env_stage < 3) {
       v->env_stage = 3;
       v->env_time = 0;
     }

@@ -163,9 +163,11 @@ static void midi_sync_to_data(UnitState* s, char* buf, size_t sz) {
 
 // ---- note_on / note_off / kill ----
 
-static void midi_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* params) {
+static void midi_note_on(UnitState* s, float pitch, uint8_t vel, const uint8_t* params) {
   if (!s->out)
     return;
+  // MIDI carries whole note numbers — a microtonal pitch rounds.
+  uint8_t note = (uint8_t)lrintf(pitch);
   uint8_t ch = params[0] & 0x0F;
 
   if (s->note_active) {
@@ -186,9 +188,10 @@ static void midi_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t*
   s->note_active = true;
 }
 
-static void midi_note_off(UnitState* s, uint8_t note) {
+static void midi_note_off(UnitState* s, float pitch) {
   if (!s->out || !s->note_active)
     return;
+  uint8_t note = (uint8_t)lrintf(pitch);
   uint8_t off[3] = {(uint8_t)(0x80 | s->last_channel), note, 0};
   midi_out_send(s->out, off, 3);
   if (s->last_note == note)

@@ -125,6 +125,8 @@ Sends MIDI note and CC data to an external device or port. Use the DATA picker t
 
 Effects process audio from the slot(s) above them in the chain.
 
+Three effects — [ARP](#arp), [MICRO](#micro) and [CHORD](#chord) — are **note modifiers** instead: they rewrite the incoming note stream for the units below them, so put them at the very top of the chain, ahead of the source. They compose, in any order: CHORD → ARP arpeggiates a triad, MICRO → ARP re-tunes each note before it is arpeggiated, and so on.
+
 ### DELAY
 
 Tape-style delay with stereo spread.
@@ -321,3 +323,51 @@ Modulates a parameter on any instrument every render block.
 | DPTH | 00–FF | Modulation depth added/subtracted from center |
 | ON | Off / On | Enable/disable |
 | SYNC | FREE / 4/1 … 1/32 | Lock the cycle to a note division of the song tempo instead of RATE |
+
+### ARP
+
+Arpeggiator, and a note modifier (put it ahead of the source). It collects every note currently held and replays them as a running arpeggio, one note per RATE, locked to the song tempo. A single held note just retriggers at that rate (raise OCT for octave jumps); put a [CHORD](#chord) unit above it — a tracker track is monophonic, so that is what gives it more than one note to cycle — and it walks the chord. Live MIDI into a shared-instance instrument works too.
+
+The step comes from the shared song position (the same source as the tempo-synced LFO), so every copy of the unit in a multi-track song agrees on where the beat is.
+
+| Param | Range | Notes |
+|-------|-------|-------|
+| ON | Off / On | Off passes notes through untouched |
+| RATE | 1/1 … 1/32 | Step length, a division of a whole note — `1/16` is one pattern line |
+| MODE | UP / DOWN / UPDN / RAND | Order to walk the held notes; UPDN ping-pongs |
+| GATE | 5%–100% | Note length as a fraction of the step; shorter leaves gaps |
+| OCT | 1–4 | How many octaves the pattern spans |
+
+### MICRO
+
+Microtonal scaler and a note modifier (put it ahead of the source). A tracker note is treated as **a step of a scale**, not a semitone:
+
+```
+pitch = ROOT + (note - ROOT) * 12 / STEPS
+```
+
+With `STEPS = 24` each written note is a quarter tone, so note 61 is 50 cents above note 60 and note 72 is a tritone above the `ROOT`, not an octave. You trade octave range for resolution — the note field's ten-odd octaves cover only five — which is how you address pitches *between* the twelve western notes without the MIDI "note plus pitch bend" trick.
+
+`ROOT` is the one note that keeps its written pitch; pick it as the riff's tonic so the part stays in its register. `STEPS = 12` is a passthrough.
+
+| Param | Range | Notes |
+|-------|-------|-------|
+| ON | Off / On | Off passes notes through untouched |
+| STEPS | 12 / 17 / 19 / 22 / 24 / 31 / 36 / 48 / 53 / 72 / 96 | Notes per octave — 12 is bypass, higher is finer |
+| ROOT | 0–127 | The note that plays its written pitch (anchor) |
+
+Sources that only take whole note numbers (SF2, SFZ region select, MIDI out, CLAP) round the result to the nearest key and lose the fine step; OSC, FM, DRUM, GRAN, SAMPLER and SFZ playback use the exact pitch.
+
+### CHORD
+
+Turns one note into a chord, and a note modifier (put it ahead of the source). A tracker track is monophonic — each note releases the last — so this is what lets an [ARP](#arp) below it cycle a real chord instead of retriggering a single note. Chain `CHORD → ARP` for an arpeggio, or `CHORD → OSC` for a straight stab.
+
+`INV` lifts that many of the lowest chord tones up an octave, which is how you get inversions and smoother arpeggio lines out of one shape.
+
+| Param | Range | Notes |
+|-------|-------|-------|
+| ON | Off / On | Off passes notes through untouched |
+| TYPE | MAJ / MIN / DOM7 / MIN7 / MAJ7 / SUS4 / DIM / AUG / P5 / OCT | Chord shape |
+| INV | 0–3 | Number of chord tones lifted an octave |
+
+The chord quality is a chain param, so automate it per step from the pattern's FX column to walk a progression with one instrument — that is exactly what [the CANON example](../../examples/canon.md) does.

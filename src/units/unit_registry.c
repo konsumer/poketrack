@@ -37,6 +37,9 @@ static const UnitDef* REGISTRY[] = {
     &unit_route,
     &unit_midi,
     &unit_lfo,
+    &unit_arp,
+    &unit_microtonal,
+    &unit_chord,
     NULL,
 };
 

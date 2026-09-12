@@ -26,7 +26,6 @@ struct UnitState {
   float rate;     // playback rate (samples per engine sample)
   int direction;  // +1 or -1 (for ping-pong)
   bool playing;
-  uint8_t last_note;
 
   float engine_sr;
 };
@@ -93,22 +92,21 @@ static void sampler_set_data(UnitState* s, const char* data, const char* base_di
   s->wav_sr = wav_sr;
 }
 
-static void sampler_note_on(UnitState* s, uint8_t note, uint8_t vel, const uint8_t* p) {
+static void sampler_note_on(UnitState* s, float pitch, uint8_t vel, const uint8_t* p) {
   (void)vel;
   if (!s->samples || s->num_samples == 0)
     return;
 
   float tune_semi = p2f_center(p[3], -12.0f, 12.0f);
-  float pitch_ratio = powf(2.0f, (note + tune_semi - 60.0f) / 12.0f);
+  float pitch_ratio = powf(2.0f, (pitch + tune_semi - 60.0f) / 12.0f);
   s->rate = pitch_ratio * ((float)s->wav_sr / s->engine_sr);
   s->phase = (p[4] / 255.0f) * (float)(s->num_samples - 1);
   s->direction = 1;
   s->playing = true;
-  s->last_note = note;
 }
 
-static void sampler_note_off(UnitState* s, uint8_t note) {
-  (void)note;
+static void sampler_note_off(UnitState* s, float pitch) {
+  (void)pitch;
   // Only stop if not looping
   // We don't have params here; kill for non-looping handled in render
   // by checking loop mode. For simplicity, note_off just sets a flag
