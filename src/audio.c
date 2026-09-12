@@ -778,6 +778,13 @@ void audio_init(AudioEngine* eng, TrackerSong* song) {
   memset(eng->active_inst, TRACKER_EMPTY, sizeof(eng->active_inst));
   eng->preview_inst = TRACKER_EMPTY;
   eng->cue_row = -1;
+  // Mark the MIDI voices empty the same way. They're calloc'd, so inst_idx
+  // would otherwise read as instrument 0 while vstate is still "free" — and
+  // midi_voice_alloc() only builds the chain when the instrument changed, so
+  // live input to instrument 0 was silent until some other instrument had
+  // been played through the voice pool first.
+  for (int v = 0; v < 8; v++)
+    eng->midi_voices[v].inst_idx = TRACKER_EMPTY;
 }
 
 // Destroy all live states for an instrument — call before mutating its chain slots

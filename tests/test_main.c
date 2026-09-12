@@ -1123,6 +1123,58 @@ static double nm_zero_cross_rate(TrackerSong* song) {
   return (double)crossings;
 }
 
+// Hold one live-MIDI note (no transport running) and render: counts amplitude
+// bursts and total energy. Live input and preview share the note pipeline with
+// pattern playback, so this exercises the modifiers on that path.
+static void nm_midi_run(TrackerSong* song, uint8_t inst, uint8_t note,
+                        int* bursts, double* energy) {
+  static AudioEngine eng;
+  audio_init(&eng, song);
+  audio_midi_note_on(&eng, inst, note);
+  enum { BLK = 512 };
+  static float buf[BLK * 2];
+  *bursts = 0;
+  *energy = 0;
+  uint32_t quiet = UINT32_MAX;
+  for (uint32_t done = 0; done < NM_LINES * NM_SPL; done += BLK) {
+    audio_fill_buffer(&eng, buf, BLK);
+    for (int i = 0; i < BLK * 2; i++) {
+      if (fabsf(buf[i]) > 1e-3f) {
+        if (quiet >= 256)
+          (*bursts)++;
+        quiet = 0;
+      } else if (quiet < UINT32_MAX) {
+        quiet++;
+      }
+      *energy += (double)buf[i] * buf[i];
+    }
+  }
+  audio_midi_kill_all(&eng);
+  audio_shutdown(&eng);
+}
+
+// Energy in the last `tail` samples of NM_LINES lines (used to check a note
+// really stopped, not just decayed).
+static double nm_tail_energy(TrackerSong* song, uint32_t tail) {
+  static AudioEngine eng;
+  audio_init(&eng, song);
+  audio_play(&eng);
+  enum { BLK = 512 };
+  static float buf[BLK * 2];
+  const uint32_t total = NM_LINES * NM_SPL;
+  double e = 0;
+  for (uint32_t done = 0; done < total; done += BLK) {
+    audio_fill_buffer(&eng, buf, BLK);
+    for (int i = 0; i < BLK; i++) {
+      uint32_t t = done + (uint32_t)i;
+      if (t >= total - tail)
+        e += (double)buf[i * 2] * buf[i * 2];
+    }
+  }
+  audio_shutdown(&eng);
+  return e;
+}
+
 // Total rendered energy over NM_LINES lines.
 static double nm_render_energy(TrackerSong* song) {
   static AudioEngine eng;
@@ -1197,8 +1249,8 @@ static void test_note_modifiers(void) {
   // --- CHORD: one note becomes a triad, so the source runs several voices ---
   uint8_t pad[UNIT_MAX_PARAMS] = {0, 0, 0, 0xFF, 0, 0x80, 0x80, 0x20};
   nm_configure(&song_a, 20);
-  pat = tracker_pattern(&song_a, 0);
-  pat->steps[0][8] = (PatternStep){.fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
+  Pattern* cpat = tracker_pattern(&song_a, 0);
+  cpat->steps[0][8] = (PatternStep){.fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
   tracker_inst_set_slot(&song_a.instruments[0], 0, "chord", 0);
   tracker_inst_set_slot(&song_a.instruments[0], 1, "osc", 0);
   memcpy(song_a.instruments[0].chain[1].params, pad, UNIT_MAX_PARAMS);
@@ -1207,8 +1259,8 @@ static void test_note_modifiers(void) {
   double chord_e = nm_render_energy(&song_a);
 
   nm_configure(&song_a, 20);
-  pat = tracker_pattern(&song_a, 0);
-  pat->steps[0][8] = (PatternStep){.fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
+  cpat = tracker_pattern(&song_a, 0);
+  cpat->steps[0][8] = (PatternStep){.fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
   tracker_inst_set_slot(&song_a.instruments[0], 0, "osc", 0);
   memcpy(song_a.instruments[0].chain[0].params, pad, UNIT_MAX_PARAMS);
   double single_e = nm_render_energy(&song_a);
@@ -1216,6 +1268,98 @@ static void test_note_modifiers(void) {
   CHECK(chord_e > single_e * 2.0,
         "chord: triad energy %.6g vs single note %.6g — the chord did not reach the "
         "source as separate voices",
+        chord_e, single_e);
+
+  // --- BEND: 00/80/FF are -1/0/+1 semitones, MIDI-wheel style ---
+  uint8_t held[UNIT_MAX_PARAMS] = {0, 0, 0, 0xFF, 0, 0x80, 0x80, 0x30};
+  const uint8_t bends[3] = {0x80, 0x00, 0xFF};  // centre, down a semitone, up
+  double bz[3];
+  for (int m = 0; m < 3; m++) {
+    nm_configure(&song_a, 20);
+    Pattern* bp = tracker_pattern(&song_a, 0);
+    bp->steps[0][8] = (PatternStep){.fx = {TRACKER_EMPTY, TRACKER_EMPTY}};  // hold
+    tracker_inst_set_slot(&song_a.instruments[0], 0, "bend", 0);
+    tracker_inst_set_slot(&song_a.instruments[0], 1, "osc", 0);
+    memcpy(song_a.instruments[0].chain[1].params, held, UNIT_MAX_PARAMS);
+    song_a.instruments[0].chain[0].params[0] = bends[m];
+    bz[m] = nm_zero_cross_rate(&song_a);
+  }
+  CHECK(fabs(bz[1] / bz[0] - 0.94387) < 0.02,
+        "bend: BEND=00 should be a semitone down (%.3fx centre)", bz[1] / bz[0]);
+  CHECK(fabs(bz[2] / bz[0] - 1.05946) < 0.02,
+        "bend: BEND=FF should be a semitone up (%.3fx centre)", bz[2] / bz[0]);
+
+  // Moving BEND while a note is held must not strand it: the note-off has to
+  // release the pitch it started on, not the one BEND points at now.
+  nm_configure(&song_a, 20);
+  Pattern* bp = tracker_pattern(&song_a, 0);
+  bp->steps[0][0] = (PatternStep){.note = 60, .velocity = 20, .instrument = 0,
+                                  .fx = {0, TRACKER_EMPTY}, .fxv = {0x00, 0}};  // bend down
+  bp->steps[0][4] = (PatternStep){.note = NOTE_EMPTY, .instrument = 0,
+                                  .fx = {0, TRACKER_EMPTY}, .fxv = {0xFF, 0}};  // bend up
+  bp->steps[0][8] = (PatternStep){.note = NOTE_OFF, .fx = {TRACKER_EMPTY, TRACKER_EMPTY}};
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "bend", 0);
+  tracker_inst_set_slot(&song_a.instruments[0], 1, "osc", 0);
+  memcpy(song_a.instruments[0].chain[1].params, held, UNIT_MAX_PARAMS);
+  double tail = nm_tail_energy(&song_a, 4000);  // well after the note-off
+  CHECK(tail < 0.05,
+        "bend: note kept ringing after note-off (tail energy %.6g) — the release "
+        "used the moved BEND instead of the one the note started with",
+        tail);
+}
+
+// A key press on a MIDI keyboard runs through the same CHORD/ARP/MICRO note
+// modifiers as pattern playback — checked here with the transport stopped,
+// which is also how the UI preview behaves.
+static void test_midi_note_modifiers(void) {
+  uint8_t pluck[UNIT_MAX_PARAMS] = {0, 0, 0x10, 0, 0, 0x80, 0x80, 0xFF};
+  int bursts;
+  double energy;
+
+  // One held key through ARP: retriggers on the arp grid.
+  nm_configure(&song_a, 100);
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "arp", 0);
+  tracker_inst_set_slot(&song_a.instruments[0], 1, "osc", 0);
+  memcpy(song_a.instruments[0].chain[1].params, pluck, UNIT_MAX_PARAMS);
+  song_a.instruments[0].chain[0].params[0] = 1;     // ON
+  song_a.instruments[0].chain[0].params[1] = 4;     // RATE = 1/16
+  song_a.instruments[0].chain[0].params[2] = 0;     // UP
+  song_a.instruments[0].chain[0].params[3] = 0x20;  // GATE short
+  song_a.instruments[0].chain[0].params[4] = 0;     // OCT 1
+  nm_midi_run(&song_a, 0, 60, &bursts, &energy);
+  int arp_bursts = bursts;
+
+  // The same key with no arp: a single burst.
+  nm_configure(&song_a, 100);
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "osc", 0);
+  memcpy(song_a.instruments[0].chain[0].params, pluck, UNIT_MAX_PARAMS);
+  nm_midi_run(&song_a, 0, 60, &bursts, &energy);
+  int plain_bursts = bursts;
+
+  CHECK(arp_bursts >= 7 && arp_bursts <= 9,
+        "midi arp: one held key produced %d retriggers, want 8 (one per 1/16)", arp_bursts);
+  CHECK(plain_bursts <= 2,
+        "midi arp control: %d bursts with no arp, want 1", plain_bursts);
+
+  // One held key through CHORD: a triad, so more voices than a single note.
+  uint8_t pad[UNIT_MAX_PARAMS] = {0, 0, 0, 0xFF, 0, 0x80, 0x80, 0x20};
+  nm_configure(&song_a, 20);
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "chord", 0);
+  tracker_inst_set_slot(&song_a.instruments[0], 1, "osc", 0);
+  memcpy(song_a.instruments[0].chain[1].params, pad, UNIT_MAX_PARAMS);
+  song_a.instruments[0].chain[0].params[0] = 1;  // ON
+  song_a.instruments[0].chain[0].params[1] = 0;  // MAJ
+  nm_midi_run(&song_a, 0, 60, &bursts, &energy);
+  double chord_e = energy;
+
+  nm_configure(&song_a, 20);
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "osc", 0);
+  memcpy(song_a.instruments[0].chain[0].params, pad, UNIT_MAX_PARAMS);
+  nm_midi_run(&song_a, 0, 60, &bursts, &energy);
+  double single_e = energy;
+
+  CHECK(chord_e > single_e * 2.0,
+        "midi chord: triad energy %.6g vs single %.6g — CHORD not applied to MIDI input",
         chord_e, single_e);
 }
 
@@ -1437,6 +1581,7 @@ int main(void) {
   RUN(test_audio_callback_flushes_denormals);
   RUN(test_idle_track_gate_wakes_on_note);
   RUN(test_note_modifiers);
+  RUN(test_midi_note_modifiers);
   RUN(test_lfo_sync_is_position_locked);
   RUN(test_route_send_bus);
   RUN(test_clap_plugin_pd);

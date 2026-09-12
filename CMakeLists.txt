@@ -160,6 +160,7 @@ set(SOURCES
     src/units/arp.c
     src/units/microtonal.c
     src/units/chord.c
+    src/units/pitchbend.c
     src/units/unit_registry.c
 )
 
@@ -171,6 +172,22 @@ else()
 endif()
 
 add_executable(${PROJECT_NAME} ${SOURCES})
+
+# App icon. macOS takes the .icns from the bundle's Resources (the plist's
+# CFBundleIconFile names it); Windows embeds the .ico in the .exe via a
+# resource script. Linux gets it at runtime — src/appicon_png.h is embedded
+# and pushed with SetWindowIcon() (see main.c).
+if(APPLE AND NOT EMSCRIPTEN)
+    set(APP_ICON_MACOS "${CMAKE_SOURCE_DIR}/art/appicon.icns")
+    set_source_files_properties(${APP_ICON_MACOS} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+    target_sources(${PROJECT_NAME} PRIVATE ${APP_ICON_MACOS})
+elseif(WIN32)
+    # Ninja/Makefile generators need the RC language enabled explicitly to
+    # compile a .rc (Visual Studio picks it up on its own).
+    enable_language(RC)
+    configure_file("${CMAKE_SOURCE_DIR}/art/appicon.rc.in" "${CMAKE_BINARY_DIR}/appicon.rc" @ONLY)
+    target_sources(${PROJECT_NAME} PRIVATE "${CMAKE_BINARY_DIR}/appicon.rc")
+endif()
 
 option(FORCE_GAMEPAD_ICONS "Always render gamepad-style button icons, even with no controller connected (for testing icon layout)" OFF)
 if(FORCE_GAMEPAD_ICONS)
@@ -250,6 +267,7 @@ else()
             MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
             MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
             MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/Info.plist.in"
+            MACOSX_BUNDLE_ICON_FILE "appicon.icns"
         )
     endif()
 

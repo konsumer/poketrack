@@ -125,7 +125,7 @@ Sends MIDI note and CC data to an external device or port. Use the DATA picker t
 
 Effects process audio from the slot(s) above them in the chain.
 
-Three effects — [ARP](#arp), [MICRO](#micro) and [CHORD](#chord) — are **note modifiers** instead: they rewrite the incoming note stream for the units below them, so put them at the very top of the chain, ahead of the source. They compose, in any order: CHORD → ARP arpeggiates a triad, MICRO → ARP re-tunes each note before it is arpeggiated, and so on.
+Four effects — [ARP](#arp), [MICRO](#micro), [CHORD](#chord) and [BEND](#bend) — are **note modifiers** instead: they rewrite the incoming note stream for the units below them, so put them at the very top of the chain, ahead of the source. They compose, in any order: CHORD → ARP arpeggiates a triad, MICRO → BEND re-tunes and then bends, and so on.
 
 ### DELAY
 
@@ -326,9 +326,11 @@ Modulates a parameter on any instrument every render block.
 
 ### ARP
 
-Arpeggiator, and a note modifier (put it ahead of the source). It collects every note currently held and replays them as a running arpeggio, one note per RATE, locked to the song tempo. A single held note just retriggers at that rate (raise OCT for octave jumps); put a [CHORD](#chord) unit above it — a tracker track is monophonic, so that is what gives it more than one note to cycle — and it walks the chord. Live MIDI into a shared-instance instrument works too.
+Arpeggiator, and a note modifier (put it ahead of the source). It collects every note currently held and replays them as a running arpeggio, one note per RATE, locked to the song tempo. A single held note just retriggers at that rate (raise OCT for octave jumps); put a [CHORD](#chord) unit above it — a tracker track is monophonic, so that is what gives it more than one note to cycle — and it walks the chord.
 
-The step comes from the shared song position (the same source as the tempo-synced LFO), so every copy of the unit in a multi-track song agrees on where the beat is.
+The step comes from the shared song position (the same source as the tempo-synced LFO), so every copy of the unit in a multi-track song agrees on where the beat is. It runs whether the transport is playing or not, so it arpeggiates live MIDI keys and UI previews too.
+
+**Live MIDI polyphony:** on a normal instrument each key gets its own voice and so its own ARPEGGIATOR — hold a chord and you get one arpeggio per key. A shared-instance instrument (CLAP) routes every key into a single chain, so there one arpeggiator walks the whole chord.
 
 | Param | Range | Notes |
 |-------|-------|-------|
@@ -360,7 +362,7 @@ Sources that only take whole note numbers (SF2, SFZ region select, MIDI out, CLA
 
 ### CHORD
 
-Turns one note into a chord, and a note modifier (put it ahead of the source). A tracker track is monophonic — each note releases the last — so this is what lets an [ARP](#arp) below it cycle a real chord instead of retriggering a single note. Chain `CHORD → ARP` for an arpeggio, or `CHORD → OSC` for a straight stab.
+Turns one note into a chord, and a note modifier (put it ahead of the source). A tracker track is monophonic — each note releases the last — so this is what lets an [ARP](#arp) below it cycle a real chord instead of retriggering a single note. Chain `CHORD → ARP` for an arpeggio, or `CHORD → OSC` for a straight stab. It works from pattern notes, live MIDI keys and UI previews alike.
 
 `INV` lifts that many of the lowest chord tones up an octave, which is how you get inversions and smoother arpeggio lines out of one shape.
 
@@ -371,3 +373,19 @@ Turns one note into a chord, and a note modifier (put it ahead of the source). A
 | INV | 0–3 | Number of chord tones lifted an octave |
 
 The chord quality is a chain param, so automate it per step from the pattern's FX column to walk a progression with one instrument — that is exactly what [the CANON example](../../examples/canon.md) does.
+
+### BEND
+
+Shifts every incoming note by a fraction of a semitone, the way a MIDI pitch wheel does, and a note modifier (put it ahead of the source). One value, centred on no bend:
+
+| BEND | Effect |
+|------|--------|
+| `00` | a semitone down — lands on the note below |
+| `80` | no bend — the written note |
+| `FF` | a semitone up — lands on the note above |
+
+Because it acts on notes rather than on a param, BEND is sampled when a note starts and remembered until that note ends. Automating it per step from the pattern's FX column therefore bends each note on its own, without stranding notes that are already sounding. Put [MICRO](#micro) before it and the bend is added to the microtonal step; put it before ARP and each arpeggiated note carries the bend.
+
+| Param | Range | Notes |
+|-------|-------|-------|
+| BEND | 00–FF | `80` = none; each end is a semitone |

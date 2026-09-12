@@ -8,7 +8,7 @@
 # breaks `cmake --build` in CI with a bogus "Permission denied".
 SHELL := /bin/bash
 
-.PHONY: help build build-web clean serve format format-check test run plugins theme-shots embed
+.PHONY: help build build-web clean serve format format-check test run plugins theme-shots embed icons
 .DEFAULT_GOAL := help
 
 help: ## Show this help
@@ -57,6 +57,9 @@ theme-shots: ## Render a PNG preview of every examples/themes/*.ptt into art/the
 
 embed: ## Re-generate src/controller_png.h from art/controller.png (after editing the art)
 	./scripts/embed_png.py art/controller.png src/controller_png.h CONTROLLER_PNG
+
+icons: ## Re-generate the app icon (art/appicon.*, src/appicon_png.h) from art/appicon.png
+	python3 scripts/make_icons.py
 
 plugins: ## Build bundled example WCLAP plugins into examples/plugins/
 	cd plugins/karplus && [ -d node_modules ] || npm install

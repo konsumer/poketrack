@@ -40,6 +40,7 @@ static const UnitDef* REGISTRY[] = {
     &unit_arp,
     &unit_microtonal,
     &unit_chord,
+    &unit_pitchbend,
     NULL,
 };
 

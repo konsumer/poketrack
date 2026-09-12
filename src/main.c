@@ -5,6 +5,11 @@
 #include <string.h>
 
 #include "audio.h"
+#ifdef __EMSCRIPTEN__
+// The web build's icon lives in webroot/ (favicon etc.), not the canvas.
+#else
+#include "appicon_png.h"
+#endif
 #include "controller.h"
 #include "input.h"
 #include "midi_in.h"
@@ -59,9 +64,9 @@ static void rate_sniffing_log(int level, const char* text, va_list args) {
 
   // Keep raylib's own output: this callback replaces the default logger.
   const char* tag = (level == LOG_WARNING) ? "WARNING: "
-                    : (level == LOG_ERROR)   ? "ERROR: "
-                    : (level == LOG_DEBUG)   ? "DEBUG: "
-                                             : "INFO: ";
+                    : (level == LOG_ERROR) ? "ERROR: "
+                    : (level == LOG_DEBUG) ? "DEBUG: "
+                                           : "INFO: ";
   printf("%s%s\n", tag, line);
 }
 
@@ -104,23 +109,22 @@ int main(int argc, char** argv) {
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
       printf(
-        "usage: poketrack [options] [song.rpt]\n"
-        "\n"
-        "  -f, --fullscreen      Start in fullscreen\n"
-        "  --theme <file.ptt>    Load a theme at launch\n"
-        "  --no-preview          Disable the note preview that normally fires as the\n"
-        "                        cursor moves over pattern cells\n"
-        "  --width <px>          Window width (default 480)\n"
-        "  --height <px>         Window height (default 320)\n"
-        "  --controller          Show a virtual SNES pad below the tracker that lights\n"
-        "                        up as you press keys/buttons (for screen recordings)\n"
-        "  --wav <out.wav>       Render the song to a WAV file and exit, instead of\n"
-        "                        opening the UI\n"
-        "  -h, --help            Show this help and exit\n"
-        "\n"
-        "poketrack loads song.rpt and theme.ptt from the current directory by default;\n"
-        "pass a path to load a different song, eg: poketrack --wav out.wav other.rpt\n"
-      );
+          "usage: poketrack [options] [song.rpt]\n"
+          "\n"
+          "  -f, --fullscreen      Start in fullscreen\n"
+          "  --theme <file.ptt>    Load a theme at launch\n"
+          "  --no-preview          Disable the note preview that normally fires as the\n"
+          "                        cursor moves over pattern cells\n"
+          "  --width <px>          Window width (default 480)\n"
+          "  --height <px>         Window height (default 320)\n"
+          "  --controller          Show a virtual SNES pad below the tracker that lights\n"
+          "                        up as you press keys/buttons (for screen recordings)\n"
+          "  --wav <out.wav>       Render the song to a WAV file and exit, instead of\n"
+          "                        opening the UI\n"
+          "  -h, --help            Show this help and exit\n"
+          "\n"
+          "poketrack loads song.rpt and theme.ptt from the current directory by default;\n"
+          "pass a path to load a different song, eg: poketrack --wav out.wav other.rpt\n");
       return 0;
     } else if (strcmp(argv[i], "--fullscreen") == 0 || strcmp(argv[i], "-f") == 0) {
       start_fullscreen = true;
@@ -188,6 +192,17 @@ int main(int argc, char** argv) {
     g_ctrl_h = controller_height(WIN_W);
 #endif
   InitWindow(WIN_W, WIN_H + g_ctrl_h, "poketrack");
+#ifndef __EMSCRIPTEN__
+  // Window/taskbar icon. The .exe already carries it on Windows and the .app
+  // on macOS; this is what gives the bare Linux binary an icon too.
+  {
+    Image icon = LoadImageFromMemory(".png", APPICON_PNG, APPICON_PNG_LEN);
+    if (icon.data) {
+      SetWindowIcon(icon);
+      UnloadImage(icon);
+    }
+  }
+#endif
   SetTargetFPS(60);
   if (g_ctrl_h > 0)
     controller_init();
