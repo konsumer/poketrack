@@ -16,6 +16,16 @@ Because the patch is compiled in, not loaded at runtime, "picking a patch" is
 a build step: run `build.sh` against your `.pd` file and point poketrack's
 DATA field at the resulting `.wasm`, exactly like any other WCLAP plugin.
 
+If you don't want to install the toolchain, the same pipeline runs entirely in
+the browser at **<https://konsumer.js.org/pdast/>** — drop a `.pd` file in and
+click **WCLAP**. It generates the C with pdast's own WASM build, links it
+against this directory's `runtime-shim.c` using a WASM build of `clang`/`wasm-ld`,
+and downloads the same kind of `<name>.wasm` you'd get from `build.sh`, ready to
+point a `PLUGIN` unit's DATA field at. The first build pulls down ~95 MB of
+compiler (cached afterwards), and it's the same generated C and the same shim,
+so the plugin behaves the same either way — the local build is still the one to
+use for scripting/reproducible builds.
+
 Some things to consider:
 
 - Any `receive`, without a `send` will get turned into a plugin param (mapped range 0-1) but it's better to use a slider/toggle/etc with a `receive`. They are nice because they let you play with the values in puredata, and also tell poketrack their range (which is mapped to 00-FF.)
@@ -112,9 +122,9 @@ Oscillators (`osc~`, `phasor~`, `noise~`), audio math (`+~ -~ *~ /~`),
 one-pole filters (`lop~`/`hip~`), a resonant bandpass (`vcf~`), `sig~`,
 `dac~`/`adc~`, `notein`, `mtof`/`ftom`, control math (`+ - * / max min mod
 pow`), and `send`/`receive`/`value`. Anything else compiles to a harmless
-zero stub with a `warning:` on stderr from `pdast2wclap` — the object
-template system (see `pdast2wclap`'s `wclap_gen.rs` in the pdast repo) is
-built to grow this list; unsupported objects are a gap to fill, not a wall.
+zero stub with a `warning:` on stderr from `pdast2wclap` — the per-object
+codegen (see pdast's `pdast/src/wclap.rs`) is built to grow this list;
+unsupported objects are a gap to fill, not a wall.
 
 ### Control-rate semantics
 
