@@ -12,7 +12,7 @@ no per-note envelope of its own (only a static cutoff, optionally swept by
 `LFO`). A self-resonating filter driven by its own envelope is what makes
 acid basslines, squelchy leads, and dark pads possible, so `RESO`/`ENVAMT`
 were kept even though it meant leaving out extras like a sub-oscillator or
-pulse width, to stay within poketrack's usual 8-params-per-unit shape.
+pulse width, to keep the unit as compact as poketrack's built-ins.
 
 Like `karplus` and `robotalk`, every note self-terminates on its own via
 the amp envelope's `ADECAY`/`SUSTAIN` — an explicit note-off isn't required

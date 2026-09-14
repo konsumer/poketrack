@@ -101,7 +101,7 @@ Sample player. Point the data field at a WAV/MP3/OGG/FLAC file. Pitch tracks the
 | Param | Range | Notes |
 |-------|-------|-------|
 | LOOP | Off / Fwd / PingPong / Rev | Loop mode |
-| LSTART | 0–100% | Loop start point |
+| LSTR | 0–100% | Loop start point |
 | LEND | 0–100% | Loop end point |
 | TUNE | -12st–+12st | Pitch transpose |
 | STRT | 0–100% | Playback start offset |
@@ -132,7 +132,7 @@ Release stops it, like any other source.
 
 ### CLAP
 
-Loads a WCLAP plugin — CLAP compiled to wasm32 (see [WebCLAP](https://github.com/WebCLAP)). Point the data field at a `.wasm` file. Same sandboxed format runs on every target (desktop and web), so it can be bundled alongside a song using a relative path, same as sf2/sfz. Use the ADD row to map up to 8 plugin parameters to tracker-controllable slots.
+Loads a WCLAP plugin — CLAP compiled to wasm32 (see [WebCLAP](https://github.com/WebCLAP)). Point the data field at a `.wasm` file. Same sandboxed format runs on every target (desktop and web), so it can be bundled alongside a song using a relative path, same as sf2/sfz. Use the ADD row to map up to 16 plugin parameters to tracker-controllable slots.
 
 ### MIDI
 
@@ -165,13 +165,14 @@ Tape-style delay with stereo spread.
 
 ### DIST
 
-Waveshaper distortion with tone control.
+Waveshaper distortion with tone control and input/output trim.
 
 | Param | Range | Notes |
 |-------|-------|-------|
 | DRIVE | clean–hard clip | Distortion amount |
 | TONE | dark–bright | Post-distortion low-pass cutoff |
-| MIX | dry–wet | Blend with dry signal |
+| PRE | 0×–4× | Input gain into the waveshaper |
+| POST | 0×–2× | Output / makeup gain |
 
 ### REVERB
 

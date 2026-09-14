@@ -75,7 +75,7 @@ It may seem a bit inscrutable at first, but input is meant to be consistent and 
 
 ### units
 
-There are some built-in units (effects/sound-generators) that are documented [here](./src//units/README.md).
+There are some built-in units (effects/sound-generators) that are documented [here](./src/units/README.md).
 
 
 ### plugins

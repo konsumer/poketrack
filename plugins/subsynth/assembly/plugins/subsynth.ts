@@ -10,7 +10,7 @@ import { CNumPtr } from "as-clap"
 // resonating filter + envelope is the whole point (acid basslines,
 // squelchy leads, dark pads), so those two params (RESO, ENVAMT) are kept
 // even though it meant leaving out extras like a sub-oscillator or pulse
-// width, to fit poketrack's convention of 8 params per unit.
+// width, to keep the unit as compact as poketrack's built-ins.
 
 const NUM_VOICES = 8
 

@@ -99,42 +99,55 @@ A reader that finds `ntracks > 16` consumes but discards the extra tracks.
 ## Instrument — `.rpti` (`RPTI`)
 
 A single instrument: a name, optional MIDI-input binding, and a chain of up
-to 8 unit slots (sources first, then effects). Written by
+to 16 unit slots (sources first, then effects). Written by
 `tracker_save_instrument`.
 
 ```
 Offset  Size   Field              Notes
 ──────  ────   ─────              ─────
 0       4      magic              "RPTI"
-4       2      version            u16; currently 2 (v1 = UNIT_MAX_PARAMS 8, v2 = 16)
+4       2      version            u16; currently 3
 6       16     name               str[16]
 22      128    midi_in_device     str[128]; "" = no MIDI input
 150     1      midi_in_channel    u8; 0 = all channels, 1..16 = specific
 
-Per chain slot (8 slots, fixed; each slot = variable size):
+Per chain slot (16 slots, fixed; each slot = variable size):
   unit_id       str[8]    "" = empty slot; e.g. "drum", "sampler", "sf2"
   enabled       u8        0 / 1
-  params[N]     u8 × N    unit param values (N = UNIT_MAX_PARAMS; 8 in v1, 16 in v2)
+  params[N]     u8 × N    unit param values (N = UNIT_MAX_PARAMS; 8 in v1, 16 in v2+)
   cc_map[N]     u8 × N    MIDI CC per param; 0xFF = unmapped
   data_len      u16       byte length of data string that follows
   data          bytes     data_len bytes; extra data (e.g. SF2/sample path), no NUL
 ```
 
+Format versions, oldest first — each widening added a version, and older
+files still load:
+
+| Version | Change |
+|---------|--------|
+| v1 | `params`/`cc_map` width 8 |
+| v2 | `params`/`cc_map` width 16 |
+| v3 | chain slots 8 → 16 |
+
+A file that stored a narrower field is padded on read: `params` beyond the
+stored width come from the unit's own defaults, `cc_map` beyond it from
+unmapped (`0xFF`), and a chain shorter than 16 is padded with empty slots.
+Reader implementation: `rb_chain_params` in `src/tracker.c`.
+
 Absolute `data` paths are rewritten relative to the file's directory on save
 and resolved back on load.
-
-v1 files (`params`/`cc_map` at width 8) still load: params beyond index 7 are
-filled from the unit's own defaults, cc_map beyond 7 from unmapped (`0xFF`).
-Reader implementation: `rb_chain_params` in `src/tracker.c`.
 
 **Fixed header size before chain:** 151 bytes. Each chain slot occupies
 `8 + 1 + N + N + 2 + data_len` bytes (N = 16 for current-version writes).
 
-Available `unit_id` values (from `src/units/`):
+Available `unit_id` values (from `src/units/unit_registry.c`):
 
-- Sources: `osc`, `fm`, `gran`, `drum`, `sampler`, `sf2`, `sfz`, `clap`
-- Effects: `dist`, `bcrush`, `delay`, `comp`, `flanger`, `filter`, `reverb`,
-  `ducker`, `lfo`, `midi`, `phaser`, `route`, `tremolo`, `chorus`
+- Sources: `osc`, `fm`, `drum`, `sf2`, `sfz` (desktop only), `clap`, `gran`,
+  `sampler`, `turntab`
+- Effects: `delay`, `dist`, `reverb`, `chorus`, `flanger`, `phaser`, `filter`,
+  `bcrush`, `tremolo`, `chopper`, `pangain`, `comp`, `ducker`, `route`, `midi`,
+  `lfo`
+- Note modifiers: `arp`, `micro`, `chord`, `bend`
 
 ---
 
@@ -148,7 +161,7 @@ using the length field. Written by `tracker_save`.
 Offset  Size  Field          Notes
 ──────  ────  ─────          ─────
 0       4     magic          "RPT2"
-4       2     version        u16; currently 3 (v1 = single-track patterns, v3 = UNIT_MAX_PARAMS 16)
+4       2     version        u16; currently 4 (v1 = single-track patterns, v3 = UNIT_MAX_PARAMS 16, v4 = CHAIN_MAX 16)
 6       2     num_sections   u16; number of chunks that follow
 
 Repeated num_sections times:
@@ -236,8 +249,9 @@ Per pattern (count times):
 
 Only non-default instruments are stored. Per-instrument layout matches the
 `.rpti` body (no `RPTI`/version header), prefixed by its slot index. `N` =
-`UNIT_MAX_PARAMS` for the RPT2 version in the file header (8 for v1/v2, 16
-for v3+) — see the same v1-compat note under the `.rpti` format above.
+`UNIT_MAX_PARAMS` (8 for RPT2 v1/v2, 16 for v3+) and the chain holds
+`CHAIN_MAX` slots (8 for v1–v3, 16 for v4) — see the version table under the
+`.rpti` format above.
 
 ```
 Offset  Size  Field    Notes
@@ -249,7 +263,7 @@ Per instrument (count times):
   name              str[16]
   midi_in_device    str[128]
   midi_in_channel   u8
-  chain[8]:
+  chain[16]:
     unit_id         str[8]
     enabled         u8
     params[N]       u8 × N

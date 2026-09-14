@@ -77,6 +77,7 @@ cp examples/theme.ptt theme.ptt
 | `m4r10-1-2.ptt` | hand-tuned Super Mario Bros. (NES) World 1-2 — black underground, electric blue | <img src="./art/themes/m4r10-1-2.png" width="160" alt="m4r10-1-2 theme" /> |
 | `m4r10-1-4.ptt` | hand-tuned Super Mario Bros. (NES) World 1-4 — black castle, stone + lava | <img src="./art/themes/m4r10-1-4.png" width="160" alt="m4r10-1-4 theme" /> |
 | `m4r10-2-2.ptt` | hand-tuned Super Mario Bros. (NES) World 2-2 — deep-blue underwater | <img src="./art/themes/m4r10-2-2.png" width="160" alt="m4r10-2-2 theme" /> |
+| `nohelp.ptt` | the default palette with the button-help strip hidden (`hide_help=1`) | <img src="./art/themes/nohelp.png" width="160" alt="nohelp theme" /> |
 
 ```
 poketrack --theme examples/themes/cyber.ptt
