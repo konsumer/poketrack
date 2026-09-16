@@ -28,6 +28,7 @@ I made some complete examples:
 - **[subsynth](subsynth)** — an analog-style subtractive synth (oscillator → resonant filter with its own envelope → amp envelope), written against [as-clap](https://github.com/WebCLAP/as-clap) (AssemblyScript).
 - **[juno1](juno1)** — a Roland Juno-1/Alpha Juno DCO synth ported from [mikerodd/june-21](https://github.com/mikerodd/june-21)'s CSound engine, 256 real patches included, written against [as-clap](https://github.com/WebCLAP/as-clap) (AssemblyScript). Note: unlike the rest of poketrack, this one is GPL-3.0-or-later — see [its README](juno1/README.md#licensing).
 - **[robotalk](robotalk)** — a playable text-to-speech instrument (37 phonemes: vowels, diphthongs, liquids, nasals, fricatives, stops), written against [clack](https://github.com/prokopyl/clack) (Rust).
+- **[dexed](dexed)** — the [Dexed](https://github.com/asb2m10/dexed) Yamaha DX7 engine itself (6-operator FM, all 159 voice/engine params, 1056 built-in voices in 33 cartridges), compiled from dexed's own C++ sources with wasi-sdk against CLAP's plain C++ API. Note: unlike the rest of poketrack, this one is GPL-3.0-or-later — see [its README](dexed/README.md#licensing).
 - **[pd2wclap](pd2wclap)** — Uses [pdast](https://github.com/konsumer/pdast) to convert puredata patches into full WCLAP plugins
 - **[pthread-synth](pthread-synth)** — a monophonic sine synth written directly against CLAP's plain C API (no wrapper library), whose wavetable is filled by a real background thread — the C example, and a repro for the web threading support described above.
 

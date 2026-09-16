@@ -87,3 +87,7 @@ plugins: ## Build bundled example WCLAP plugins into examples/plugins/
 		plugins/pthread-synth/build.sh && \
 		cp plugins/pthread-synth/build/pthread-synth.wasm examples/plugins/pthread-synth.wclap.wasm \
 	) || echo "skipping pthread-synth demo (see plugins/pthread-synth/README.md#building) — wasi-sdk not found"
+	[ -x "$${WASI_SDK_PATH:-/opt/wasi-sdk}/bin/clang++" ] && ( \
+		plugins/dexed/build.sh && \
+		cp plugins/dexed/build/dexed.wasm examples/plugins/dexed.wclap.wasm \
+	) || echo "skipping dexed (see plugins/dexed/README.md#building) — wasi-sdk or node not found"

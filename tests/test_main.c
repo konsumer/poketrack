@@ -1663,6 +1663,429 @@ static void test_chopper_repeats_at_tempo_derived_length(void) {
   g_unit_samples_per_line = 0;
 }
 
+// --- Dexed (plugins/dexed: dexed's own engine compiled to WCLAP) -----------
+//
+// The tests below are the load-bearing ones for that plugin: its preset table
+// is compiled in rather than read from disk, so "the table decoded, the
+// voices got unpacked, and the engine is actually driven by them" is the
+// property worth pinning, along with the param surface poketrack's ADD row
+// talks to.
+
+static const char* dexed_wasm_path = "../examples/plugins/dexed.wclap.wasm";
+
+// Finds a param by name; returns false when the plugin doesn't declare it.
+static bool dexed_find_param(ClapPlugin* p, const char* want, uint32_t* out_id, double* out_min, double* out_max, bool* out_stepped, bool* out_enum) {
+  uint32_t total = clap_host_param_count(p);
+  char name[24];
+  for (uint32_t i = 0; i < total; i++) {
+    double min = 0, max = 0, def = 0;
+    if (!clap_host_param_info(p, i, out_id, name, sizeof(name), &min, &max, &def))
+      continue;
+    if (strcmp(name, want) != 0)
+      continue;
+    if (out_min)
+      *out_min = min;
+    if (out_max)
+      *out_max = max;
+    if (out_stepped)
+      *out_stepped = clap_host_param_is_stepped(p, i);
+    if (out_enum)
+      *out_enum = clap_host_param_is_enum(p, i);
+    return true;
+  }
+  return false;
+}
+
+// Renders `blocks` blocks after a note-on and reports total energy, draining
+// the voice afterwards so the next case starts clean.
+static float dexed_render_note(ClapPlugin* p, uint8_t key, int blocks) {
+  static float out_l[512], out_r[512];
+  clap_host_note_on(p, key, 100, 0);
+  float energy = 0.0f;
+  for (int b = 0; b < blocks; b++) {
+    clap_host_process(p, NULL, NULL, out_l, out_r, 512);
+    for (int f = 0; f < 512; f++)
+      energy += out_l[f] * out_l[f] + out_r[f] * out_r[f];
+  }
+  clap_host_note_off(p, key, 0);
+  for (int b = 0; b < 96; b++)  // let the release tail clear (~1.1s)
+    clap_host_process(p, NULL, NULL, out_l, out_r, 512);
+  return energy;
+}
+
+// Loads dexed, checks its param surface, and checks that the bundled presets
+// actually drive the engine: distinct programs must produce distinct audio,
+// and a released note must decay to silence rather than hang.
+static void test_clap_plugin_dexed(void) {
+  if (!FileExists(dexed_wasm_path)) {
+    printf("SKIP test_clap_plugin_dexed: %s not built (see plugins/dexed/README.md)\n", dexed_wasm_path);
+    return;
+  }
+
+  ClapPlugin* p = clap_host_load(dexed_wasm_path, NULL, 44100.0f, 512);
+  CHECK(p != NULL, "dexed.wclap.wasm: load failed");
+  if (!p)
+    return;
+
+  CHECK(clap_host_is_instrument(p), "dexed.wclap.wasm: expected an instrument");
+
+  // 156 params from dexed's own Ctrl list (24 globals + 6 operators x 22),
+  // plus Cartridge/Program/Engine.
+  uint32_t total = clap_host_param_count(p);
+  CHECK(total == 159, "dexed.wclap.wasm: expected 159 params, got %u", total);
+
+  uint32_t cart_id = 0, prog_id = 0, algo_id = 0, out_id = 0;
+  double min = 0, max = 0;
+  bool stepped = false, is_enum = false;
+  CHECK(dexed_find_param(p, "ALGORITHM", &algo_id, &min, &max, &stepped, &is_enum), "dexed: no ALGORITHM param");
+  CHECK(min == 1 && max == 32, "dexed: ALGORITHM range %g-%g, want 1-32 (the DX7's own range, not a 0-31 byte)", min, max);
+  CHECK(dexed_find_param(p, "Cartridge", &cart_id, &min, &max, &stepped, &is_enum), "dexed: no Cartridge param");
+  CHECK(max == 33 - 1, "dexed: Cartridge max %g, want 32 (33 bundled banks)", max);
+  CHECK(is_enum && stepped, "dexed: Cartridge should be a stepped enum (one byte bump = one bank)");
+  CHECK(dexed_find_param(p, "Program", &prog_id, &min, &max, &stepped, &is_enum), "dexed: no Program param");
+  CHECK(max == 31, "dexed: Program max %g, want 31 (32 voices per DX7 cartridge)", max);
+  CHECK(is_enum && stepped, "dexed: Program should be a stepped enum (one byte bump = one voice)");
+  CHECK(dexed_find_param(p, "Output", &out_id, &min, &max, &stepped, &is_enum), "dexed: no Output param");
+  CHECK(!stepped, "dexed: Output is a continuous gain, not stepped");
+
+  // Program 0 of cartridge 0 vs a program 20 voices later: the DX7's own
+  // ROM banks are full of very different sounds, so these must not come out
+  // the same — which is what a preset table wired to nothing would do.
+  float e0 = dexed_render_note(p, 60, 8);
+  clap_host_queue_param(p, prog_id, 20);
+  float e20 = dexed_render_note(p, 60, 8);
+  CHECK(e0 > 1e-4f, "dexed.wclap.wasm: silent on the startup program");
+  CHECK(e20 > 1e-4f, "dexed.wclap.wasm: silent on program 20 of cartridge 0");
+  CHECK(fabsf(e20 - e0) > 1e-4f, "dexed.wclap.wasm: program 0 and 20 rendered identically (%g vs %g) — preset table not wired up", e0, e20);
+
+  clap_host_unload(p);
+
+  // Note-off must reach silence. Fresh instance so the tail from the
+  // comparison above can't bleed in.
+  ClapPlugin* p2 = clap_host_load(dexed_wasm_path, NULL, 44100.0f, 512);
+  CHECK(p2 != NULL, "dexed.wclap.wasm: reload failed");
+  if (!p2)
+    return;
+  static float out_l[512], out_r[512];
+  clap_host_note_on(p2, 60, 100, 0);
+  for (int b = 0; b < 8; b++)
+    clap_host_process(p2, NULL, NULL, out_l, out_r, 512);
+  clap_host_note_off(p2, 60, 0);
+  // The DX7's longest factory release is ~8s of slow decay; 8s of blocks is
+  // far past anything a DX7 voice can hold after key-up.
+  for (int b = 0; b < 700; b++)
+    clap_host_process(p2, NULL, NULL, out_l, out_r, 512);
+  float tail = 0.0f;
+  for (int b = 0; b < 4; b++) {
+    clap_host_process(p2, NULL, NULL, out_l, out_r, 512);
+    for (int f = 0; f < 512; f++)
+      tail += out_l[f] * out_l[f] + out_r[f] * out_r[f];
+  }
+  CHECK(tail < 1e-4f, "dexed.wclap.wasm: still loud (%g) 8s after note-off — envelope/voice not releasing", tail);
+
+  clap_host_unload(p2);
+}
+
+// Every bundled cartridge must load: the banks are compiled in as raw 4104-
+// byte SysEx and unpacked at runtime by dexed's own parser, so a bank that
+// decoded wrong (bad checksum path, wrong voice count) shows up here as a
+// silent or missing cartridge.
+static void test_clap_plugin_dexed_all_cartridges(void) {
+  if (!FileExists(dexed_wasm_path)) {
+    printf("SKIP test_clap_plugin_dexed_all_cartridges: %s not built\n", dexed_wasm_path);
+    return;
+  }
+
+  ClapPlugin* p = clap_host_load(dexed_wasm_path, NULL, 44100.0f, 512);
+  CHECK(p != NULL, "dexed.wclap.wasm: load failed");
+  if (!p)
+    return;
+
+  uint32_t cart_id = 0, prog_id = 0;
+  if (!dexed_find_param(p, "Cartridge", &cart_id, NULL, NULL, NULL, NULL) || !dexed_find_param(p, "Program", &prog_id, NULL, NULL, NULL, NULL)) {
+    CHECK(0, "dexed: Cartridge/Program params missing");
+    clap_host_unload(p);
+    return;
+  }
+
+  float energies[33];
+  int silent = 0;
+  for (int cart = 0; cart < 33; cart++) {
+    clap_host_queue_param(p, prog_id, 0);
+    clap_host_queue_param(p, cart_id, cart);
+    energies[cart] = dexed_render_note(p, 60, 6);
+    if (!(energies[cart] > 1e-4f)) {
+      printf("  dexed: cartridge %d is silent (energy %g)\n", cart, energies[cart]);
+      silent++;
+    }
+  }
+  CHECK(silent == 0, "dexed.wclap.wasm: %d/33 bundled cartridges produced no sound — preset table/parser broke", silent);
+
+  // ...and they must not all be the same bank copied 33 times.
+  float lo = energies[0], hi = energies[0];
+  for (int i = 1; i < 33; i++) {
+    if (energies[i] < lo)
+      lo = energies[i];
+    if (energies[i] > hi)
+      hi = energies[i];
+  }
+  CHECK(hi > lo * 1.5f, "dexed.wclap.wasm: all 33 cartridges rendered near-identical energy (%.5f..%.5f) — every bank may be loading the same data", lo, hi);
+
+  clap_host_unload(p);
+}
+
+// The poketrack-side behaviour of the two preset params, through clap_unit's
+// ADD row: one byte bump is exactly one program, the plugin's own value_to_text
+// names it, and Program is reported as a CLAP enum so the UI shows the name
+// instead of drawing a slider over it.
+static void test_clap_dexed_program_param_stepping(void) {
+  if (!FileExists(dexed_wasm_path)) {
+    printf("SKIP test_clap_dexed_program_param_stepping: %s not built\n", dexed_wasm_path);
+    return;
+  }
+
+  const UnitDef* def = unit_find("clap");
+  CHECK(def != NULL, "clap unit not registered");
+  if (!def)
+    return;
+
+  UnitState* s = def->create(44100.0f);
+  CHECK(s != NULL, "clap_unit_create failed");
+  if (!s)
+    return;
+  char data[640];
+  snprintf(data, sizeof(data), "%s\t\t", dexed_wasm_path);
+  def->set_data(s, data, "./");
+
+  CHECK(def->picker_count(s) == 159, "dexed exposes %d params via picker, want 159", def->picker_count(s));
+
+  int cart_idx = -1, prog_idx = -1, algo_idx = -1;
+  for (int i = 0; i < def->picker_count(s); i++) {
+    const char* n = def->picker_name(s, i);
+    if (n && strcmp(n, "Cartridge") == 0)
+      cart_idx = i;
+    else if (n && strcmp(n, "Program") == 0)
+      prog_idx = i;
+    else if (n && strcmp(n, "ALGORITHM") == 0)
+      algo_idx = i;
+  }
+  CHECK(prog_idx >= 0 && cart_idx >= 0 && algo_idx >= 0, "dexed: picker is missing Cartridge/Program/ALGORITHM");
+
+  def->picker_add(s, prog_idx);
+  CHECK(def->dyn_num_params(s) == 1, "picker_add didn't map Program");
+
+  // Program is 0-31 across a 0-255 ADD-row byte: byte N is program N, and
+  // bytes past the last program hold there rather than wrapping or spreading.
+  char prev[64] = {0};
+  for (int b = 0; b <= 31; b++) {
+    const char* now = def->format_param_val(s, 0, (uint8_t)b);
+    CHECK(now != NULL && now[0], "dexed: no name for program byte %d", b);
+    if (now) {
+      CHECK(strcmp(now, prev) != 0, "dexed: program byte %d..%d gave the same name (\"%s\")", b - 1, b, now);
+      snprintf(prev, sizeof(prev), "%s", now);
+    }
+  }
+  const char* last = def->format_param_val(s, 0, 31);
+  char last_name[64];
+  snprintf(last_name, sizeof(last_name), "%s", last ? last : "");
+  const char* wrapped = def->format_param_val(s, 0, 255);
+  CHECK(wrapped && strcmp(wrapped, last_name) == 0, "dexed: byte 255 gave \"%s\", want program 31 (\"%s\") — bytes past the last program must clamp", wrapped ? wrapped : "(null)", last_name);
+
+  CHECK(def->dyn_param_is_enum != NULL, "clap unit doesn't implement dyn_param_is_enum");
+  if (def->dyn_param_is_enum)
+    CHECK(def->dyn_param_is_enum(s, 0), "Program not reported as enum — its name would be hidden behind the ADD row's slider bar");
+
+  def->destroy(s);
+}
+
+// A param edited while a note is held must reach that note immediately —
+// dexed's processBlock re-inits every live voice when a DX param changes
+// (its `refreshVoice` path), which is what makes parameter automation audible
+// in a tracker instead of only from the next note-on.
+//
+// Compared against a control instance left alone for the same number of
+// blocks, so the DX7 envelope's own evolution cancels out.
+static void test_clap_plugin_dexed_param_change_reaches_held_note(void) {
+  if (!FileExists(dexed_wasm_path)) {
+    printf("SKIP test_clap_plugin_dexed_param_change_reaches_held_note: %s not built\n", dexed_wasm_path);
+    return;
+  }
+
+  static float out_l[512], out_r[512];
+  uint32_t algo_id = 0;
+
+  float energy[2];
+  for (int variant = 0; variant < 2; variant++) {
+    ClapPlugin* p = clap_host_load(dexed_wasm_path, NULL, 44100.0f, 512);
+    CHECK(p != NULL, "dexed.wclap.wasm: load failed");
+    if (!p)
+      return;
+    CHECK(dexed_find_param(p, "ALGORITHM", &algo_id, NULL, NULL, NULL, NULL), "dexed: no ALGORITHM param");
+
+    clap_host_note_on(p, 60, 100, 0);
+    for (int b = 0; b < 4; b++)
+      clap_host_process(p, NULL, NULL, out_l, out_r, 512);
+    if (variant == 1)
+      clap_host_queue_param(p, algo_id, 5);  // a different algorithm, same voice
+    float e = 0.0f;
+    for (int b = 0; b < 4; b++) {
+      clap_host_process(p, NULL, NULL, out_l, out_r, 512);
+      for (int f = 0; f < 512; f++) {
+        CHECK(isfinite(out_l[f]) && isfinite(out_r[f]), "dexed: non-finite output after a mid-note ALGORITHM change");
+        e += out_l[f] * out_l[f] + out_r[f] * out_r[f];
+      }
+    }
+    energy[variant] = e;
+    clap_host_unload(p);
+  }
+
+  CHECK(energy[0] > 1e-4f, "dexed: silent on a held note");
+  CHECK(fabsf(energy[1] - energy[0]) > energy[0] * 0.05f,
+        "dexed: changing ALGORITHM mid-note left the audio essentially unchanged (%g vs %g) — live voices aren't being refreshed on param change", energy[1],
+        energy[0]);
+}
+
+// Host block size must not change the sound: dexed renders in fixed 64-sample
+// quanta and carries the remainder in `extra_buf`, so any split of the same
+// frames has to come out sample-identical. This pins the port's quantum
+// buffering (a wrong remainder offset or a lost quantum still "makes sound",
+// which the other tests wouldn't notice).
+static void test_clap_plugin_dexed_block_size_independent(void) {
+  if (!FileExists(dexed_wasm_path)) {
+    printf("SKIP test_clap_plugin_dexed_block_size_independent: %s not built\n", dexed_wasm_path);
+    return;
+  }
+
+  static float whole[512], split_l[512], split_r[512];
+  int bad = 0;
+
+  ClapPlugin* a = clap_host_load(dexed_wasm_path, NULL, 44100.0f, 512);
+  CHECK(a != NULL, "dexed.wclap.wasm: load failed");
+  if (!a)
+    return;
+  clap_host_note_on(a, 60, 100, 0);
+  clap_host_process(a, NULL, NULL, whole, split_r, 512);
+  clap_host_unload(a);
+
+  // 2 x 256
+  ClapPlugin* b = clap_host_load(dexed_wasm_path, NULL, 44100.0f, 512);
+  CHECK(b != NULL, "dexed.wclap.wasm: load failed");
+  if (!b) {
+    return;
+  }
+  clap_host_note_on(b, 60, 100, 0);
+  clap_host_process(b, NULL, NULL, split_l, split_r, 256);
+  clap_host_process(b, NULL, NULL, split_l + 256, split_r + 256, 256);
+  clap_host_unload(b);
+  for (int f = 0; f < 512; f++)
+    if (fabsf(split_l[f] - whole[f]) > 1e-9f)
+      bad++;
+
+  // 5 x 100 — a size that isn't a multiple of the engine's 64-sample quantum,
+  // so this is the case that actually exercises the carry-over buffer.
+  ClapPlugin* c = clap_host_load(dexed_wasm_path, NULL, 44100.0f, 512);
+  CHECK(c != NULL, "dexed.wclap.wasm: load failed");
+  if (!c) {
+    return;
+  }
+  clap_host_note_on(c, 60, 100, 0);
+  for (int i = 0; i < 5; i++)
+    clap_host_process(c, NULL, NULL, split_l + i * 100, split_r, 100);
+  clap_host_unload(c);
+  for (int f = 0; f < 500; f++)
+    if (fabsf(split_l[f] - whole[f]) > 1e-9f)
+      bad++;
+
+  CHECK(bad == 0, "dexed.wclap.wasm: %d samples differ between one 512-frame block and the same frames split into 256/100-frame blocks — quantum buffering is off", bad);
+}
+
+// End-to-end: dexed in a real poketrack instrument, played by the real
+// playback path (audio_midi_note_on → the shared instance), with a preset
+// param statically ADD-mapped — the flow screen_instrument.c drives. A plugin
+// can pass every host-level test above and still be silent here if the
+// mapping never reaches the playing instance or the voice doesn't survive
+// poketrack's note handling.
+static void test_clap_dexed_static_mapping_reaches_shared_instance(void) {
+  if (!FileExists(dexed_wasm_path)) {
+    printf("SKIP test_clap_dexed_static_mapping_reaches_shared_instance: %s not built\n", dexed_wasm_path);
+    return;
+  }
+
+  static AudioEngine eng;
+  tracker_init(&song_a);
+  ChainSlot* sl = &song_a.instruments[0].chain[0];
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "clap", 0);
+  strncpy(sl->data, dexed_wasm_path, sizeof(sl->data) - 1);
+  audio_init(&eng, &song_a);
+
+  const UnitDef* def = unit_find("clap");
+  CHECK(def != NULL, "clap unit not registered");
+  if (!def) {
+    audio_shutdown(&eng);
+    return;
+  }
+
+  audio_ensure_preview(&eng, 0);
+  UnitState* preview = eng.preview_states[0];
+  CHECK(preview != NULL, "preview_states[0] not created");
+  if (!preview) {
+    audio_shutdown(&eng);
+    return;
+  }
+
+  int prog_idx = -1;
+  for (int i = 0; i < def->picker_count(preview); i++) {
+    const char* n = def->picker_name(preview, i);
+    if (n && strcmp(n, "Program") == 0)
+      prog_idx = i;
+  }
+  CHECK(prog_idx >= 0, "dexed: picker has no Program param");
+  if (prog_idx < 0) {
+    audio_shutdown(&eng);
+    return;
+  }
+
+  def->picker_add(preview, prog_idx);
+  CHECK(def->dyn_num_params(preview) == 1, "picker_add didn't add a mapping");
+  def->set_param_val(preview, 0, 20);  // byte 20 = program 20 (stepped param: byte == step)
+  def->sync_to_data(preview, sl->data, sizeof(sl->data));
+  audio_rebuild_instrument(&eng, 0);
+
+  enum { BLK = 512, BLOCKS = 8 };
+  static float blk[BLK * 2];
+
+  audio_preview_note(&eng, 0, 60);
+  double preview_energy = 0;
+  for (int b = 0; b < BLOCKS; b++) {
+    audio_fill_buffer(&eng, blk, BLK);
+    for (int f = 0; f < BLK * 2; f++)
+      preview_energy += (double)blk[f] * blk[f];
+  }
+  audio_preview_kill(&eng);
+  for (int b = 0; b < 96; b++)  // let the DX7 release tail clear
+    audio_fill_buffer(&eng, blk, BLK);
+  CHECK(preview_energy > 1e-4, "dexed: preview silent with Program statically mapped to 20 (energy=%g)", preview_energy);
+
+  audio_midi_note_on(&eng, 0, 60);
+  UnitState* shared = eng.shared_states[0][0];
+  CHECK(shared != NULL, "shared_states[0][0] not created by note-on");
+  if (shared)
+    CHECK(def->dyn_num_params(shared) == 1 && def->get_param_val(shared, 0) == 20,
+          "shared instance's Program mapping is %d params / val %d, want 1 / 20 — mapping never reached the playing instance",
+          def->dyn_num_params(shared), def->dyn_num_params(shared) > 0 ? def->get_param_val(shared, 0) : -1);
+  double shared_energy = 0;
+  for (int b = 0; b < BLOCKS; b++) {
+    audio_fill_buffer(&eng, blk, BLK);
+    for (int f = 0; f < BLK * 2; f++)
+      shared_energy += (double)blk[f] * blk[f];
+  }
+  CHECK(shared_energy > 1e-4, "dexed: SILENT via real playback (audio_midi_note_on) with Program mapped to 20 (energy=%g), even though preview played fine (energy=%g)",
+        shared_energy, preview_energy);
+
+  audio_midi_note_off(&eng, 0, 60);
+  audio_shutdown(&eng);
+}
+
 // Prints before each test runs, so a hard crash (which loses any buffered
 // stdout) still tells you which test it died in from the last line printed.
 #define RUN(fn)                \
@@ -1699,6 +2122,12 @@ int main(void) {
   RUN(test_clap_plugin_pd_default_params_are_audible);
   RUN(test_clap_param_mapping_reaches_shared_instance);
   RUN(test_clap_plugin_pd_supersaw_polyphony);
+  RUN(test_clap_plugin_dexed);
+  RUN(test_clap_plugin_dexed_all_cartridges);
+  RUN(test_clap_dexed_program_param_stepping);
+  RUN(test_clap_plugin_dexed_param_change_reaches_held_note);
+  RUN(test_clap_plugin_dexed_block_size_independent);
+  RUN(test_clap_dexed_static_mapping_reaches_shared_instance);
 
   if (fails) {
     printf("%d FAILURE(S)\n", fails);
