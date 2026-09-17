@@ -229,6 +229,24 @@ Stereo state-variable filter (SVF).
 | CUTF | 20Hz–20kHz | Cutoff frequency (log scale) |
 | RESO | Q0.5–Q8.0 | Resonance |
 
+### EQ
+
+16-band stereo graphic EQ — one band every 2/3 octave from 20Hz to 20kHz, one param per band, fixed centres. 16 bands is both the audible span and `UNIT_MAX_PARAMS`, which is why this is a graphic EQ rather than a parametric one: shape a spectrum, and reach for [FILTER](#filter) to sweep a cutoff instead.
+
+| Param | Range | Notes |
+|-------|-------|-------|
+| 20 … 20000 | -15dB–80(flat)–+15dB | That band's gain, named after its own centre frequency in Hz |
+
+The band centres are the standard ISO 2/3-octave series: 20, 31.5, 50, 80, 125, 200, 315, 500, 800, 1250, 2000, 3150, 5000, 8000, 12500, 20000. Each band is a peaking filter with the Q that band spacing implies, so neighbours meet at about -3dB — the same shape a hardware graphic EQ has. The ADD row shows the gain in dB rather than a raw byte.
+
+Three things worth knowing:
+
+- **`80` is exactly flat, and flat is a bypass.** Every band starts there, so dropping an EQ into a chain changes nothing until you move a band — it costs nothing until then either. A band within 0.05dB of flat is skipped outright, so the filter only runs for the bands you actually moved.
+- **Bands are independent, so they add up.** Boosting all 16 is +15dB per band *and* the neighbours overlap on top of that; there is no automatic makeup, and the chain can clip. Boost the bands you actually want and cut the ones you don't.
+- **Params are sampled at block boundaries, with no coefficient smoothing** (same as FILTER). Automating a band from the pattern's FX column is fine, but a large jump lands as a step — a 15dB slam can click, the way moving a fader on hardware does.
+
+Each band's gain is stereo-linked and both channels have their own filter state.
+
 ### BITCRUSH
 
 Bit depth and sample rate reducer.

@@ -145,7 +145,7 @@ Available `unit_id` values (from `src/units/unit_registry.c`):
 - Sources: `osc`, `fm`, `drum`, `sf2`, `sfz` (desktop only), `clap`, `gran`,
   `sampler`, `turntab`
 - Effects: `delay`, `dist`, `reverb`, `chorus`, `flanger`, `phaser`, `filter`,
-  `bcrush`, `tremolo`, `chopper`, `pangain`, `comp`, `ducker`, `route`, `midi`,
+  `eq`, `bcrush`, `tremolo`, `chopper`, `pangain`, `comp`, `ducker`, `route`, `midi`,
   `lfo`
 - Note modifiers: `arp`, `micro`, `chord`, `bend`
 

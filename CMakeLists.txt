@@ -148,6 +148,7 @@ set(SOURCES
     src/units/phaser.c
     src/units/gran.c
     src/units/filter.c
+    src/units/eq.c
     src/units/sampler.c
     src/units/turntable.c
     src/units/sample_cache.c

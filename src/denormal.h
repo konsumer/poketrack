@@ -35,6 +35,10 @@ static inline AudioDenormalState audio_denormals_off(void) {
   return prev;
 }
 static inline void audio_denormals_restore(AudioDenormalState prev) { _mm_setcsr(prev); }
+static inline void audio_denormals_on(void) {
+  _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_OFF);
+  _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_OFF);
+}
 
 #elif defined(__aarch64__)
 
@@ -49,6 +53,11 @@ static inline AudioDenormalState audio_denormals_off(void) {
 static inline void audio_denormals_restore(AudioDenormalState prev) {
   __asm__ volatile("msr fpcr, %0" : : "r"(prev));
 }
+static inline void audio_denormals_on(void) {
+  AudioDenormalState cur;
+  __asm__ volatile("mrs %0, fpcr" : "=r"(cur));
+  __asm__ volatile("msr fpcr, %0" : : "r"(cur & ~(1u << 24)));
+}
 
 #else
 
@@ -57,5 +66,16 @@ static inline void audio_denormals_restore(AudioDenormalState prev) {
 typedef uint32_t AudioDenormalState;
 static inline AudioDenormalState audio_denormals_off(void) { return 0; }
 static inline void audio_denormals_restore(AudioDenormalState prev) { (void)prev; }
+static inline void audio_denormals_on(void) {}
 
 #endif
+
+// Allows denormals again on the current thread — the inverse of
+// audio_denormals_off(). The engine never calls it (the audio thread keeps
+// flushing on for its whole life, which is the point of this header), but
+// audio_fill_buffer() sets the mode on whatever thread calls it, so a caller
+// that ISN'T the audio thread has to be able to hand the thread back before
+// changing float behaviour for everything that runs after it. audio_render_wav()
+// does that with the save/restore pair; this is for wanting a known-cleared
+// state rather than the previous one. See test_audio_callback_flushes_denormals,
+// which needs exactly that to check the mode at all.

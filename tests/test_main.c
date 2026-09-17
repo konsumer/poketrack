@@ -5,6 +5,7 @@
 // renders finite audio; synth sources actually make sound).
 #include <float.h>
 #include <math.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -312,6 +313,193 @@ static void test_render_smoke(void) {
       d->kill(st);
     d->destroy(st);
   }
+}
+
+// The EQ unit: 16 graphic bands, one gain param each.
+//
+// The load-bearing properties are (a) flat is *exactly* transparent — a
+// 16-band cascade at 0dB must not colour anything, and the ADD row's default
+// is flat, so every instrument that adds an EQ but doesn't touch it would
+// otherwise be subtly filtered; and (b) each param is the band its *name*
+// says, i.e. boosting "500" moves a 500Hz tone and boosting "20" doesn't.
+// Reversing the band order or the name table would pass the smoke test and be
+// almost impossible to spot by ear in a mix.
+static double eq_tone_rms(const UnitDef* def, UnitState* st, const uint8_t* params, float hz) {
+  enum { BLK = 512,
+         BLOCKS = 8 };
+  static float l[BLK], r[BLK];
+  double phase = 0.0, inc = hz / 44100.0;
+  double rms = 0.0;
+
+  def->kill(st);
+  for (int blk = 0; blk < BLOCKS; blk++) {
+    for (int f = 0; f < BLK; f++) {
+      l[f] = r[f] = 0.5f * unit_sin((float)phase);
+      phase += inc;
+    }
+    def->render(st, params, l, r, l, r, BLK);
+    if (blk == BLOCKS - 1) {
+      double s = 0.0;
+      for (int f = 0; f < BLK; f++)
+        s += (double)l[f] * l[f];
+      rms = sqrt(s / BLK);
+    }
+  }
+  return rms;
+}
+
+static void test_eq_unit(void) {
+  const UnitDef* def = unit_find("eq");
+  CHECK(def != NULL, "eq unit not registered");
+  if (!def)
+    return;
+
+  CHECK(def->num_params == UNIT_MAX_PARAMS, "eq has %d params, want %d so every band gets one", def->num_params, UNIT_MAX_PARAMS);
+  CHECK(!def->is_source, "eq should be an effect");
+
+  UnitState* st = def->create(44100.0f);
+  CHECK(st != NULL, "eq create failed");
+  if (!st)
+    return;
+
+  enum { BLK = 512 };
+  static float in_l[BLK], in_r[BLK], out_l[BLK], out_r[BLK];
+  uint8_t params[UNIT_MAX_PARAMS];
+  memcpy(params, def->param_defaults, UNIT_MAX_PARAMS);
+
+  for (int f = 0; f < BLK; f++) {
+    in_l[f] = unit_sin(f * (440.0f / 44100.0f)) * 0.4f;
+    in_r[f] = unit_sin(f * (311.1f / 44100.0f)) * 0.4f;
+  }
+
+  // 1. Flat = transparent, bit for bit — both in place and into new buffers
+  // (the flat path returns early, so it has to do the copy itself).
+  memcpy(out_l, in_l, sizeof(out_l));
+  memcpy(out_r, in_r, sizeof(out_r));
+  def->render(st, params, out_l, out_r, out_l, out_r, BLK);
+  CHECK(memcmp(out_l, in_l, sizeof(out_l)) == 0 && memcmp(out_r, in_r, sizeof(out_r)) == 0,
+        "eq with flat defaults changed the signal in place — a flat 16-band cascade must be a no-op");
+
+  memset(out_l, 0, sizeof(out_l));
+  memset(out_r, 0, sizeof(out_r));
+  def->render(st, params, in_l, in_r, out_l, out_r, BLK);
+  CHECK(memcmp(out_l, in_l, sizeof(out_l)) == 0 && memcmp(out_r, in_r, sizeof(out_r)) == 0,
+        "eq with flat defaults didn't pass the input through to separate output buffers");
+
+  // 2. Each band is the frequency its name says.
+  int idx_500 = -1, idx_20 = -1;
+  for (int i = 0; i < def->num_params; i++) {
+    if (strcmp(def->param_names[i], "500") == 0)
+      idx_500 = i;
+    if (strcmp(def->param_names[i], "20") == 0)
+      idx_20 = i;
+  }
+  CHECK(idx_500 >= 0 && idx_20 >= 0, "eq: no band named \"500\" / \"20\" — names: %s / %s", def->param_names[0], def->param_names[UNIT_MAX_PARAMS - 1]);
+  if (idx_500 < 0 || idx_20 < 0) {
+    def->destroy(st);
+    return;
+  }
+
+  double flat = eq_tone_rms(def, st, params, 500.0f);
+  CHECK(flat > 0.1, "eq: flat tone measurement failed (rms %g)", flat);
+
+  params[idx_500] = 0xFF;  // +15 dB
+  double in_band = eq_tone_rms(def, st, params, 500.0f) / flat;
+  params[idx_500] = 0x80;
+
+  params[idx_20] = 0x00;  // -15 dB, four and a half octaves below the tone
+  double out_of_band = eq_tone_rms(def, st, params, 500.0f) / flat;
+  params[idx_20] = 0x80;
+
+  // +15dB is x5.62 in amplitude; the tone sits exactly on the band centre, so
+  // that's what a correct band gives.
+  CHECK(in_band > 4.5 && in_band < 7.0, "eq: boosting the \"500\" band moved a 500Hz tone by x%.2f, want ~x5.6 (+15dB at the band centre) — bands may be miswired", in_band);
+  CHECK(out_of_band > 0.95 && out_of_band < 1.05, "eq: cutting the \"20\" band changed a 500Hz tone by x%.2f, want ~x1.0 — a band is affecting the wrong frequency", out_of_band);
+
+  // A cut must go the other way, by the same factor.
+  params[idx_500] = 0x00;
+  double cut = eq_tone_rms(def, st, params, 500.0f) / flat;
+  params[idx_500] = 0x80;
+  CHECK(cut > 0.05 && cut < 0.3, "eq: cutting the \"500\" band moved a 500Hz tone by x%.2f, want ~x0.18 (-15dB) — cut and boost may be swapped", cut);
+
+  // 3. Every band at once, both extremes: still finite (a cascade of 16
+  // peaking biquads has to stay stable at full boost).
+  for (int i = 0; i < UNIT_MAX_PARAMS; i++)
+    params[i] = 0xFF;
+  for (int blk = 0; blk < 8; blk++) {
+    for (int f = 0; f < BLK; f++)
+      out_l[f] = out_r[f] = unit_sin(f * (500.0f / 44100.0f)) * 0.2f;
+    def->render(st, params, out_l, out_r, out_l, out_r, BLK);
+    for (int f = 0; f < BLK; f++)
+      CHECK(isfinite(out_l[f]) && isfinite(out_r[f]), "eq: non-finite output with every band at +15dB");
+  }
+
+  for (int i = 0; i < UNIT_MAX_PARAMS; i++)
+    params[i] = 0x00;
+  for (int f = 0; f < BLK; f++)
+    out_l[f] = out_r[f] = unit_sin(f * (500.0f / 44100.0f)) * 0.2f;
+  def->render(st, params, out_l, out_r, out_l, out_r, BLK);
+  for (int f = 0; f < BLK; f++)
+    CHECK(isfinite(out_l[f]) && isfinite(out_r[f]), "eq: non-finite output with every band at -15dB");
+
+  // 4. The ADD row prints dB, not a bare byte.
+  const char* text = def->format_param_val ? def->format_param_val(st, 0, 0x80) : NULL;
+  CHECK(text && strcmp(text, "0.0 dB") == 0, "eq: flat displays as \"%s\", want \"0.0 dB\"", text ? text : "(null)");
+  text = def->format_param_val ? def->format_param_val(st, 0, 0xFF) : NULL;
+  CHECK(text && strcmp(text, "+15.0 dB") == 0, "eq: full boost displays as \"%s\", want \"+15.0 dB\"", text ? text : "(null)");
+  text = def->format_param_val ? def->format_param_val(st, 0, 0x00) : NULL;
+  CHECK(text && strcmp(text, "-15.0 dB") == 0, "eq: full cut displays as \"%s\", want \"-15.0 dB\"", text ? text : "(null)");
+
+  def->destroy(st);
+}
+
+// The EQ inside a real instrument chain, driven by the real playback path:
+// osc -> eq, note-on through AudioEngine, same render_channel call the app
+// uses (in-place, per tick-aligned sub-block). The unit test above proves the
+// DSP; this proves the unit is wired into a chain at all — flat and boosted
+// runs have to differ, and a chain that never renders it would make them
+// identical.
+static double eq_chain_energy(uint8_t band3_value) {
+  static AudioEngine eng;
+  enum { BLK = 512,
+         BLOCKS = 12 };
+  static float blk[BLK * 2];
+
+  tracker_init(&song_a);
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "osc", 0);
+  tracker_inst_set_slot(&song_a.instruments[0], 1, "eq", 0);
+  ChainSlot* eq = &song_a.instruments[0].chain[1];
+  // A 261Hz note (C4) sits between the 200 and 315 bands, so lifting the low
+  // mids has to move it a lot. Each of 200/315/500 gets +15dB.
+  eq->params[5] = band3_value;
+  eq->params[6] = band3_value;
+  eq->params[7] = band3_value;
+
+  audio_init(&eng, &song_a);
+  audio_midi_note_on(&eng, 0, 60);
+  AudioDenormalState denorm_prev = audio_denormals_off();
+  double energy = 0;
+  for (int b = 0; b < BLOCKS; b++) {
+    audio_fill_buffer(&eng, blk, BLK);
+    for (int f = 0; f < BLK * 2; f++)
+      energy += (double)blk[f] * blk[f];
+  }
+  audio_midi_note_off(&eng, 0, 60);
+  audio_shutdown(&eng);
+  // audio_fill_buffer() deliberately leaves flush-to-zero on for the calling
+  // thread (on the audio thread it stays on for the thread's life). A unit
+  // test isn't the audio thread, so hand the process back the way we found it
+  // — same discipline as audio_render_wav().
+  audio_denormals_restore(denorm_prev);
+  return energy;
+}
+
+static void test_eq_in_chain(void) {
+  double flat = eq_chain_energy(0x80);
+  double boosted = eq_chain_energy(0xFF);
+
+  CHECK(flat > 1e-6, "osc->eq chain is silent");
+  CHECK(boosted > flat * 1.5, "osc->eq: boosting the 200/315/500 bands changed the chain's energy only from %g to %g — the EQ may not be in the render path", flat, boosted);
 }
 
 // End-to-end check of the pd2wclap pipeline: loads the pre-built demo WCLAP
@@ -1022,9 +1210,14 @@ static void test_audio_callback_flushes_denormals(void) {
 #if !AUDIO_DENORMALS_CONTROLLED
   return;  // no per-thread denormal control on this target (wasm)
 #else
-  // Clear only the flush bits, leaving rounding/exception-mask bits alone.
-  AudioDenormalState set = audio_denormals_off();
-  audio_denormals_restore(set);
+  // Clear the flush bits, leaving rounding/exception-mask bits alone — and
+  // clear them *explicitly* rather than round-tripping whatever the thread is
+  // in now: audio_fill_buffer() sets the mode on whatever thread calls it (on
+  // the audio thread, correctly, for that thread's whole life), so any earlier
+  // test that rendered audio leaves this one starting from "flushing on". It
+  // would then report "not sensitive" — which reads like a broken test helper
+  // or a broken CPU, not like state left over from the test above.
+  audio_denormals_on();
   CHECK(makes_denormal(),
         "test is not sensitive: FLT_MIN*0.5 flushed even with the mode cleared");
 
@@ -2105,6 +2298,8 @@ int main(void) {
   RUN(test_recursive_find);
   RUN(test_wav_export);
   RUN(test_render_smoke);
+  RUN(test_eq_unit);
+  RUN(test_eq_in_chain);
   RUN(test_chopper_repeats_at_tempo_derived_length);
   RUN(test_audio_callback_flushes_denormals);
   RUN(test_idle_track_gate_wakes_on_note);

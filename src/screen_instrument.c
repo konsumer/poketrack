@@ -162,7 +162,9 @@ void screen_instrument_update(UIState* ui) {
         memset(inst->chain[slot].cc_map, 0xFF, UNIT_MAX_PARAMS);
       }
     } else {
-      const UnitDef* defs[32];
+      // Sized well past the registry (unit_list writes every entry and does
+      // not bounds-check its caller's array).
+      const UnitDef* defs[64];
       int nf = 0;
       unit_list(defs, &nf);
       ChainSlot* sl = &inst->chain[slot];
