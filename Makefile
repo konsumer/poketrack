@@ -8,7 +8,7 @@
 # breaks `cmake --build` in CI with a bogus "Permission denied".
 SHELL := /bin/bash
 
-.PHONY: help build build-web clean serve format format-check test run plugins theme-shots embed icons
+.PHONY: help build build-web clean serve format format-check test run plugins plugin-samples test-plugins theme-shots embed icons
 .DEFAULT_GOAL := help
 
 help: ## Show this help
@@ -61,6 +61,16 @@ embed: ## Re-generate src/controller_png.h from art/controller.png (after editin
 icons: ## Re-generate the app icon (art/appicon.*, src/appicon_png.h) from art/appicon.png
 	python3 scripts/make_icons.py
 
+plugin-samples: ## Fetch the drum recordings trommelsynthesizer embeds (needed before `make plugins` for its sampled machines)
+	plugins/trommelsynthesizer/scripts/fetch_samples.sh
+
+test-plugins: ## Sanity-check the trommelsynthesizer drum engine natively (synthesized machines; no samples needed)
+	mkdir -p build
+	cc -std=gnu17 -O2 -Wall -Iplugins/trommelsynthesizer/src -o build/trommelsynthesizer-render \
+		plugins/trommelsynthesizer/test/render.c plugins/trommelsynthesizer/src/trommelsynthesizer.c \
+		plugins/trommelsynthesizer/src/samples_stub.c -lm
+	build/trommelsynthesizer-render --check
+
 plugins: ## Build bundled example WCLAP plugins into examples/plugins/
 	cd plugins/karplus && [ -d node_modules ] || npm install
 	cd plugins/karplus && npm run asbuild:release
@@ -91,3 +101,7 @@ plugins: ## Build bundled example WCLAP plugins into examples/plugins/
 		plugins/dexed/build.sh && \
 		cp plugins/dexed/build/dexed.wasm examples/plugins/dexed.wclap.wasm \
 	) || echo "skipping dexed (see plugins/dexed/README.md#building) — wasi-sdk or node not found"
+	[ -x "$${WASI_SDK_PATH:-/opt/wasi-sdk}/bin/clang" ] && ( \
+		plugins/trommelsynthesizer/build.sh && \
+		cp plugins/trommelsynthesizer/build/trommelsynthesizer.wasm examples/plugins/trommelsynthesizer.wclap.wasm \
+	) || echo "skipping trommelsynthesizer (see plugins/trommelsynthesizer/README.md#building) — wasi-sdk not found"

@@ -167,11 +167,31 @@ jobs:
         # main — matching that same convention here. build.sh fetches its
         # own CLAP headers on first run, so nothing else to set up for it.
 
+      - name: Test trommelsynthesizer engine
+        run: make test-plugins
+        # Native self-check of the drum engine (every synthesized voice
+        # audible, finite and decaying; the GM map consistent). Uses the stub
+        # sample table, so it needs no #embed-capable compiler.
+
+      - name: Fetch trommelsynthesizer samples
+        run: make plugin-samples
+        # The sampled machines' recordings are generated, not checked in
+        # (plugins/trommelsynthesizer/.gitignore). Without this step the
+        # plugin builds against src/samples_stub.c and 19 machines are silent.
+
       - name: Build example plugins
         run: make plugins
         # Builds karplus (npm/AssemblyScript) + robotalk (cargo) + the 3
-        # pd2wclap demo patches into examples/plugins/ — none of that is
-        # checked into git any more (see .gitignore).
+        # pd2wclap demo patches + trommelsynthesizer (wasi-sdk) into
+        # examples/plugins/ — none of that is checked into git any more (see
+        # .gitignore).
+
+      - name: Check trommelsynthesizer has its samples
+        run: |
+          size=$(stat -c%s examples/plugins/trommelsynthesizer.wclap.wasm)
+          echo "trommelsynthesizer.wclap.wasm: $size bytes"
+          # ~6.7 MB with the embedded recordings, well under 1 MB with the stub
+          test "$size" -gt 5000000
 
       - name: Zip examples
         run: cd examples && zip -r ../examples.zip .
