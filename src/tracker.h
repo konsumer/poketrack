@@ -118,6 +118,15 @@ void tracker_inst_set_slot(TrackerInstrument* inst, int slot, const char* unit_i
 
 // Returns true on success
 bool tracker_save(const TrackerSong* song, const char* path);
+
+// Re-express every instrument's relative file path (SF2, sample, plugin...) so
+// it is relative to the folder of new_file_path instead of old_dir (the engine's
+// save_dir: a folder with a trailing '/', or "" for a song never saved). Call
+// it before tracker_save() when saving into a different folder: the paths in
+// memory are relative to wherever the song was last saved, and tracker_save()
+// only rewrites absolute ones, so without this a "save as" elsewhere writes
+// paths that point at the old folder's files.
+void tracker_rebase_paths(TrackerSong* song, const char* old_dir, const char* new_file_path);
 bool tracker_load(TrackerSong* song, const char* path);
 
 // Save/load a single instrument to/from a .rpti file.

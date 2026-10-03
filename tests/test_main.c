@@ -13,6 +13,7 @@
 #include "clap_host.h"
 #include "denormal.h"
 #include "raylib.h"
+#include "paths.h"
 #include "tracker.h"
 #include "units/unit_registry.h"
 
@@ -2279,6 +2280,70 @@ static void test_clap_dexed_static_mapping_reaches_shared_instance(void) {
   audio_shutdown(&eng);
 }
 
+// A song keeps each instrument's file path (SF2, sample, plugin) relative to
+// the folder it was last saved in. Saving into a different folder used to write
+// those paths unchanged, so they pointed at the old folder's files: the song
+// reloaded with a silent instrument (headless `--wav` found no plugin).
+static void test_save_as_rebases_relative_paths(void) {
+  MakeDirectory("test_rebase/old/plugins");
+  MakeDirectory("test_rebase/new/songs");
+  FILE* f = fopen("test_rebase/old/plugins/p.wasm", "wb");
+  CHECK(f != NULL, "rebase: couldn't create the fixture file");
+  if (!f)
+    return;
+  fputs("x", f);
+  fclose(f);
+
+  // The song was last saved in test_rebase/old/ and picked plugins/p.wasm there.
+  char old_dir[512];
+  path_dir_of("test_rebase/old/song.rpt", old_dir, sizeof(old_dir));
+  tracker_init(&song_a);
+  tracker_inst_set_slot(&song_a.instruments[0], 0, "clap", 0);
+  snprintf(song_a.instruments[0].chain[0].data, sizeof(song_a.instruments[0].chain[0].data),
+           "plugins/p.wasm\tcom.x.y\t0000000100");
+
+  const char* saved = "test_rebase/new/songs/s.rpt";
+  tracker_rebase_paths(&song_a, old_dir, saved);
+  const char* want = "../../old/plugins/p.wasm\tcom.x.y\t0000000100";
+  CHECK(strcmp(song_a.instruments[0].chain[0].data, want) == 0,
+        "rebase: path not rewritten for the new folder (got \"%s\")",
+        song_a.instruments[0].chain[0].data);
+
+  CHECK(tracker_save(&song_a, saved), "rebase: save failed");
+  tracker_init(&song_b);
+  CHECK(tracker_load(&song_b, saved), "rebase: load failed");
+  char path[512];
+  snprintf(path, sizeof(path), "%s", song_b.instruments[0].chain[0].data);
+  char* tab = strchr(path, '\t');
+  CHECK(tab != NULL && strcmp(tab + 1, "com.x.y\t0000000100") == 0,
+        "rebase: the plugin id/mappings after the path were lost");
+  if (tab)
+    *tab = '\0';
+  CHECK(FileExists(path), "rebase: reloaded path \"%s\" doesn't exist", path);
+
+  // Saving again into the same folder must leave it alone.
+  char new_dir[512];
+  path_dir_of(saved, new_dir, sizeof(new_dir));
+  tracker_rebase_paths(&song_a, new_dir, saved);
+  CHECK(strcmp(song_a.instruments[0].chain[0].data, want) == 0,
+        "rebase: saving into the same folder changed the path (got \"%s\")",
+        song_a.instruments[0].chain[0].data);
+
+  // A song written before this fix has a path relative to the folder it
+  // started in. Resolving it against the folder it now lives in finds nothing,
+  // so it falls back to the working directory.
+  char resolved[512];
+  unit_resolve_path(new_dir, "test_rebase/old/plugins/p.wasm", resolved, sizeof(resolved));
+  CHECK(path_is_absolute(resolved) && FileExists(resolved),
+        "rebase: legacy path didn't fall back to the working directory (got \"%s\")", resolved);
+  unit_resolve_path(new_dir, "nope/missing.wasm", resolved, sizeof(resolved));
+  CHECK(strcmp(resolved, TextFormat("%snope/missing.wasm", new_dir)) == 0,
+        "rebase: a path found nowhere must stay relative to the song (got \"%s\")", resolved);
+
+  remove("test_rebase/new/songs/s.rpt");
+  remove("test_rebase/old/plugins/p.wasm");
+}
+
 // Prints before each test runs, so a hard crash (which loses any buffered
 // stdout) still tells you which test it died in from the last line printed.
 #define RUN(fn)                \
@@ -2295,6 +2360,7 @@ int main(void) {
   RUN(test_registry);
   RUN(test_song_roundtrip);
   RUN(test_instrument_roundtrip);
+  RUN(test_save_as_rebases_relative_paths);
   RUN(test_recursive_find);
   RUN(test_wav_export);
   RUN(test_render_smoke);

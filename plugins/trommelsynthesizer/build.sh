@@ -43,7 +43,7 @@ fi
 "$WASI_SDK_PATH/bin/clang" --target=wasm32-wasip1 -mexec-model=reactor -std=c23 -O2 \
   -Wall -Wextra \
   -Wl,--export-memory -Wl,--export-table \
-  -Wl,--initial-memory=16777216 -Wl,--max-memory=268435456 \
+  -Wl,--initial-memory=8388608 -Wl,--max-memory=268435456 \
   -Wl,--export=malloc -Wl,--export=clap_entry -Wl,--growable-table \
   -I"$CLAP_INCLUDE" -I"$SCRIPT_DIR/src" \
   "$SCRIPT_DIR/src/plugin.c" \

@@ -3,8 +3,8 @@
 #include <stdint.h>
 
 typedef struct {
-  const uint8_t* data;  // little-endian int16, mono
-  uint32_t frames;
+  const uint8_t* data;  // 8-bit mu-law (G.711), mono
+  uint32_t frames;      // = bytes in data
   uint32_t rate;
 } Sample;
 

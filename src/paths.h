@@ -48,14 +48,26 @@ static inline void path_dir_of(const char* file_path, char* out, int sz) {
 
 // Resolve path against base_dir. Absolute paths (and an empty base_dir) pass
 // through unchanged; base_dir is expected to end in a separator.
+//
+// A relative path that isn't there but IS there relative to the working
+// directory resolves to that, as an absolute path. Songs written before
+// tracker_rebase_paths() existed could keep a path relative to the folder they
+// were first saved in after being saved somewhere else (examples/plugins/x.wasm
+// in ~/Music/song.rpt), which would otherwise leave the unit silently unloaded.
 static inline void unit_resolve_path(const char* base_dir, const char* path,
                                      char* out, int sz) {
-  if (!path || !path[0])
+  if (!path || !path[0]) {
     out[0] = '\0';
-  else if (path_is_absolute(path) || !base_dir || !base_dir[0])
+  } else if (path_is_absolute(path) || !base_dir || !base_dir[0]) {
     snprintf(out, sz, "%s", path);
-  else
+  } else {
     snprintf(out, sz, "%s%s", base_dir, path);
+    if (!FileExists(out) && FileExists(path)) {
+      const char* cwd = GetWorkingDirectory();
+      size_t cl = strlen(cwd);
+      snprintf(out, sz, "%s%s%s", cwd, (cl && cwd[cl - 1] == '/') ? "" : "/", path);
+    }
+  }
 }
 
 // Inverse of unit_resolve_path: express abs_path relative to base_dir, using

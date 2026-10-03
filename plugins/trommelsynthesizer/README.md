@@ -124,8 +124,10 @@ Honest account, since "as accurate as possible" depends on what's knowable:
 
 ## Samples
 
-The 19 sampled machines are 219 16-bit mono recordings, 6.5 MB in all, built
-into the `.wasm` with C23 `#embed` (the plugin is about 6.7 MB). They aren't in git. `make plugin-samples` fetches
+The 19 sampled machines are 219 mono recordings, 2.8 MB in all, built into the
+`.wasm` with C23 `#embed` (the plugin is about 3 MB). They are stored as 8-bit
+mu-law (G.711), and recordings with no energy above a quarter of the sample rate
+are stored at half rate; see [Load time](#load-time). They aren't in git. `make plugin-samples` fetches
 them from [tidal-drum-machines](https://github.com/geikha/tidal-drum-machines)
 (only the folders it needs, pinned to a commit) and generates the blobs. To use a
 copy you already have, point the prep script at its `machines/` folder:
@@ -162,7 +164,7 @@ Plain C, no threads, exported memory, so it loads on desktop and web.
 
 The release workflow's `examples` job installs wasi-sdk 33, then runs
 `make test-plugins`, `make plugin-samples` and `make plugins`, and fails if the
-built plugin is under 5 MB (which would mean it was built with the stub sample
+built plugin is under 1 MB (which would mean it was built with the stub sample
 table, leaving 19 machines silent). The samples are fetched by
 `scripts/fetch_samples.sh`, a sparse checkout of just the machine folders it
 needs, pinned to a commit (`SAMPLES_REF`) so builds are reproducible. Change
@@ -183,6 +185,20 @@ clang -std=c23 -O2 -Isrc -o /tmp/render test/render.c src/trommelsynthesizer.c s
 
 `src/gains.h` holds each voice's output gain, which brings every voice to a
 target peak (kicks loud, hats quiet) so the machines sit at the same loudness.
+
+## Load time
+
+Opening a WCLAP module costs about 5 ms per MB of `.wasm`, and poketrack pays it
+again whenever an instrument is edited (it tears down every instance, and the
+module with them). With the samples stored as 16-bit this plugin took about 32 ms
+to load, which is long enough to glitch playback if it lands during a block. Storing
+them as 8-bit mu-law (median 37 dB SNR against the originals, no worse than the
+8-12 bit machines they come from) and halving the rate of recordings with nothing
+above 11 kHz brought the load to about 15 ms. The first load after a new build is
+slower (about 55 ms) while wasmtime compiles and caches the code.
+
+Playing it is cheap: a 512-frame block takes about 0.12 ms, around 1% of the time
+available, even with many voices triggering at once.
 
 ## Song data limit
 

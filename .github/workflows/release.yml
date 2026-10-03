@@ -190,8 +190,8 @@ jobs:
         run: |
           size=$(stat -c%s examples/plugins/trommelsynthesizer.wclap.wasm)
           echo "trommelsynthesizer.wclap.wasm: $size bytes"
-          # ~6.7 MB with the embedded recordings, well under 1 MB with the stub
-          test "$size" -gt 5000000
+          # ~3 MB with the embedded recordings, ~0.2 MB with the stub
+          test "$size" -gt 1000000
 
       - name: Zip examples
         run: cd examples && zip -r ../examples.zip .

@@ -396,6 +396,45 @@ static bool inst_has_data(const TrackerInstrument* inst, int idx) {
 
 // ---- public API ------------------------------------------------------------
 
+void tracker_rebase_paths(TrackerSong* song, const char* old_dir, const char* new_file_path) {
+  char new_dir[512];
+  path_dir_of(new_file_path, new_dir, sizeof(new_dir));
+  for (int i = 0; i < NUM_INSTRUMENTS; i++) {
+    for (int s = 0; s < CHAIN_MAX; s++) {
+      char* d = song->instruments[i].chain[s].data;
+      if (!d[0] || path_is_absolute(d))
+        continue;  // absolute paths are relativised by tracker_save itself
+      char path[512];
+      strncpy(path, d, sizeof(path) - 1);
+      path[sizeof(path) - 1] = '\0';
+      char* tab = strchr(path, '\t');  // a plugin's data is "path\tid\tmappings"
+      const char* rest = tab ? tab + 1 : NULL;
+      if (tab)
+        *tab = '\0';
+      char abs_path[512];
+      unit_resolve_path(old_dir, path, abs_path, sizeof(abs_path));
+      if (!path_is_absolute(abs_path)) {  // never saved: relative to the working dir
+        char tmp[512];
+        const char* cwd = GetWorkingDirectory();
+        size_t cl = strlen(cwd);
+        snprintf(tmp, sizeof(tmp), "%s%s%s", cwd, (cl && cwd[cl - 1] == '/') ? "" : "/", abs_path);
+        snprintf(abs_path, sizeof(abs_path), "%s", tmp);
+      }
+      char rel[512];
+      path_make_relative(new_dir, abs_path, rel, sizeof(rel));
+      char out[512];
+      if (rest)
+        snprintf(out, sizeof(out), "%s\t%s", rel, rest);
+      else
+        snprintf(out, sizeof(out), "%s", rel);
+      // The slot's data field is fixed-size; keep the old value rather than
+      // truncate a plugin's mapping list.
+      if (strlen(out) < sizeof(song->instruments[i].chain[s].data))
+        strcpy(d, out);
+    }
+  }
+}
+
 bool tracker_save(const TrackerSong* song, const char* path) {
   char dir[512];
   path_dir_of(path, dir, sizeof(dir));

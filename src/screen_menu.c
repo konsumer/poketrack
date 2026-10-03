@@ -102,6 +102,9 @@ void screen_menu_update(UIState* ui) {
       status_timer = 180;
     } else if (g_fb_mode == MENU_FB_SAVE) {
       set_song_name_from_path(ui->song, fb_path);
+      // Instrument file paths are relative to the folder the song was last
+      // saved in; make them relative to this one before writing them out.
+      tracker_rebase_paths(ui->song, ui->engine->save_dir, fb_path);
       bool ok = tracker_save(ui->song, fb_path);
       if (ok) {
         audio_set_save_dir(ui->engine, fb_path);

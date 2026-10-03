@@ -418,10 +418,24 @@ static void sample_init(Voice* v, int semis) {
   v->tone_a = onepole_a(3000.0, v->sr);
 }
 
+// G.711 mu-law byte -> linear, filled once (every engine shares it).
+static float g_ulaw[256];
+static bool g_ulaw_ready;
+
+static void ulaw_init(void) {
+  for (int i = 0; i < 256; i++) {
+    int u = ~i & 0xFF;
+    int t = (((u & 0x0F) << 3) + 0x84) << ((u >> 4) & 7);
+    t -= 0x84;
+    g_ulaw[i] = (u & 0x80 ? -t : t) / 32768.0f;
+  }
+  g_ulaw_ready = true;
+}
+
 static inline double smp_at(const Sample* s, int64_t i) {
   if (i < 0 || (uint32_t)i >= s->frames)
     return 0.0;
-  return (int16_t)(s->data[2 * i] | (s->data[2 * i + 1] << 8)) / 32768.0;
+  return g_ulaw[s->data[i]];
 }
 
 static double tick_sample(Voice* v) {
@@ -603,6 +617,8 @@ static double voice_tick(Voice* v) {
 }
 
 Engine* eng_create(double sr) {
+  if (!g_ulaw_ready)
+    ulaw_init();
   Engine* e = calloc(1, sizeof *e);
   e->sr = sr > 0 ? sr : 48000.0;
   e->master = 1.0f;
