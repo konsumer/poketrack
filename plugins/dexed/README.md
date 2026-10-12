@@ -60,14 +60,15 @@ signal.
 
 ## Params: a full 1:1 mapping
 
-All 156 of Dexed's own parameters, in Dexed's own order, so param N here is
-param N there: 24 globals (Cutoff, Resonance, Output, MonoMode, MASTER TUNE
+Three preset/engine params first (like juno1's `Patch`), then all 156 of
+Dexed's own parameters, in Dexed's own order, so param id N here is param N
+there: 24 globals (Cutoff, Resonance, Output, MonoMode, MASTER TUNE
 ADJ, ALGORITHM, FEEDBACK, OSC KEY SYNC, the six LFO params, TRANSPOSE,
 P MODE SENS., and the two 4-stage pitch EGs) followed by 6 operators × 22
 (each operator's 4+4 EG rates/levels, OUTPUT LEVEL, MODE, F COARSE, F FINE,
 OSC DETUNE, BREAK POINT, L/R SCALE DEPTH, L/R KEY SCALE, RATE SCALING,
-A MOD SENS., KEY VELOCITY, and its on/off SWITCH) — plus three that Dexed only
-reaches from its GUI:
+A MOD SENS., KEY VELOCITY, and its on/off SWITCH). The three leading ones are
+what Dexed only reaches from its GUI:
 
 | Extra param | Range | Notes |
 |-------------|-------|-------|

@@ -1,4 +1,5 @@
-// See params.h. The table is dexed's initCtrl() order, index for index.
+// See params.h. After the three preset/engine extras, the table is dexed's
+// initCtrl() order.
 #include "params.h"
 
 #include <math.h>
@@ -44,6 +45,13 @@
   { id + 21, "OP" #n " SWITCH", 0, 1, ENUM, -1, 0, 0, (n) - 1, FMT_ON_OFF }
 
 const DexedParamDesc dexed_params[] = {
+    // Extras: dexed picks these from its cartridge/bank UI rather than
+    // exposing them as params; in a host with no plugin GUI they have to be
+    // params to be reachable at all. First, like juno1's Patch.
+    {DEXED_PARAM_CARTRIDGE, "Cartridge", 0, DEXED_CART_COUNT - 1, ENUM, -1, 0, 0, -1, FMT_CARTRIDGE},
+    {DEXED_PARAM_PROGRAM, "Program", 0, DEXED_VOICES_PER_CART - 1, ENUM, -1, 0, 0, -1, FMT_PROGRAM},
+    {DEXED_PARAM_ENGINE, "Engine", 0, DEXED_ENGINE_COUNT - 1, ENUM, -1, 0, 0, -1, FMT_ENGINE},
+
     // Output stage and global settings (dexed: fxCutoff, fxReso, output,
     // monoModeCtrl, tune).
     {0, "Cutoff", 0, 1, CONT, -1, 0, 0, -1, FMT_FLOAT},
@@ -82,13 +90,6 @@ const DexedParamDesc dexed_params[] = {
     OP_PARAM_ROWS(4, 90, 42),
     OP_PARAM_ROWS(5, 112, 21),
     OP_PARAM_ROWS(6, 134, 0),
-
-    // Extras: dexed picks these from its cartridge/bank UI rather than
-    // exposing them as params; in a host with no plugin GUI they have to be
-    // params to be reachable at all.
-    {DEXED_PARAM_CARTRIDGE, "Cartridge", 0, DEXED_CART_COUNT - 1, ENUM, -1, 0, 0, -1, FMT_CARTRIDGE},
-    {DEXED_PARAM_PROGRAM, "Program", 0, DEXED_VOICES_PER_CART - 1, ENUM, -1, 0, 0, -1, FMT_PROGRAM},
-    {DEXED_PARAM_ENGINE, "Engine", 0, DEXED_ENGINE_COUNT - 1, ENUM, -1, 0, 0, -1, FMT_ENGINE},
 };
 
 const int dexed_num_params = (int)(sizeof(dexed_params) / sizeof(dexed_params[0]));

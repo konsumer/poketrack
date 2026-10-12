@@ -1,6 +1,6 @@
-// The parameter model: dexed's own parameter list (Source/PluginParam.cpp's
-// initCtrl()), in dexed's own order, so param index N here is param index N
-// in Dexed itself.
+// The parameter model: Cartridge/Program/Engine first (like juno1's Patch),
+// then dexed's own parameter list (Source/PluginParam.cpp's initCtrl()), in
+// dexed's own order, so param id N here is param index N in Dexed itself.
 //
 // Dexed exposes params through JUCE Ctrl objects for a 145-byte "unpacked
 // voice" plus a handful of non-voice settings. Each voice param is a plain
