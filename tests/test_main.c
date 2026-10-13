@@ -2352,6 +2352,104 @@ static void test_save_as_rebases_relative_paths(void) {
     fn();                      \
   } while (0)
 
+// plugins/syntakt: the template build (no engine, contains nothing of
+// Elektron's) must load, list its params and stay silent. A plugin made from
+// a real Syntakt OS file (plugins/syntakt/build/syntakt.wclap.wasm, never
+// built in CI) must sound on every machine and park voices once they decay.
+static void test_clap_plugin_syntakt(void) {
+  enum { BLK = 512 };
+  static float out_l[BLK], out_r[BLK];
+  const char* tpath = "../plugins/syntakt/build/syntakt-template.wasm";
+  if (!FileExists(tpath)) {
+    printf("SKIP test_clap_plugin_syntakt: %s not built (plugins/syntakt/build.sh)\n", tpath);
+    return;
+  }
+  ClapPlugin* t = clap_host_load(tpath, NULL, 44100.0f, BLK);
+  CHECK(t != NULL, "syntakt-template.wasm: load failed");
+  if (t) {
+    CHECK(clap_host_is_instrument(t), "syntakt-template.wasm: expected an instrument");
+    uint32_t total = clap_host_param_count(t);
+    CHECK(total == 94, "syntakt-template.wasm: expected 94 params (6 globals + 11 machines x 8 knobs), got %u", total);
+    uint32_t id;
+    char name[128];
+    double min, max, def;
+    clap_host_param_info(t, 0, &id, name, sizeof(name), &min, &max, &def);
+    CHECK(strcmp(name, "Machine") == 0 && max == 10, "syntakt-template.wasm: param 0 is %s (max %g), want Machine (max 10)", name, max);
+    clap_host_note_on(t, 60, 255, 0);
+    float energy = 0.0f;
+    for (int blk = 0; blk < 8; blk++) {
+      clap_host_process(t, NULL, NULL, out_l, out_r, BLK);
+      for (int f = 0; f < BLK; f++)
+        energy += out_l[f] * out_l[f] + out_r[f] * out_r[f];
+    }
+    CHECK(energy == 0.0f, "syntakt-template.wasm: an unpatched template should be silent, got energy %g", energy);
+    clap_host_unload(t);
+  }
+
+  const char* path = "../plugins/syntakt/build/syntakt.wclap.wasm";
+  if (!FileExists(path)) {
+    printf("SKIP test_clap_plugin_syntakt (engines): %s not made (plugins/syntakt/scripts/make-plugin.mjs)\n", path);
+    return;
+  }
+  for (int m = 0; m < 11; m++) {
+    ClapPlugin* p = clap_host_load(path, NULL, 44100.0f, BLK);
+    CHECK(p != NULL, "syntakt.wclap.wasm: load failed");
+    if (!p)
+      return;
+    clap_host_queue_param(p, 0, (double)m);
+    clap_host_note_on(p, 48, 255, 0);
+    bool all_finite = true;
+    float energy = 0.0f;
+    for (int blk = 0; blk < 16; blk++) {
+      clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+      for (int f = 0; f < BLK; f++) {
+        if (!isfinite(out_l[f]) || !isfinite(out_r[f]))
+          all_finite = false;
+        energy += out_l[f] * out_l[f] + out_r[f] * out_r[f];
+      }
+    }
+    CHECK(all_finite, "syntakt.wclap.wasm: non-finite output on machine %d", m);
+    CHECK(energy > 1e-3f, "syntakt.wclap.wasm: silent on machine %d (energy %g)", m, energy);
+    clap_host_unload(p);
+  }
+
+  // SD VINTAGE (short default decay) dies away and its voice gets parked
+  ClapPlugin* p = clap_host_load(path, NULL, 44100.0f, BLK);
+  CHECK(p != NULL, "syntakt.wclap.wasm: reload failed");
+  if (!p)
+    return;
+  clap_host_queue_param(p, 0, 6.0);
+  clap_host_note_on(p, 60, 100, 0);
+  clap_host_note_off(p, 60, 0);
+  for (int blk = 0; blk < 172; blk++)  // ~2s
+    clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+  float tail = 0.0f;
+  for (int blk = 0; blk < 8; blk++) {
+    clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+    for (int f = 0; f < BLK; f++)
+      tail += out_l[f] * out_l[f] + out_r[f] * out_r[f];
+  }
+  CHECK(tail == 0.0f, "syntakt.wclap.wasm: SD VINTAGE still sounding (%g) 2s after its hit — voice not parked", tail);
+
+  // SY TONE's default decay never ends: a note-off with a short Release (param 5) must still silence it
+  clap_host_queue_param(p, 0, 4.0);
+  clap_host_queue_param(p, 5, 0.05);  // 100 ms
+  clap_host_note_on(p, 60, 100, 0);
+  for (int blk = 0; blk < 16; blk++)
+    clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+  clap_host_note_off(p, 60, 0);
+  for (int blk = 0; blk < 16; blk++)  // ~190 ms
+    clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+  tail = 0.0f;
+  for (int blk = 0; blk < 8; blk++) {
+    clap_host_process(p, NULL, NULL, out_l, out_r, BLK);
+    for (int f = 0; f < BLK; f++)
+      tail += out_l[f] * out_l[f] + out_r[f] * out_r[f];
+  }
+  CHECK(tail == 0.0f, "syntakt.wclap.wasm: SY TONE still sounding (%g) after note-off with a 100 ms Release", tail);
+  clap_host_unload(p);
+}
+
 int main(void) {
   setvbuf(stdout, NULL, _IONBF, 0);  // unbuffered: a crash must not eat RUN()'s output
   SetTraceLogLevel(LOG_ERROR);       // silence raylib INFO spam
@@ -2388,6 +2486,7 @@ int main(void) {
   RUN(test_clap_dexed_program_param_stepping);
   RUN(test_clap_plugin_dexed_param_change_reaches_held_note);
   RUN(test_clap_plugin_dexed_block_size_independent);
+  RUN(test_clap_plugin_syntakt);
   RUN(test_clap_dexed_static_mapping_reaches_shared_instance);
 
   if (fails) {

@@ -1,0 +1,81 @@
+# SY BITS, SY SWARM, PC CARBON and repeats with other settings
+0 machine 0 37
+0 machine 1 38
+0 machine 2 3
+0 machine 3 37
+0 machine 4 38
+0 machine 5 6
+0 machine 6 7
+0 machine 7 36
+0 set 0 tune 52
+0 set 0 p1 102
+0 set 0 p2 0
+0 set 0 p3 21
+0 set 0 punch 80
+0 set 0 decay 60
+0 set 1 tune 64
+0 set 1 p1 20
+0 set 1 p2 15
+0 set 1 p3 70
+0 set 1 p4 127
+0 set 1 punch 2
+0 set 1 decay 75
+0 set 2 tune 64
+0 set 2 p1 50
+0 set 2 p2 70
+0 set 2 p3 30
+0 set 2 decay 50
+0 set 3 tune 76
+0 set 3 p1 30
+0 set 3 p2 90
+0 set 3 p3 110
+0 set 3 decay 100
+0 set 3 gate 1
+0 set 4 tune 40
+0 set 4 p1 127
+0 set 4 p2 127
+0 set 4 p3 127
+0 set 4 p4 0
+0 set 4 punch 0
+0 set 4 decay 127
+0 set 5 tune 88
+0 set 5 p1 127
+0 set 5 p2 0
+0 set 5 p3 127
+0 set 5 p4 0
+0 set 5 decay 127
+0 set 5 over 127
+0 set 6 tune 40
+0 set 6 p1 127
+0 set 6 p2 0
+0 set 6 p3 127
+0 set 6 p4 127
+0 set 6 decay 127
+0 set 7 tune 88
+0 set 7 p1 0
+0 set 7 p2 127
+0 set 7 p3 0
+0 set 7 p4 127
+0 set 7 decay 0
+0 trig 0
+0 trig 1
+4 trig 2
+8 note 3 -7
+8 trig 3
+12 note 4 3.5
+12 trig 4
+16 trig 5
+20 trig 6
+24 trig 7
+50 set 0 p3 100
+55 set 1 p2 100
+60 release 3
+75 trig 0
+75 trig 2
+90 note 1 -24
+90 trig 1
+120 machine 2 37
+120 trig 2
+140 set 4 p1 0
+150 release 4
+end 220
