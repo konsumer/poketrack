@@ -31,6 +31,7 @@ typedef struct cf_dec {
   uint8_t smode, sreg, sx, sxf;  // source operand (sxf: index scale | long << 2)
   uint8_t dmode, dreg, dx, dxf;  // destination operand
   uint8_t kind, a, b, c;
+  uint8_t h;  // handler number for dispatch (0 = not decoded yet)
 } cf_dec;
 
 typedef struct cf_cpu {

@@ -1582,11 +1582,47 @@ static void decode(cf_cpu* cpu, cf_dec* d, uint32_t pc) {
     d->next = 0;
 }
 
-// every cache entry starts here, and replaces itself with the decoded handler
-static void h_decode(cf_cpu* cpu, const cf_dec* d) {
-  cf_dec* w = (cf_dec*)d;
-  decode(cpu, w, cpu->pc);
-  w->fn(cpu, w);
+// Handler numbers: the run loop dispatches with a switch built without jump
+// tables (-fno-jump-tables), so each instruction costs a few compares and a
+// direct call. An indirect call or a br_table per instruction is several times
+// slower on some wasm runtimes (wasmtime 39 on arm64, which poketrack uses).
+#define HANDLERS \
+  X(h_generic)   \
+  X(h_move_l)    \
+  X(h_clr_l)     \
+  X(h_alu_dn)    \
+  X(h_adda)      \
+  X(h_cmpa)      \
+  X(h_moveq)     \
+  X(h_lea)       \
+  X(h_pea)       \
+  X(h_jsr)       \
+  X(h_jmp)       \
+  X(h_rts)       \
+  X(h_bra)       \
+  X(h_bsr)       \
+  X(h_bcc)       \
+  X(h_shift)     \
+  X(h_sats)      \
+  X(h_mac)       \
+  X(h_macld)     \
+  X(h_toacc)     \
+  X(h_fromacc)   \
+  X(h_movclr)
+
+enum {
+  H_DECODE = 0,
+#define X(n) H_##n,
+  HANDLERS
+#undef X
+};
+
+static void set_handler(cf_dec* d) {
+#define X(n)      \
+  if (d->fn == n) \
+    d->h = H_##n;
+  HANDLERS
+#undef X
 }
 
 int cf_set_code(cf_cpu* cpu, uint32_t lo, uint32_t hi) {
@@ -1595,7 +1631,6 @@ int cf_set_code(cf_cpu* cpu, uint32_t lo, uint32_t hi) {
   cpu->dec = calloc(n, sizeof(cf_dec));
   if (!cpu->dec)
     return CF_ERR_OOM;
-  for (uint32_t i = 0; i < n; i++) cpu->dec[i].fn = h_decode;
   cpu->code_lo = lo;
   cpu->code_hi = hi;
   return CF_OK;
@@ -1623,7 +1658,18 @@ int cf_run(cf_cpu* cpu, uint32_t stop, uint64_t max) {
     PROFILE(pc)
     if (off < span) {  // the stop address is never inside the code
       cf_dec* d = &dec[off >> 1];
-      d->fn(cpu, d);
+      if (!d->h) {
+        decode(cpu, d, pc);
+        set_handler(d);
+      }
+      switch (d->h) {
+#define X(n)   \
+  case H_##n:  \
+    n(cpu, d); \
+    break;
+        HANDLERS
+#undef X
+      }
       if (cpu->err && cpu->err != CF_ERR_ILLEGAL)
         cpu->err_pc = pc;
     } else {

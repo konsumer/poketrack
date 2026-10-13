@@ -52,7 +52,7 @@ bool param_info_by_id(uint32_t id, param_info_t* out) {
         out->max = 1, out->stepped = true;
         break;
       case PID_VOICES:
-        out->min = 1, out->max = ST_VOICES, out->def = ST_VOICES, out->stepped = true;
+        out->min = 1, out->max = ST_VOICES, out->def = 1, out->stepped = true;  // one voice, like a Syntakt track
         break;
       case PID_VELOCITY:
         out->max = 1, out->def = 1;
@@ -212,6 +212,14 @@ static void render_block(synth_t* s) {
   memset(s->block, 0, sizeof(s->block));
   if (!s->eng)
     return;
+  // nothing sounding and nothing to start: every voice is parked, so skip the engine
+  bool any = s->trig != 0;
+  for (int t = 0; t < ST_VOICES && !any; t++)
+    any = s->voices[t].active;
+  if (!any) {
+    s->release = 0;
+    return;
+  }
   int32_t out[ST_VOICES][ST_FRAMES];
   if (st_block(s->eng, s->trig, s->release, out)) {
     // the engine hit something it can't run: stop rather than make noise
@@ -245,7 +253,8 @@ static void render_block(synth_t* s) {
     if (v->env <= 0.0f) {
       v->active = false;
       st_park(s->eng, t);
-    } else if (peak < SILENCE && !v->held) {
+    } else if (peak < SILENCE && !(v->held && s->params[PID_GATE] >= 0.5)) {
+      // silent: park it, even if its note-off never comes (trackers often send none for hits)
       if (++v->silent >= SILENT_BLOCKS) {
         v->active = false;
         st_park(s->eng, t);

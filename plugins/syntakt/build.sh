@@ -33,8 +33,13 @@ else
 fi
 
 # No wasm-opt: its memory packing could split the engine slot, which the
-# generator expects to find in one piece.
-"$WASI_SDK_PATH/bin/clang" --target=wasm32-wasip1 -mexec-model=reactor -std=gnu17 -O2 \
+# generator expects to find in one piece. clang runs wasm-opt by itself when
+# it's on PATH, hence the minimal PATH.
+# -fno-jump-tables: the interpreter's dispatch switch must not become a wasm
+# br_table. wasmtime 39 (what poketrack bundles) compiles br_table and
+# call_indirect several times slower on arm64, and per emulated instruction
+# that made the engine ~5x slower.
+PATH=/usr/bin:/bin "$WASI_SDK_PATH/bin/clang" --target=wasm32-wasip1 -mexec-model=reactor -std=gnu17 -O2 -fno-jump-tables \
   -Wall -Wextra \
   -Wl,--export-memory -Wl,--export-table \
   -Wl,--initial-memory=16777216 -Wl,--max-memory=268435456 \
