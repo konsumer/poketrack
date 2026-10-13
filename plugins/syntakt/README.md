@@ -25,7 +25,9 @@ How it works: the maker unpacks the OS file (SysEx, then the ELE3 container, the
 
 ## Params
 
-Every machine has its own 8 knobs, named and ranged as on the Syntakt (TUNE shows as -24..+24). Each knob is stepped, so a poketrack ADD-row value is the Syntakt value. Knobs belong to their machine, so switching machines keeps each machine's settings.
+There are 6 global params and 8 knobs. The knobs are shared by all machines, like the Syntakt's own: their names, defaults and meaning follow the selected machine. Pick SD VINTAGE and knob A is `INHM`; pick SY BITS and it's `DET`. When the machine changes, the plugin asks the host to rescan, so poketrack relabels mapped knobs. Hosts that ignore rescans keep showing the first machine's names, but values still apply.
+
+Each knob is stepped and declared as 0–127 (TUNE as 40–88), so an ADD-row value is the Syntakt value whatever the machine. Each machine clamps it to its own range, and the value text shows it the way the machine plays it (TUNE and SY BITS DET as -24..+24). A knob you haven't set follows the current machine's default.
 
 | Param | |
 |---|---|
@@ -36,7 +38,9 @@ Every machine has its own 8 knobs, named and ranged as on the Syntakt (TUNE show
 | Velocity | how much note velocity scales the level |
 | Release | fade after note-off, up to 2 s. OFF (the default) ignores note-off, like the hardware's trig-only machines; set it to cut long or infinite decays (SY TONE and SY CHORD default to DEC 127) |
 
-| Machine | TUNE, then knobs A–D | PNCH slot | DEC, OVER |
+The knobs on each machine:
+
+| Machine | TUNE, then knobs A–D | E | DEC, OVER |
 |---|---|---|---|
 | BD MODERN | SMOD, TMOD, SWEP, MENV | PNCH | DEC, OVER |
 | SD BASIC | INHM, MDFB, SWEP, MENV | PNCH | DEC, OVER |
@@ -50,7 +54,7 @@ Every machine has its own 8 knobs, named and ranged as on the Syntakt (TUNE show
 | SY BITS | DET (-24..+24), BAL, SRR, WAVE | BR (bit redux) | DEC, OVER |
 | SY SWARM | NMOD, ANIM, DET, MIX | SUB (0–2) | DEC, OVER |
 
-In the param picker, knobs read like `SD VINTAGE INHM`. Notes play at pitch from key 60 (C4), plus TUNE.
+Notes play at pitch from key 60 (C4), plus TUNE.
 
 The engine runs at 48 kHz in blocks of 32 frames (0.67 ms), and its output is resampled to the host rate. A trig therefore lands on the next block boundary.
 

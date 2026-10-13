@@ -14,11 +14,14 @@
 typedef struct {
   clap_plugin_t plugin;
   const clap_host_t* host;
+  const clap_host_params_t* host_params;
   synth_t* synth;
+  volatile bool rescan;  // the machine changed: ask the host to re-read knob names
 } Plugin;
 
 static bool plugin_init(const clap_plugin_t* plugin) {
   Plugin* p = plugin->plugin_data;
+  p->host_params = p->host->get_extension(p->host, CLAP_EXT_PARAMS);
   if (!synth_has_engine(p->synth)) {
     const char* msg = "syntakt: this plugin has no engine yet, so it is silent. Make your own from your Syntakt OS file: see plugins/syntakt/README.md";
     const clap_host_log_t* log = p->host->get_extension(p->host, CLAP_EXT_LOG);
@@ -85,6 +88,11 @@ static void handle_event(Plugin* p, const clap_event_header_t* h) {
     case CLAP_EVENT_PARAM_VALUE: {
       const clap_event_param_value_t* ev = (const clap_event_param_value_t*)h;
       synth_set_param(p->synth, ev->param_id, ev->value);
+      // knob names follow the machine: hosts may only rescan from the main thread
+      if (synth_take_machine_changed(p->synth) && p->host_params) {
+        p->rescan = true;
+        p->host->request_callback(p->host);
+      }
       break;
     }
     default:
@@ -168,9 +176,9 @@ static uint32_t params_count(const clap_plugin_t* plugin) {
 }
 
 static bool params_get_info(const clap_plugin_t* plugin, uint32_t index, clap_param_info_t* info) {
-  (void)plugin;
+  Plugin* p = plugin->plugin_data;
   param_info_t pi;
-  if (!param_info(index, &pi))
+  if (!param_info(p->synth, index, &pi))
     return false;
   memset(info, 0, sizeof *info);
   info->id = pi.id;
@@ -179,11 +187,7 @@ static bool params_get_info(const clap_plugin_t* plugin, uint32_t index, clap_pa
     info->flags |= CLAP_PARAM_IS_STEPPED;
   if (pi.is_enum)
     info->flags |= CLAP_PARAM_IS_ENUM;
-  // knobs read "SD VINTAGE INHM" in the picker
-  if (pi.module[0])
-    snprintf(info->name, sizeof info->name, "%s %s", pi.module, pi.name);
-  else
-    snprintf(info->name, sizeof info->name, "%s", pi.name);
+  snprintf(info->name, sizeof info->name, "%s", pi.name);
   snprintf(info->module, sizeof info->module, "%s", pi.module);
   info->min_value = pi.min;
   info->max_value = pi.max;
@@ -194,25 +198,25 @@ static bool params_get_info(const clap_plugin_t* plugin, uint32_t index, clap_pa
 static bool params_get_value(const clap_plugin_t* plugin, clap_id id, double* out) {
   Plugin* p = plugin->plugin_data;
   param_info_t pi;
-  if (!param_info_by_id(id, &pi))
+  if (!param_info_by_id(p->synth, id, &pi))
     return false;
   *out = synth_get_param(p->synth, id);
   return true;
 }
 
 static bool params_value_to_text(const clap_plugin_t* plugin, clap_id id, double value, char* out, uint32_t size) {
-  (void)plugin;
+  Plugin* p = plugin->plugin_data;
   param_info_t pi;
-  if (!param_info_by_id(id, &pi))
+  if (!param_info_by_id(p->synth, id, &pi))
     return false;
-  param_text(id, value, out, size);
+  param_text(p->synth, id, value, out, size);
   return true;
 }
 
 static bool params_text_to_value(const clap_plugin_t* plugin, clap_id id, const char* text, double* out) {
-  (void)plugin;
+  Plugin* p = plugin->plugin_data;
   param_info_t pi;
-  if (!param_info_by_id(id, &pi))
+  if (!param_info_by_id(p->synth, id, &pi))
     return false;
   if (id == PID_MACHINE) {
     for (int m = 0; m < MACHINE_COUNT; m++) {
@@ -241,7 +245,7 @@ static bool params_text_to_value(const clap_plugin_t* plugin, clap_id id, const 
     *out /= 100.0;
   else if (id == PID_RELEASE)
     *out /= RELEASE_MAX * 1000.0;
-  else if (id >= PID_KNOB0 && pi.min == 40 && pi.max == 88)
+  else if (param_knob(p->synth, id) && param_knob(p->synth, id)->min == 40 && param_knob(p->synth, id)->max == 88)
     *out += 64;
   return true;
 }
@@ -273,7 +277,13 @@ static const void* plugin_get_extension(const clap_plugin_t* plugin, const char*
   return NULL;
 }
 
-static void plugin_on_main_thread(const clap_plugin_t* plugin) { (void)plugin; }
+static void plugin_on_main_thread(const clap_plugin_t* plugin) {
+  Plugin* p = plugin->plugin_data;
+  if (p->rescan && p->host_params) {
+    p->rescan = false;
+    p->host_params->rescan(p->host, CLAP_PARAM_RESCAN_INFO | CLAP_PARAM_RESCAN_TEXT | CLAP_PARAM_RESCAN_VALUES);
+  }
+}
 
 // ---- factory ---------------------------------------------------------------
 

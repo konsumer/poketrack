@@ -26,6 +26,7 @@ extern int wclap_web_param_info(int handle, unsigned int idx, unsigned int* out_
 extern int wclap_web_param_flags(int handle, unsigned int idx, unsigned int* out_flags);
 extern int wclap_web_param_value_to_text(int handle, unsigned int param_id, double value, char* out, int out_sz);
 extern void wclap_web_do_main_thread_work(int handle);
+extern int wclap_web_take_params_rescan(int handle);
 
 struct ClapPlugin {
   int handle;
@@ -129,4 +130,8 @@ void clap_host_do_main_thread_work(ClapPlugin* p) {
   if (!p)
     return;
   wclap_web_do_main_thread_work(p->handle);
+}
+
+bool clap_host_take_params_rescan(ClapPlugin* p) {
+  return p && wclap_web_take_params_rescan(p->handle) != 0;
 }

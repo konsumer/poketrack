@@ -394,6 +394,7 @@ self.onmessage = function (e) {
       if (!hostEnv) return 0; // logged inside — needs shared memory but not cross-origin isolated
 
       var pendingMainThread = false;
+      var paramsRescan = false;
       var hostFnIdx = {};
       function dispatch(id, a, b, c) {
         switch (id) {
@@ -414,6 +415,7 @@ self.onmessage = function (e) {
             return 0;
           }
           case 3: pendingMainThread = true; return 0; // request_callback
+          case 4: paramsRescan = true; return 0; // params_rescan: re-read the param cache (wclap_web_take_params_rescan)
           case 7: console.log('[WCLAP]', readCStr(c)); return 0; // log
           default: return 0;
         }
@@ -492,6 +494,7 @@ self.onmessage = function (e) {
 
       // param cache (mirrors native backend's UnitState.param_cache)
       var paramCache = [];
+      var readParams = null;
       var pcValueToTextIdx = 0, vtScratchPtr = 0;
       var paramsExtPtr = table.get(pGetExtIdx)(pluginPtr, writeCStr('clap.params'));
       if (paramsExtPtr) {
@@ -499,19 +502,24 @@ self.onmessage = function (e) {
         var pcGetInfoIdx = dv.g32(paramsExtPtr + O.plugin_params.get_info);
         pcValueToTextIdx = dv.g32(paramsExtPtr + O.plugin_params.value_to_text);
         if (pcValueToTextIdx) vtScratchPtr = malloc(256);
-        var pcount = table.get(pcCountIdx)(pluginPtr);
         var infoPtr = malloc(O.param_info.size);
-        for (var pi = 0; pi < pcount; pi++) {
-          if (!table.get(pcGetInfoIdx)(pluginPtr, pi, infoPtr)) continue;
-          paramCache.push({
-            id: dv.g32(infoPtr + O.param_info.id),
-            flags: dv.g32(infoPtr + O.param_info.flags),
-            name: readCStr(infoPtr + O.param_info.name),
-            min: new DataView(mem.buffer).getFloat64(infoPtr + O.param_info.min_value, true),
-            max: new DataView(mem.buffer).getFloat64(infoPtr + O.param_info.max_value, true),
-            def: new DataView(mem.buffer).getFloat64(infoPtr + O.param_info.default_value, true),
-          });
-        }
+        // (re)fills paramCache in place; run again when the plugin asks for a rescan
+        readParams = function () {
+          paramCache.length = 0;
+          var pcount = table.get(pcCountIdx)(pluginPtr);
+          for (var pi = 0; pi < pcount; pi++) {
+            if (!table.get(pcGetInfoIdx)(pluginPtr, pi, infoPtr)) continue;
+            paramCache.push({
+              id: dv.g32(infoPtr + O.param_info.id),
+              flags: dv.g32(infoPtr + O.param_info.flags),
+              name: readCStr(infoPtr + O.param_info.name),
+              min: new DataView(mem.buffer).getFloat64(infoPtr + O.param_info.min_value, true),
+              max: new DataView(mem.buffer).getFloat64(infoPtr + O.param_info.max_value, true),
+              def: new DataView(mem.buffer).getFloat64(infoPtr + O.param_info.default_value, true),
+            });
+          }
+        };
+        readParams();
       }
 
       // event-list shim + preallocated audio/event scratch (reused every process() call)
@@ -572,6 +580,12 @@ self.onmessage = function (e) {
         blockSize: blockSize, isInstrument: isInstrument, name: pluginName, paramCache: paramCache,
         pcValueToTextIdx: pcValueToTextIdx, vtScratchPtr: vtScratchPtr,
         pendingMainThreadRef: function () { return pendingMainThread; },
+        takeParamsRescan: function () {
+          if (!paramsRescan) return false;
+          paramsRescan = false;
+          if (readParams) readParams();
+          return true;
+        },
         clearMainThread: function () { pendingMainThread = false; },
         outLPtr: outLPtr, outRPtr: outRPtr, inLPtr: inLPtr, inRPtr: inRPtr,
         audioInPtr: audioInPtr, audioOutPtr: audioOutPtr,
@@ -797,6 +811,12 @@ self.onmessage = function (e) {
     var text = UTF8ArrayToString(b.slice(inst.vtScratchPtr, end), 0, end - inst.vtScratchPtr);
     stringToUTF8(text, outPtr, outSz);
     return 1;
+  },
+
+  wclap_web_take_params_rescan__deps: ['$WCLAP_INSTANCES'],
+  wclap_web_take_params_rescan: function (handle) {
+    var inst = WCLAP_INSTANCES[handle];
+    return inst && inst.takeParamsRescan() ? 1 : 0;
   },
 
   wclap_web_do_main_thread_work__deps: ['$WCLAP_INSTANCES'],

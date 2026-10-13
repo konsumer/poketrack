@@ -21,6 +21,8 @@ typedef struct {
 struct synth {
   st_engine* eng;
   double params[PARAM_COUNT];
+  bool knob_set[KNOB_COUNT];  // set by the host; otherwise the machine's default
+  bool machine_changed;
   voice_t voices[ST_VOICES];
   uint32_t clock;
   uint32_t trig, release;
@@ -32,15 +34,33 @@ struct synth {
 };
 
 // --- params ------------------------------------------------------------------
+//
+// Knobs are shared: knob k means machines[m].knobs[k] for the current machine
+// m, like the Syntakt's own knobs. Their declared range covers every machine
+// (TUNE 40..88, the rest 0..127), so a value always means the same number;
+// each machine clamps it to its own range. A knob nobody has set follows the
+// current machine's default.
 
 static const char* global_names[PID_GLOBAL_COUNT] = {"Machine", "Level", "Gate", "Voices", "Velocity", "Release"};
 
-bool param_info_by_id(uint32_t id, param_info_t* out) {
+static int machine_index(const synth_t* s) {
+  int m = (int)lround(s->params[PID_MACHINE]);
+  return m < 0 ? 0 : m >= MACHINE_COUNT ? MACHINE_COUNT - 1
+                                        : m;
+}
+
+const knob_t* param_knob(const synth_t* s, uint32_t id) {
+  if (id < PID_KNOB0 || id >= PID_KNOB0 + KNOB_COUNT)
+    return NULL;
+  return &machines[machine_index(s)].knobs[id - PID_KNOB0];
+}
+
+bool param_info_by_id(const synth_t* s, uint32_t id, param_info_t* out) {
   memset(out, 0, sizeof(*out));
   out->id = id;
+  out->module = "";
   if (id < PID_GLOBAL_COUNT) {
     out->name = global_names[id];
-    out->module = "";
     switch (id) {
       case PID_MACHINE:
         out->max = MACHINE_COUNT - 1, out->stepped = out->is_enum = true;
@@ -63,29 +83,42 @@ bool param_info_by_id(uint32_t id, param_info_t* out) {
     }
     return true;
   }
-  if (id < PID_KNOB0 || id >= PID_KNOB0 + MACHINE_COUNT * KNOB_COUNT)
+  const knob_t* k = param_knob(s, id);
+  if (!k)
     return false;
-  const machine_t* m = &machines[(id - PID_KNOB0) / KNOB_COUNT];
-  const knob_t* k = &m->knobs[(id - PID_KNOB0) % KNOB_COUNT];
   out->name = k->code;
-  out->module = m->name;
-  out->min = k->min;
-  out->max = k->max;
+  out->module = machines[machine_index(s)].name;
+  out->min = k->slot == ST_TUNE ? 40 : 0;
+  out->max = k->slot == ST_TUNE ? 88 : 127;
   out->def = k->def;
   out->stepped = true;
   return true;
 }
 
-bool param_info(uint32_t index, param_info_t* out) {
+bool param_info(const synth_t* s, uint32_t index, param_info_t* out) {
   if (index < PID_GLOBAL_COUNT)
-    return param_info_by_id(index, out);
-  index -= PID_GLOBAL_COUNT;
-  if (index >= MACHINE_COUNT * KNOB_COUNT)
+    return param_info_by_id(s, index, out);
+  if (index >= PARAM_COUNT)
     return false;
-  return param_info_by_id(PID_KNOB0 + index, out);
+  return param_info_by_id(s, PID_KNOB0 + (index - PID_GLOBAL_COUNT), out);
 }
 
-void param_text(uint32_t id, double value, char* out, uint32_t size) {
+static uint32_t param_index(uint32_t id) {
+  return id < PID_GLOBAL_COUNT ? id : PID_GLOBAL_COUNT + (id - PID_KNOB0);
+}
+
+// what a knob is worth on the current machine: its own default until set, clamped to the machine's range
+static double knob_value(const synth_t* s, int k) {
+  const knob_t* kn = &machines[machine_index(s)].knobs[k];
+  if (!s->knob_set[k])
+    return kn->def;
+  double v = s->params[PID_GLOBAL_COUNT + k];
+  return v < kn->min ? kn->min : v > kn->max ? kn->max
+                                             : v;
+}
+
+void param_text(const synth_t* s, uint32_t id, double value, char* out, uint32_t size) {
+  const knob_t* k = param_knob(s, id);
   if (id == PID_MACHINE) {
     int m = (int)lround(value);
     snprintf(out, size, "%s", machines[m < 0 ? 0 : m >= MACHINE_COUNT ? MACHINE_COUNT - 1
@@ -100,47 +133,34 @@ void param_text(uint32_t id, double value, char* out, uint32_t size) {
       snprintf(out, size, "%dms", (int)lround(value * RELEASE_MAX * 1000));
   } else if (id == PID_LEVEL || id == PID_VELOCITY) {
     snprintf(out, size, "%d%%", (int)lround(value * 100));
-  } else if (id >= PID_KNOB0) {
-    const knob_t* k = &machines[(id - PID_KNOB0) / KNOB_COUNT].knobs[(id - PID_KNOB0) % KNOB_COUNT];
-    int v = (int)lround(value);
+  } else if (k) {
+    // shown as the machine plays it: clamped to its range, bipolar knobs as -24..+24
+    double v = value < k->min ? k->min : value > k->max ? k->max
+                                                        : value;
     if (k->min == 40 && k->max == 88)
-      snprintf(out, size, "%s %+d", k->code, v - 64);  // bipolar, like the Syntakt shows it
+      snprintf(out, size, "%+d", (int)lround(v) - 64);
     else
-      snprintf(out, size, "%s %d", k->code, v);
+      snprintf(out, size, "%d", (int)lround(v));
   } else {
     snprintf(out, size, "%d", (int)lround(value));
   }
-}
-
-static int machine_index(const synth_t* s) {
-  int m = (int)lround(s->params[PID_MACHINE]);
-  return m < 0 ? 0 : m >= MACHINE_COUNT ? MACHINE_COUNT - 1
-                                        : m;
-}
-
-static uint32_t param_index(uint32_t id) {
-  return id < PID_GLOBAL_COUNT ? id : PID_GLOBAL_COUNT + (id - PID_KNOB0);
 }
 
 // push the current machine and its knobs to all 8 engine tracks
 static void apply_machine(synth_t* s) {
   if (!s->eng)
     return;
-  int mi = machine_index(s);
-  const machine_t* m = &machines[mi];
+  const machine_t* m = &machines[machine_index(s)];
   for (int t = 0; t < ST_VOICES; t++) {
     st_machine(s->eng, t, m->type);
-    for (int k = 0; k < KNOB_COUNT; k++) {
-      double v = s->params[param_index(PID_KNOB(mi, k))];
-      st_param(s->eng, t, m->knobs[k].slot, (uint16_t)lround(v * 256));
-    }
+    for (int k = 0; k < KNOB_COUNT; k++) st_param(s->eng, t, m->knobs[k].slot, (uint16_t)lround(knob_value(s, k) * 256));
     st_param(s->eng, t, ST_GATE, s->params[PID_GATE] >= 0.5 ? 256 : 0);
   }
 }
 
 void synth_set_param(synth_t* s, uint32_t id, double value) {
   param_info_t pi;
-  if (!param_info_by_id(id, &pi))
+  if (!param_info_by_id(s, id, &pi))
     return;
   if (value < pi.min)
     value = pi.min;
@@ -148,16 +168,28 @@ void synth_set_param(synth_t* s, uint32_t id, double value) {
     value = pi.max;
   if (pi.stepped)
     value = round(value);
+  if (id == PID_MACHINE && value != s->params[PID_MACHINE])
+    s->machine_changed = true;
   s->params[param_index(id)] = value;
+  if (id >= PID_KNOB0)
+    s->knob_set[id - PID_KNOB0] = true;
   if (id == PID_MACHINE || id == PID_GATE || id >= PID_KNOB0)
     apply_machine(s);
 }
 
 double synth_get_param(const synth_t* s, uint32_t id) {
   param_info_t pi;
-  if (!param_info_by_id(id, &pi))
+  if (!param_info_by_id(s, id, &pi))
     return 0;
+  if (id >= PID_KNOB0)
+    return s->knob_set[id - PID_KNOB0] ? s->params[param_index(id)] : pi.def;
   return s->params[param_index(id)];
+}
+
+bool synth_take_machine_changed(synth_t* s) {
+  bool c = s->machine_changed;
+  s->machine_changed = false;
+  return c;
 }
 
 // --- voices ------------------------------------------------------------------
@@ -324,7 +356,7 @@ synth_t* synth_new(const uint8_t* image, double rate) {
   if (image)
     s->eng = st_new(image, ST_IMAGE_SIZE);
   param_info_t pi;
-  for (uint32_t i = 0; param_info(i, &pi); i++) s->params[param_index(pi.id)] = pi.def;
+  for (uint32_t i = 0; param_info(s, i, &pi); i++) s->params[param_index(pi.id)] = pi.def;
   s->step = 1.0;
   synth_set_rate(s, rate);
   synth_reset(s);

@@ -2369,12 +2369,31 @@ static void test_clap_plugin_syntakt(void) {
   if (t) {
     CHECK(clap_host_is_instrument(t), "syntakt-template.wasm: expected an instrument");
     uint32_t total = clap_host_param_count(t);
-    CHECK(total == 94, "syntakt-template.wasm: expected 94 params (6 globals + 11 machines x 8 knobs), got %u", total);
+    CHECK(total == 14, "syntakt-template.wasm: expected 14 params (6 globals + 8 shared knobs), got %u", total);
     uint32_t id;
     char name[128];
     double min, max, def;
     clap_host_param_info(t, 0, &id, name, sizeof(name), &min, &max, &def);
     CHECK(strcmp(name, "Machine") == 0 && max == 10, "syntakt-template.wasm: param 0 is %s (max %g), want Machine (max 10)", name, max);
+    // knob A (index 7) is named for the machine: BD MODERN's SMOD, then SD VINTAGE's INHM after a rescan
+    clap_host_param_info(t, 7, &id, name, sizeof(name), &min, &max, &def);
+    CHECK(strcmp(name, "SMOD") == 0 && def == 10, "syntakt-template.wasm: knob A on BD MODERN is %s (default %g), want SMOD (10)", name, def);
+    clap_host_queue_param(t, 0, 6.0);  // SD VINTAGE
+    clap_host_process(t, NULL, NULL, out_l, out_r, BLK);
+    clap_host_do_main_thread_work(t);
+    CHECK(clap_host_take_params_rescan(t), "syntakt-template.wasm: no params rescan after changing machine");
+    clap_host_param_info(t, 7, &id, name, sizeof(name), &min, &max, &def);
+    CHECK(strcmp(name, "INHM") == 0 && def == 0, "syntakt-template.wasm: knob A on SD VINTAGE is %s (default %g), want INHM (0)", name, def);
+    char text[64] = "";
+    clap_host_param_value_to_text(t, id, 64.0, text, sizeof(text));
+    CHECK(strcmp(text, "64") == 0, "syntakt-template.wasm: INHM 64 shows as '%s'", text);
+    clap_host_queue_param(t, 0, 9.0);  // SY BITS: knob A is DET, bipolar
+    clap_host_process(t, NULL, NULL, out_l, out_r, BLK);
+    clap_host_do_main_thread_work(t);
+    clap_host_take_params_rescan(t);
+    clap_host_param_value_to_text(t, id, 67.0, text, sizeof(text));
+    CHECK(strcmp(text, "+3") == 0, "syntakt-template.wasm: SY BITS DET 67 shows as '%s', want +3", text);
+    clap_host_queue_param(t, 0, 0.0);
     clap_host_note_on(t, 60, 255, 0);
     float energy = 0.0f;
     for (int blk = 0; blk < 8; blk++) {
