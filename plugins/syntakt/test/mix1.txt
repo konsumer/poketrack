@@ -1,0 +1,79 @@
+# block command args: values are UI units (8.8 = value*256), notes in semitones
+# machine track type | set track tune|p1|p2|p3|p4|punch|gate|decay|over value
+# note track semis | trig track | release track | end blocks
+0 machine 0 0
+0 machine 1 1
+0 machine 2 2
+0 machine 3 4
+0 machine 4 5
+0 machine 5 6
+0 machine 6 7
+0 machine 7 36
+0 set 0 tune 64
+0 set 0 p1 10
+0 set 0 p2 16
+0 set 0 p3 16
+0 set 0 p4 24
+0 set 0 decay 60
+0 set 1 tune 64
+0 set 1 p1 0
+0 set 1 p2 127
+0 set 1 p3 8
+0 set 1 decay 40
+0 set 2 tune 64
+0 set 2 p1 64
+0 set 2 p2 80
+0 set 2 decay 70
+0 set 3 tune 64
+0 set 3 p1 40
+0 set 3 p2 90
+0 set 3 decay 90
+0 set 3 gate 1
+0 set 4 tune 64
+0 set 4 p1 30
+0 set 4 p2 60
+0 set 4 p3 20
+0 set 4 decay 80
+0 set 5 tune 64
+0 set 5 p1 0
+0 set 5 p2 110
+0 set 5 p3 74
+0 set 5 p4 80
+0 set 5 decay 33
+0 set 6 tune 64
+0 set 6 p1 24
+0 set 6 p2 25
+0 set 6 p3 46
+0 set 6 p4 37
+0 set 6 decay 32
+0 set 7 tune 64
+0 set 7 p1 24
+0 set 7 p2 60
+0 set 7 p3 110
+0 set 7 p4 64
+0 set 7 decay 60
+0 trig 0
+3 trig 1
+6 trig 2
+9 note 3 7
+9 trig 3
+12 note 4 -5
+12 trig 4
+15 trig 5
+18 trig 6
+21 trig 7
+40 set 5 p2 30
+45 set 3 p1 100
+60 release 3
+70 set 0 punch 1
+70 note 0 -12
+70 trig 0
+80 set 4 p2 127
+90 set 7 over 60
+95 trig 7
+110 note 5 12
+110 trig 5
+130 set 1 over 90
+130 trig 1
+150 trig 6
+end 220

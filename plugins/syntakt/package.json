@@ -1,0 +1,16 @@
+{
+  "name": "syntakt-wclap",
+  "version": "0.0.0",
+  "description": "Syntakt digital voice engines as a WCLAP, generated from your own Syntakt OS file",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "./build.sh",
+    "make-plugin": "node scripts/make-plugin.mjs",
+    "extract": "node scripts/extract.mjs",
+    "survey": "node scripts/survey.mjs build/section7.bin",
+    "test": "test/run.sh",
+    "fmt": "npx -y prettier -w web scripts"
+  }
+}
