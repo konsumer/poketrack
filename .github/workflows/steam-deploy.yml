@@ -25,10 +25,9 @@ on:
 permissions:
   contents: read
 
-# Steam allows one steamcmd session per account at a time, and overlapping
-# runs of this workflow (e.g. two releases close together) share one build
-# account, so they'd step on each other and fail in ways that look like
-# nothing went wrong. One deploy at a time.
+# Steam allows one steamcmd session per account at a time, and the two jobs
+# below share one build account, so overlapping runs step on each other and
+# fail in ways that look like nothing went wrong. One deploy at a time.
 concurrency:
   group: steam-deploy
   cancel-in-progress: false
@@ -119,6 +118,70 @@ jobs:
           echo "── build_output.log ──"
           cat build_output.log 2>/dev/null || echo "(none)"
           for f in $(find . -path ./content -prune -o -name '*.log' -print 2>/dev/null | head -20); do
+            echo "── $f ──"
+            tail -80 "$f"
+          done
+
+  deploy-examples:
+    # Sequential, not parallel: both jobs log into Steam as the same build
+    # account, and concurrent steamcmd sessions invalidate each other.
+    needs: deploy
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'release')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Determine release tag
+        id: tag
+        run: |
+          TAG="${{ inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.event.workflow_run.head_branch }}"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "::error::Could not determine a release tag to deploy."
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Download examples
+        run: |
+          mkdir -p dl content-examples
+          gh release download "${{ steps.tag.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            -p 'examples.zip' \
+            -D dl
+          if [ ! -s dl/examples.zip ]; then
+            echo "::error::examples.zip is missing or empty on release ${{ steps.tag.outputs.tag }}."
+            exit 1
+          fi
+          unzip -o dl/examples.zip -d content-examples
+
+      - name: Show what will be uploaded
+        run: find content-examples -type f -printf '%M %10s %p\n' | head -40
+
+      # NOTE: releaseBranch is deliberately empty. This used to say "default",
+      # which uploaded the build fine and then failed at set-live, because
+      # Steam refuses to set the default branch live from steamcmd — the
+      # upload log showed no error, so the job just looked broken. Upload
+      # only; promote in the Steamworks App Admin panel (see steam/README.md).
+      - name: Deploy Example Beats to Steam
+        uses: game-ci/steam-deploy@v3
+        with:
+          username: ${{ secrets.STEAM_USERNAME }}
+          configVdf: ${{ secrets.STEAM_CONFIG_VDF }}
+          appId: ${{ secrets.STEAM_EXAMPLES_APP_ID || '5043220' }}
+          buildDescription: ${{ steps.tag.outputs.tag }}
+          rootPath: content-examples
+          depot1Path: .
+          releaseBranch: ''
+
+      - name: Dump steamcmd logs on failure
+        if: failure()
+        run: |
+          echo "── build_output.log ──"
+          cat build_output.log 2>/dev/null || echo "(none)"
+          for f in $(find . -path ./content-examples -prune -o -name '*.log' -print 2>/dev/null | head -20); do
             echo "── $f ──"
             tail -80 "$f"
           done
