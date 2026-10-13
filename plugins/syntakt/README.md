@@ -32,7 +32,7 @@ Every machine has its own 8 knobs, named and ranged as on the Syntakt (TUNE show
 | Machine | which of the 11 machines plays |
 | Level | output level (default 50%) |
 | Gate | holds the machine's envelope at full until note-off (the Syntakt's hidden gate flag) |
-| Voices | polyphony, 1–8. A new note takes a free voice, then the voice already playing that key, then the oldest |
+| Voices | polyphony, 1–8 (default 1, like a Syntakt track: a new note cuts the last). With more, a new note takes a free voice, then the voice already playing that key, then the oldest |
 | Velocity | how much note velocity scales the level |
 | Release | fade after note-off, up to 2 s. OFF (the default) ignores note-off, like the hardware's trig-only machines; set it to cut long or infinite decays (SY TONE and SY CHORD default to DEC 127) |
 
@@ -99,7 +99,7 @@ The reference takes about 50 s per scenario. The interpreter takes under 0.1 s.
 
 ## Performance
 
-The engine always computes all 8 voices, so the synth **parks** voices that aren't sounding (`st_park`): after about 21 ms below -100 dBFS once the note is off, or when a Release fade ends. A parked voice costs nothing until its next trig.
+The engine always computes all 8 voices, so the synth **parks** voices that aren't sounding (`st_park`): after about 21 ms below -100 dBFS (note-off or not, unless Gate holds it), or when a Release fade ends. An instance with every voice parked skips the engine entirely. A parked voice costs nothing until its next trig.
 
 Measured on an Apple M-series laptop, as multiples of realtime:
 
@@ -109,7 +109,9 @@ Measured on an Apple M-series laptop, as multiples of realtime:
 | one sounding voice | 14–18× | 12–17× |
 | 8 voices sounding at once | 2.9× | 2.2× |
 
-That's roughly 6–8% of a core per sounding voice. poketrack's desktop host runs plugins in wasmtime, and browsers JIT wasm too. The interpreter decodes each instruction once into a cached record with a handler specialized for its operand forms (`decode()` in `cf.c`), and falls back to the generic `step()` for anything else.
+That's roughly 6–8% of a core per sounding voice. poketrack's desktop host runs plugins in wasmtime 39, and browsers JIT wasm too.
+
+The template is built with `-fno-jump-tables`, so the dispatch `switch` becomes compares and direct calls. Dispatching through a function pointer (`call_indirect`) or a jump table (`br_table`) runs about 5× slower on wasmtime 39 on arm64. That slowdown is what made early builds garble in poketrack. The interpreter decodes each instruction once into a cached record with a handler specialized for its operand forms (`decode()` in `cf.c`), and falls back to the generic `step()` for anything else.
 
 ## What the interpreter has to cover
 
