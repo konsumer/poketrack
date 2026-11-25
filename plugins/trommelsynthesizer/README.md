@@ -127,8 +127,8 @@ Honest account, since "as accurate as possible" depends on what's knowable:
 The 19 sampled machines are 219 mono recordings, 2.8 MB in all, built into the
 `.wasm` with C23 `#embed` (the plugin is about 3 MB). They are stored as 8-bit
 mu-law (G.711), and recordings with no energy above a quarter of the sample rate
-are stored at half rate; see [Load time](#load-time). They aren't in git. `make plugin-samples` fetches
-them from [tidal-drum-machines](https://github.com/geikha/tidal-drum-machines)
+are stored at half rate; see [Load time](#load-time). They aren't in git. `make plugins` fetches
+them (the first time, or whenever `src/samples.c` is missing; `make plugin-samples` re-fetches) from [tidal-drum-machines](https://github.com/geikha/tidal-drum-machines)
 (only the folders it needs, pinned to a commit) and generates the blobs. To use a
 copy you already have, point the prep script at its `machines/` folder:
 
@@ -153,8 +153,8 @@ Needs [wasi-sdk](https://github.com/WebAssembly/wasi-sdk) with clang 19 or newer
 (for C23 `#embed`; wasi-sdk 25+), at `/opt/wasi-sdk` or `$WASI_SDK_PATH`:
 
 ```
-make plugin-samples                # fetch + generate the sample blobs (once; needs git and python3)
-make plugins                       # builds this and the other plugins into examples/plugins/
+make plugins                       # fetches the samples if missing (needs git and python3), builds all plugins into examples/plugins/
+make plugin-samples                # force a re-fetch + regenerate of the sample blobs
 plugins/trommelsynthesizer/build.sh   # just this one -> plugins/trommelsynthesizer/build/
 ```
 
@@ -163,7 +163,7 @@ Plain C, no threads, exported memory, so it loads on desktop and web.
 ### CI
 
 The release workflow's `examples` job installs wasi-sdk 33, then runs
-`make test-plugins`, `make plugin-samples` and `make plugins`, and fails if the
+`make test-plugins` and `make plugins` (which fetches the samples), and fails if the
 built plugin is under 1 MB (which would mean it was built with the stub sample
 table, leaving 19 machines silent). The samples are fetched by
 `scripts/fetch_samples.sh`, a sparse checkout of just the machine folders it

@@ -61,7 +61,12 @@ embed: ## Re-generate src/controller_png.h from art/controller.png (after editin
 icons: ## Re-generate the app icon (art/appicon.*, src/appicon_png.h) from art/appicon.png
 	python3 scripts/make_icons.py
 
-plugin-samples: ## Fetch the drum recordings trommelsynthesizer embeds (needed before `make plugins` for its sampled machines)
+plugin-samples: ## (Re-)fetch the drum recordings trommelsynthesizer embeds (`make plugins` does this once automatically)
+	plugins/trommelsynthesizer/scripts/fetch_samples.sh
+
+# Generated (gitignored); fetched on first `make plugins` so the 19 sampled
+# machines are never silently built against samples_stub.c.
+plugins/trommelsynthesizer/src/samples.c:
 	plugins/trommelsynthesizer/scripts/fetch_samples.sh
 
 test-plugins: ## Sanity-check the trommelsynthesizer drum engine natively (synthesized machines; no samples needed)
@@ -71,7 +76,7 @@ test-plugins: ## Sanity-check the trommelsynthesizer drum engine natively (synth
 		plugins/trommelsynthesizer/src/samples_stub.c -lm
 	build/trommelsynthesizer-render --check
 
-plugins: ## Build bundled example WCLAP plugins into examples/plugins/
+plugins: plugins/trommelsynthesizer/src/samples.c ## Build bundled example WCLAP plugins into examples/plugins/
 	cd plugins/karplus && [ -d node_modules ] || npm install
 	cd plugins/karplus && npm run asbuild:release
 	cd plugins/subsynth && [ -d node_modules ] || npm install
