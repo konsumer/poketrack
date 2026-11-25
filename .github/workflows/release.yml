@@ -173,16 +173,11 @@ jobs:
         # audible, finite and decaying; the GM map consistent). Uses the stub
         # sample table, so it needs no #embed-capable compiler.
 
-      - name: Fetch trommelsynthesizer samples
-        run: make plugin-samples
-        # The sampled machines' recordings are generated, not checked in
-        # (plugins/trommelsynthesizer/.gitignore). Without this step the
-        # plugin builds against src/samples_stub.c and 19 machines are silent.
-
       - name: Build example plugins
         run: make plugins
         # Builds karplus (npm/AssemblyScript) + robotalk (cargo) + the 3
-        # pd2wclap demo patches + trommelsynthesizer (wasi-sdk) into
+        # pd2wclap demo patches + trommelsynthesizer (wasi-sdk, fetching its
+        # gitignored sample recordings first) into
         # examples/plugins/ — none of that is checked into git any more (see
         # .gitignore).
 
