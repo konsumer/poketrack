@@ -1,0 +1,38 @@
+# parked voices cost nothing until triggered; parking mid-note, then retriggering
+0 park 0
+0 park 1
+0 park 2
+0 park 3
+0 park 4
+0 park 5
+0 park 6
+0 park 7
+0 machine 0 6
+0 machine 1 38
+0 machine 2 36
+0 set 0 tune 64
+0 set 0 p2 110
+0 set 0 p3 74
+0 set 0 p4 80
+0 set 0 decay 33
+0 set 1 tune 64
+0 set 1 p1 20
+0 set 1 p3 70
+0 set 1 p4 127
+0 set 1 punch 2
+0 set 1 decay 75
+0 set 2 tune 64
+0 set 2 p2 60
+0 set 2 p3 110
+0 set 2 decay 60
+5 trig 0
+10 trig 1
+60 park 0
+80 trig 0
+100 park 1
+110 trig 2
+130 machine 1 37
+130 trig 1
+160 park 2
+170 trig 2
+end 220

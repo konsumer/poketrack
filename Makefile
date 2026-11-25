@@ -8,7 +8,7 @@
 # breaks `cmake --build` in CI with a bogus "Permission denied".
 SHELL := /bin/bash
 
-.PHONY: help build build-web clean serve format format-check test run plugins plugin-samples test-plugins theme-shots embed icons
+.PHONY: help build build-web clean serve format format-check test run plugins plugin-samples test-plugins theme-shots embed icons syntakt-web
 .DEFAULT_GOAL := help
 
 help: ## Show this help
@@ -27,6 +27,12 @@ build-web: ## Build web (Emscripten) release, plus the ROBOTALK text-to-pattern 
 	cd plugins/robotalk && cargo build --target wasm32-unknown-unknown --release --lib
 	mkdir -p webroot/tts
 	wasm-bindgen plugins/robotalk/target/wasm32-unknown-unknown/release/robotalk.wasm --out-dir webroot/tts --out-name robotalk --target web --no-typescript
+	[ -x "$${WASI_SDK_PATH:-/opt/wasi-sdk}/bin/clang" ] && $(MAKE) syntakt-web || echo "skipping the Syntakt WCLAP maker page (webroot/syntakt/) — wasi-sdk not found"
+
+syntakt-web: ## Build the Syntakt WCLAP maker page into webroot/syntakt/ (needs wasi-sdk)
+	plugins/syntakt/build.sh
+	mkdir -p webroot/syntakt
+	cp plugins/syntakt/web/index.html plugins/syntakt/web/firmware.js plugins/syntakt/web/patch.js plugins/syntakt/build/syntakt-template.wasm webroot/syntakt/
 
 clean: ## Delete built files
 	rm -rf build-web build

@@ -60,3 +60,7 @@ void clap_host_queue_param(ClapPlugin* p, uint32_t param_id, double value);
 bool clap_host_param_value_to_text(ClapPlugin* p, uint32_t param_id, double value, char* out, size_t out_sz);
 // Call from main thread each frame to deliver deferred on_main_thread() work
 void clap_host_do_main_thread_work(ClapPlugin* p);
+// True once after the plugin asked the host to rescan its params (CLAP_EXT_PARAMS
+// rescan, e.g. a synth whose knob names follow its selected machine). The
+// param_info/flags queries above return the fresh info from then on.
+bool clap_host_take_params_rescan(ClapPlugin* p);

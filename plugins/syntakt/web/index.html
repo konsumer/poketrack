@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Syntakt WCLAP maker</title>
+    <meta name="description" content="Make a poketrack WCLAP instrument with the Syntakt's 11 digital machines, from your own official Syntakt OS file. Everything happens in your browser." />
+    <link rel="icon" type="image/png" href="../favicon-32x32.png" sizes="32x32" />
+    <style>
+      :root {
+        --bg: #000008;
+        --panel: #0a0a18;
+        --sep: #202030;
+        --text: #b8b8c8;
+        --header: #505070;
+        --note: #40ffc0;
+        --inst: #ffa030;
+        --err: #ff6080;
+        --title: #ffffff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+      }
+      body {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+        color: var(--text);
+        line-height: 1.55;
+        font-size: 14px;
+      }
+      a {
+        color: var(--note);
+      }
+      main {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 32px 16px 64px;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 22px;
+        color: var(--title);
+      }
+      .sub {
+        margin: 0 0 24px;
+        color: var(--header);
+      }
+      ol {
+        padding-left: 20px;
+      }
+      li {
+        margin: 6px 0;
+      }
+      .drop {
+        display: block;
+        margin: 24px 0 16px;
+        padding: 28px 16px;
+        border: 1px dashed var(--header);
+        border-radius: 6px;
+        background: var(--panel);
+        text-align: center;
+        cursor: pointer;
+      }
+      .drop.over {
+        border-color: var(--note);
+      }
+      .drop input {
+        display: none;
+      }
+      .drop strong {
+        color: var(--title);
+      }
+      #status {
+        min-height: 1.5em;
+        margin: 0 0 16px;
+        overflow-wrap: anywhere;
+      }
+      #status.ok {
+        color: var(--note);
+      }
+      #status.err {
+        color: var(--err);
+      }
+      .btn {
+        display: inline-block;
+        padding: 9px 16px;
+        border: 1px solid var(--note);
+        border-radius: 4px;
+        color: var(--note);
+        font-weight: 700;
+        text-decoration: none;
+      }
+      .btn[hidden] {
+        display: none;
+      }
+      .note {
+        margin-top: 28px;
+        padding: 12px 14px;
+        border-left: 3px solid var(--inst);
+        background: var(--panel);
+      }
+      .small {
+        color: var(--header);
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Syntakt WCLAP maker</h1>
+      <p class="sub">The Syntakt's 11 digital machines as a poketrack instrument, made from your own Syntakt OS file.</p>
+
+      <ol>
+        <li>Download the Syntakt OS from <a href="https://www.elektron.se/support-downloads/syntakt" target="_blank" rel="noopener">elektron.se</a> and unzip it. You need <code>Syntakt_OS1.42.syx</code> (1.41 works too).</li>
+        <li>Pick that file below. It's read here in your browser, and nothing is uploaded.</li>
+        <li>Save <code>syntakt.wclap.wasm</code> and point a PLUGIN unit at it in poketrack.</li>
+      </ol>
+
+      <label class="drop" id="drop">
+        <input type="file" id="file" accept=".syx" />
+        <strong>Choose Syntakt_OS1.42.syx</strong><br />
+        <span class="small">or drop it here</span>
+      </label>
+
+      <p id="status"></p>
+      <a class="btn" id="save" hidden download="syntakt.wclap.wasm">Save syntakt.wclap.wasm</a>
+
+      <div class="note">The plugin you make contains Elektron's code from your OS file, so it's for your own use. If you share a song that uses it, leave <code>syntakt.wclap.wasm</code> out: whoever gets the song can make their own here.</div>
+
+      <p class="small">BD MODERN, SD BASIC, CY ALLOY, PC CARBON, SY TONE, SY CHORD, SD VINTAGE, CP VINTAGE, SY TOY, SY BITS and SY SWARM. The Syntakt's other machines are analog circuits, so there's no code to run. Built on the research of <a href="https://github.com/18nelli18/Modded-Cycles" target="_blank" rel="noopener">Modded-Cycles</a>. See the <a href="https://github.com/konsumer/poketrack/tree/main/plugins/syntakt" target="_blank" rel="noopener">source and docs</a>. Not affiliated with or endorsed by Elektron.</p>
+    </main>
+
+    <script type="module">
+      import { makePlugin } from './patch.js'
+
+      const status = document.getElementById('status')
+      const save = document.getElementById('save')
+      const drop = document.getElementById('drop')
+      let url = null
+
+      function show(msg, kind) {
+        status.textContent = msg
+        status.className = kind || ''
+      }
+
+      async function handle(file) {
+        if (!file) return
+        save.hidden = true
+        if (url) URL.revokeObjectURL(url)
+        show(`Reading ${file.name}…`)
+        try {
+          const res = await fetch('syntakt-template.wasm')
+          if (!res.ok) throw new Error(`couldn't load the plugin template (${res.status})`)
+          const [syx, template] = await Promise.all([file.arrayBuffer(), res.arrayBuffer()])
+          const { version, plugin } = await makePlugin(new Uint8Array(syx), new Uint8Array(template))
+          url = URL.createObjectURL(new Blob([plugin], { type: 'application/wasm' }))
+          save.href = url
+          save.hidden = false
+          show(`Made from Syntakt OS ${version || '(unknown build)'}: ${(plugin.length / 1024).toFixed(0)} KB.`, 'ok')
+        } catch (e) {
+          show(e.message, 'err')
+        }
+      }
+
+      document.getElementById('file').addEventListener('change', (e) => handle(e.target.files[0]))
+      drop.addEventListener('dragover', (e) => {
+        e.preventDefault()
+        drop.classList.add('over')
+      })
+      drop.addEventListener('dragleave', () => drop.classList.remove('over'))
+      drop.addEventListener('drop', (e) => {
+        e.preventDefault()
+        drop.classList.remove('over')
+        handle(e.dataTransfer.files[0])
+      })
+    </script>
+  </body>
+</html>

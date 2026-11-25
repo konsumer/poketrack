@@ -144,6 +144,26 @@ static void fill_mapping_from_cache(UnitState* s, uint32_t id, ClapMapping* m) {
   m->last_sent = m->val;
 }
 
+// (Re)reads the plugin's full param list into s->param_cache, for the picker.
+static void read_param_cache(UnitState* s) {
+  free(s->param_cache);
+  s->param_cache = NULL;
+  uint32_t total = clap_host_param_count(s->plugin);
+  s->total_params = (int)total;
+  if (total > 0) {
+    s->param_cache = calloc(total, sizeof(ClapParamInfo));
+    for (uint32_t i = 0; i < total; i++) {
+      ClapParamInfo* c = &s->param_cache[i];
+      clap_host_param_info(s->plugin, i, &c->id, c->name, sizeof(c->name),
+                           &c->min_val, &c->max_val, &c->default_val);
+      bool stepped = clap_host_param_is_stepped(s->plugin, i);
+      c->is_bool = stepped && (c->max_val - c->min_val) == 1.0;
+      c->is_stepped = stepped && !c->is_bool;
+      c->is_enum = clap_host_param_is_enum(s->plugin, i);
+    }
+  }
+}
+
 // (Re)loads s->plugin from s->resolved_path/s->plugin_id, rebuilding the
 // param cache. Clears any existing mappings — caller restores them if needed.
 static void clap_reload_plugin(UnitState* s) {
@@ -163,22 +183,7 @@ static void clap_reload_plugin(UnitState* s) {
     return;
 
   s->is_source = clap_host_is_instrument(s->plugin);
-
-  // Build full param cache for picker
-  uint32_t total = clap_host_param_count(s->plugin);
-  s->total_params = (int)total;
-  if (total > 0) {
-    s->param_cache = calloc(total, sizeof(ClapParamInfo));
-    for (uint32_t i = 0; i < total; i++) {
-      ClapParamInfo* c = &s->param_cache[i];
-      clap_host_param_info(s->plugin, i, &c->id, c->name, sizeof(c->name),
-                           &c->min_val, &c->max_val, &c->default_val);
-      bool stepped = clap_host_param_is_stepped(s->plugin, i);
-      c->is_bool = stepped && (c->max_val - c->min_val) == 1.0;
-      c->is_stepped = stepped && !c->is_bool;
-      c->is_enum = clap_host_param_is_enum(s->plugin, i);
-    }
-  }
+  read_param_cache(s);
 }
 
 // Selecting a different plugin id in the DATA-row picker
@@ -400,8 +405,31 @@ static void clap_mapping_remove(UnitState* s, int map_idx) {
 }
 
 static void clap_main_thread_work(UnitState* s) {
-  if (s->plugin)
-    clap_host_do_main_thread_work(s->plugin);
+  if (!s->plugin)
+    return;
+  clap_host_do_main_thread_work(s->plugin);
+  // The plugin changed its param info (e.g. knob names that follow a selected
+  // machine): refresh the picker and the names/ranges of mapped params, keeping
+  // their values. The default is re-read from the cache each time anyway.
+  if (clap_host_take_params_rescan(s->plugin)) {
+    read_param_cache(s);
+    for (int m = 0; m < s->num_mappings; m++) {
+      ClapMapping* mp = &s->mappings[m];
+      for (int i = 0; i < s->total_params; i++) {
+        ClapParamInfo* c = &s->param_cache[i];
+        if (c->id != mp->id)
+          continue;
+        strncpy(mp->name, c->name, sizeof(mp->name) - 1);
+        mp->name[sizeof(mp->name) - 1] = '\0';
+        mp->min_val = c->min_val;
+        mp->max_val = c->max_val;
+        mp->is_bool = c->is_bool;
+        mp->is_stepped = c->is_stepped;
+        mp->is_enum = c->is_enum;
+        break;
+      }
+    }
+  }
 }
 
 static void clap_unit_render(UnitState* s, const uint8_t* p,

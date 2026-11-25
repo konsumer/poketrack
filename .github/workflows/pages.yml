@@ -25,6 +25,14 @@ jobs:
         with:
           version: 4.0.14
 
+      - name: Install wasi-sdk
+        run: |
+          curl -sL -o /tmp/wasi-sdk.tar.gz https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-33/wasi-sdk-33.0-x86_64-linux.tar.gz
+          tar xzf /tmp/wasi-sdk.tar.gz -C /tmp
+          echo "WASI_SDK_PATH=/tmp/wasi-sdk-33.0-x86_64-linux" >> "$GITHUB_ENV"
+        # for the Syntakt WCLAP maker page (webroot/syntakt/): its plugin
+        # template is C built with wasi-sdk, same version as release.yml
+
       - name: Build
         run: make build-web
 

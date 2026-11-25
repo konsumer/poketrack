@@ -86,6 +86,7 @@ struct ClapPlugin {
   uint32_t block_size;
   bool is_instrument;
   bool main_thread_requested;
+  bool params_rescan;
   char name[128];
 
   // Pending note events for next process call
@@ -109,11 +110,13 @@ static const char* host_get_name(const clap_host_t* host) {
 }
 
 // CLAP_EXT_PARAMS host side — plugins call these to notify the host of param changes.
-// We don't cache param state, so rescan/clear are no-ops.
+// rescan flags the instance so clap_unit re-reads the names/defaults it shows
+// (clap_host_take_params_rescan); clear is a no-op.
 // request_flush signals the plugin wants flush() called; we handle it inline next process().
 static void host_params_rescan(const clap_host_t* h, clap_param_rescan_flags f) {
-  (void)h;
-  (void)f;
+  ClapPlugin* cp = (ClapPlugin*)h->host_data;
+  if (cp && (f & (CLAP_PARAM_RESCAN_ALL | CLAP_PARAM_RESCAN_INFO | CLAP_PARAM_RESCAN_TEXT | CLAP_PARAM_RESCAN_VALUES)))
+    cp->params_rescan = true;
 }
 static void host_params_clear(const clap_host_t* h, clap_id id, clap_param_clear_flags f) {
   (void)h;
@@ -486,6 +489,13 @@ bool clap_host_param_value_to_text(ClapPlugin* p, uint32_t param_id, double valu
 
 // Call this from the main thread each frame (not the audio thread).
 // Delivers any deferred on_main_thread() work the plugin requested.
+bool clap_host_take_params_rescan(ClapPlugin* p) {
+  if (!p || !p->params_rescan)
+    return false;
+  p->params_rescan = false;
+  return true;
+}
+
 void clap_host_do_main_thread_work(ClapPlugin* p) {
   if (!p || !p->main_thread_requested)
     return;
